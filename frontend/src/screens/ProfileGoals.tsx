@@ -13,12 +13,12 @@ import {
   macroSplit,
 } from '../lib/nutrition';
 import { formatInt } from '../lib/format';
-import { Field, useToast } from '../components/ui';
-import './profile.css';
+import { Button, Card, Field, Segmented, Select, Sheet, TextInput, useToast } from '../components/ui';
+import { cn } from '../lib/cn';
 
 /** Profile & goals — prototype view: avatar card, sectioned hairline
- * forms, TDEE gradient card with goalseg pills, meal plan rows, and a
- * bottom-sheet theme picker (8 presets + custom). */
+ * forms, TDEE gradient card with goal Segmented, meal plan rows, and a
+ * bottom-sheet theme picker (appearance mode + 8 accent presets + custom). */
 
 const THEME_PRESETS = [
   { name: 'Turf', color: '#0f7a5f' },
@@ -30,6 +30,14 @@ const THEME_PRESETS = [
   { name: 'Slate', color: '#475569' },
   { name: 'Night', color: '#1e293b' },
 ];
+
+const HINT = 'text-sm leading-normal text-text-muted';
+const ICON_BTN =
+  'flex h-7 w-7 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
+  'disabled:opacity-35 disabled:cursor-default hover:border-accent-line hover:text-accent-ink';
+const ICON_BTN_DANGER =
+  'flex h-7 w-7 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
+  'disabled:opacity-35 disabled:cursor-default hover:border-danger hover:text-danger';
 
 interface ProfileForm {
   height_cm: string;
@@ -54,7 +62,7 @@ function fromProfile(p: Profile | null): ProfileForm {
 }
 
 export default function ProfileGoals() {
-  const { endpoint, profile, refreshProfile, slots, refreshSlots, theme, setTheme } = useApp();
+  const { endpoint, profile, refreshProfile, slots, refreshSlots, theme, setTheme, mode, setMode } = useApp();
   const toast = useToast();
   const [form, setForm] = useState<ProfileForm>(() => fromProfile(profile));
   const [saving, setSaving] = useState(false);
@@ -210,50 +218,43 @@ export default function ProfileGoals() {
   })();
 
   return (
-    <div className="profile">
-      <div className="subhead">
-        <h2>Profile &amp; goals</h2>
+    <div>
+      <div className="flex items-center justify-between px-6 pb-3 pt-4">
+        <h2 className="text-xl font-bold tracking-[-.02em]">Profile &amp; goals</h2>
       </div>
 
       {/* Identity card (prototype avatar card) */}
-      <div className="sec" style={{ paddingTop: 10 }}>
-        <div className="card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div className="avatar">{initials}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{(profile?.['name'] as string) || 'Signed in'}</div>
-            <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 2 }}>
+      <div className="px-6 pt-5">
+        <Card className="flex items-center gap-3.5 p-5">
+          <div className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full bg-accent text-lg font-bold text-white">
+            {initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-md font-bold">{(profile?.['name'] as string) || 'Signed in'}</div>
+            <div className="mt-0.5 text-xs text-text-faint">
               {profile ? 'Profile on ' : 'Sign-in active · '}
               {new URL(endpoint).host}
             </div>
-            <div
-              style={{
-                fontSize: 11.5,
-                color: 'var(--good-ink)',
-                fontWeight: 600,
-                marginTop: 4,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-              }}
-            >
-              <span className="led" /> Hosted · {new URL(endpoint).host}
+            <div className="mt-1 flex items-center gap-1.5 text-2xs font-semibold text-good-ink">
+              <span className="inline-block h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />{' '}
+              Hosted · {new URL(endpoint).host}
             </div>
           </div>
-          <button className="btn ghost sm" onClick={() => setSheetOpen(true)}>
+          <Button variant="ghost" size="sm" onClick={() => setSheetOpen(true)}>
             Theme
-          </button>
-        </div>
+          </Button>
+        </Card>
       </div>
 
       {/* Body metrics (prototype sectioned hairline form) */}
-      <div className="sec">
-        <div className="sec-h">
-          <h2>Your numbers</h2>
+      <div className="px-6 pt-5">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-md font-bold tracking-[-.01em]">Your numbers</h2>
         </div>
-        <div className="card" style={{ padding: '16px 18px' }}>
-          <div className="form-grid">
+        <Card className="p-4">
+          <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
             <Field label="Height (cm)">
-              <input
+              <TextInput
                 type="number"
                 min={0}
                 value={form.height_cm}
@@ -261,7 +262,7 @@ export default function ProfileGoals() {
               />
             </Field>
             <Field label="Birth year">
-              <input
+              <TextInput
                 type="number"
                 min={1900}
                 max={new Date().getFullYear()}
@@ -270,15 +271,15 @@ export default function ProfileGoals() {
               />
             </Field>
             <Field label="Sex">
-              <select value={form.sex} onChange={(e) => setForm({ ...form, sex: e.target.value as Sex })}>
+              <Select value={form.sex} onChange={(e) => setForm({ ...form, sex: e.target.value as Sex })}>
                 <option value="">Select…</option>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
                 <option value="other">Other</option>
-              </select>
+              </Select>
             </Field>
             <Field label="Activity level">
-              <select
+              <Select
                 value={form.activity_level}
                 onChange={(e) => setForm({ ...form, activity_level: e.target.value as ActivityLevel })}
               >
@@ -288,10 +289,10 @@ export default function ProfileGoals() {
                 <option value="moderate">Moderate</option>
                 <option value="very">Very active</option>
                 <option value="extreme">Extreme</option>
-              </select>
+              </Select>
             </Field>
             <Field label="Body fat % (for Katch-McArdle)" hint="Optional">
-              <input
+              <TextInput
                 type="number"
                 min={1}
                 max={70}
@@ -301,7 +302,7 @@ export default function ProfileGoals() {
               />
             </Field>
             <Field label="Weight (kg)" hint="Saved as a weights record">
-              <input
+              <TextInput
                 type="number"
                 min={0}
                 step={0.1}
@@ -310,64 +311,58 @@ export default function ProfileGoals() {
               />
             </Field>
             <Field label="Formula">
-              <select
+              <Select
                 value={form.tdee_formula}
                 onChange={(e) => setForm({ ...form, tdee_formula: e.target.value as TdeeFormula })}
               >
                 <option value="mifflin">Mifflin-St Jeor</option>
                 <option value="katch">Katch-McArdle</option>
-              </select>
+              </Select>
             </Field>
           </div>
-        </div>
+        </Card>
       </div>
 
-      {/* TDEE card (prototype gradient card + goalseg) */}
-      <div className="sec">
-        <div className="sec-h">
-          <h2>TDEE estimate</h2>
+      {/* TDEE card (prototype gradient card + goal Segmented) */}
+      <div className="px-6 pt-5">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-md font-bold tracking-[-.01em]">TDEE estimate</h2>
         </div>
-        <div className="card tdee-card" style={{ padding: '18px 20px' }}>
+        <Card className="bg-gradient-to-br from-surface to-accent-soft p-5">
           {tdee == null ? (
-            <p className="tdee-hint">
+            <p className={HINT}>
               Fill in height, birth year, sex and activity level (plus weight) to compute your target.
             </p>
           ) : (
             <>
-              <div className="cap" style={{ fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)' }}>
+              <div className="text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">
                 {FORMULA_LABEL[form.tdee_formula]}
                 {form.activity_level ? ` · ${form.activity_level} ×${ACTIVITY_FACTORS[form.activity_level]}` : ''}
               </div>
-              <div style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 4 }}>
-                {formatInt(tdee)} <small style={{ fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>kcal/day</small>
+              <div className="mt-1 text-[32px] font-bold tracking-[-.02em]">
+                {formatInt(tdee)} <small className="text-base font-medium text-text-muted">kcal/day</small>
               </div>
-              <div className="goalout">
+              <div className="mt-2.5 text-sm font-medium text-text-muted">
                 BMR {formatInt(computeBmr(input, form.tdee_formula) ?? 0)} · target{' '}
                 {target != null ? formatInt(target) : '—'} kcal/day to {goal}
               </div>
             </>
           )}
-          <div className="goalseg">
-            {(
-              [
-                ['lose', 'Lose'],
-                ['maintain', 'Maintain'],
-                ['gain', 'Gain'],
-              ] as const
-            ).map(([g, label]) => (
-              <button
-                key={g}
-                className={goal === g ? 'on' : ''}
-                onClick={() => {
-                  setGoal(g);
-                  void saveGoalMacros(g, macros);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="stats" style={{ marginTop: 14 }}>
+          <Segmented
+            className="mt-4"
+            aria-label="Goal"
+            value={goal}
+            onChange={(g) => {
+              setGoal(g);
+              void saveGoalMacros(g, macros);
+            }}
+            options={[
+              { value: 'lose', label: 'Lose' },
+              { value: 'maintain', label: 'Maintain' },
+              { value: 'gain', label: 'Gain' },
+            ]}
+          />
+          <div className="mt-3.5 flex gap-2.5">
             {(
               [
                 ['Protein', split.proteinKcal, macros.protein_pct],
@@ -375,16 +370,15 @@ export default function ProfileGoals() {
                 ['Fat', split.fatKcal, macros.fat_pct],
               ] as const
             ).map(([label, kcal, pct]) => (
-              <div key={label} className="stat" style={{ background: '#fff' }}>
-                <div className="k">{label}</div>
-                <div className="v">
-                  {formatInt(kcal)}
-                  <small> kcal · {pct}%</small>
+              <div key={label} className="min-w-0 flex-1 rounded-lg border border-border bg-raised p-3.5">
+                <div className="text-2xs font-semibold uppercase tracking-[.04em] text-text-faint">{label}</div>
+                <div className="mt-1 truncate text-lg font-bold tracking-[-.01em]">
+                  {formatInt(kcal)} <small className="text-2xs font-medium text-text-faint">kcal · {pct}%</small>
                 </div>
               </div>
             ))}
           </div>
-          <div className="macro-inputs">
+          <div className="mt-3.5 grid grid-cols-3 gap-2.5">
             {(
               [
                 ['protein_pct', 'Protein %'],
@@ -393,7 +387,7 @@ export default function ProfileGoals() {
               ] as const
             ).map(([key, label]) => (
               <Field key={key} label={label}>
-                <input
+                <TextInput
                   type="number"
                   min={0}
                   max={100}
@@ -408,113 +402,156 @@ export default function ProfileGoals() {
             ))}
           </div>
           {macros.protein_pct + macros.carbs_pct + macros.fat_pct !== 100 && (
-            <p className="macro-warn">
+            <p className="mt-2.5 text-xs leading-normal text-warn">
               Macro percentages currently sum to {macros.protein_pct + macros.carbs_pct + macros.fat_pct}% — carbs are
               adjusted to fill the remainder when saved.
             </p>
           )}
-        </div>
+        </Card>
       </div>
 
-      {/* Meal plan editor (prototype .strow card) */}
-      <div className="sec">
-        <div className="sec-h">
-          <h2>Meal plan</h2>
-          <span className={'pct-sum' + (pctSum === 100 ? ' pct-ok' : '')}>{pctSum}% of 100%</span>
+      {/* Meal plan editor (prototype hairline rows) */}
+      <div className="px-6 pt-5">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-md font-bold tracking-[-.01em]">Meal plan</h2>
+          <span className={cn('text-xs font-semibold', pctSum === 100 ? 'text-good-ink' : 'text-text-faint')}>
+            {pctSum}% of 100%
+          </span>
         </div>
-        <div className="card" style={{ padding: '4px 18px' }}>
-          {slots.length === 0 && <p className="tdee-hint">No meal slots yet.</p>}
-          <ul className="slot-list">
+        <Card className="px-[18px] py-1">
+          {slots.length === 0 && <p className={HINT}>No meal slots yet.</p>}
+          <ul className="m-0 list-none p-0">
             {slots.map((s, i) => (
-              <li key={s.id} className="slot-row strow">
-                <span style={{ color: 'var(--faint)' }}>⋮⋮</span>
-                <span style={{ flex: 1 }}>{s.name}</span>
+              <li
+                key={s.id}
+                className="flex items-center gap-2.5 border-b border-border py-3.5 text-base last:border-0"
+              >
+                <span className="text-text-faint">⋮⋮</span>
+                <span className="flex-1">{s.name}</span>
                 <input
-                  className="slot-pct"
+                  className="w-[54px] rounded-md border-[1.5px] border-border px-1.5 py-1 text-right text-sm font-semibold"
                   type="number"
                   min={0}
                   max={100}
                   value={s.pct_allocation ?? 0}
                   onChange={(e) => void setSlotPct(s.id, Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
                 />
-                <span className="slot-pct-sign">%</span>
-                <div className="slot-actions">
-                  <button className="icon-btn" onClick={() => void moveSlot(i, -1)} disabled={i === 0} aria-label={`Move ${s.name} up`}>
+                <span className="text-xs text-text-faint">%</span>
+                <div className="flex gap-1">
+                  <button
+                    className={ICON_BTN}
+                    onClick={() => void moveSlot(i, -1)}
+                    disabled={i === 0}
+                    aria-label={`Move ${s.name} up`}
+                  >
                     ↑
                   </button>
                   <button
-                    className="icon-btn"
+                    className={ICON_BTN}
                     onClick={() => void moveSlot(i, 1)}
                     disabled={i === slots.length - 1}
                     aria-label={`Move ${s.name} down`}
                   >
                     ↓
                   </button>
-                  <button className="icon-btn icon-btn-danger" onClick={() => void removeSlot(s.id)} aria-label={`Remove ${s.name}`}>
+                  <button
+                    className={ICON_BTN_DANGER}
+                    onClick={() => void removeSlot(s.id)}
+                    aria-label={`Remove ${s.name}`}
+                  >
                     ✕
                   </button>
                 </div>
               </li>
             ))}
           </ul>
-          {pctSum !== 100 && <p className="macro-warn">Allocations must sum to 100%.</p>}
-        </div>
+          {pctSum !== 100 && <p className="mt-2.5 text-xs leading-normal text-warn">Allocations must sum to 100%.</p>}
+        </Card>
       </div>
 
       {/* Save + data */}
-      <div className="sec">
-        <button className="btn" onClick={() => void saveProfile()} disabled={saving}>
+      <div className="px-6 pt-5">
+        <Button block loading={saving} onClick={() => void saveProfile()}>
           {saving ? 'Saving…' : 'Save changes'}
-        </button>
+        </Button>
       </div>
 
-      <div className="sec" style={{ paddingBottom: 26 }}>
-        <div className="card" style={{ padding: '16px 18px' }}>
-          <div className="lbl2">Data</div>
-          <p className="tdee-hint" style={{ margin: '8px 0 12px' }}>
-            Bring your history from other apps, or export your diary.
-          </p>
-          <Link to="/profile/import" className="btn outline" style={{ width: '100%', textAlign: 'center' }}>
+      <div className="px-6 pb-6 pt-5">
+        <Card className="p-4">
+          <div className="text-xs font-semibold text-text-muted">Data</div>
+          <p className={cn(HINT, 'mb-3 mt-2')}>Bring your history from other apps, or export your diary.</p>
+          <Link
+            to="/profile/import"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-raised px-3.5 py-3 text-base font-semibold text-text transition hover:border-accent-line hover:text-accent-ink active:scale-[.98]"
+          >
             Import / Export
           </Link>
-        </div>
+        </Card>
       </div>
 
-      {/* ── Theme sheet (prototype bottom sheet) ── */}
-      <div className={`sheet-scrim${sheetOpen ? ' open' : ''}`} onClick={() => setSheetOpen(false)} />
-      <div className={`sheet${sheetOpen ? ' open' : ''}`} role="dialog" aria-label="Accent theme">
-        <div className="grab" />
-        <h3>Make it yours</h3>
-        <div className="sub">
+      {/* ── Theme sheet ── */}
+      <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Accent theme">
+        <p className="mt-1 text-xs leading-normal text-text-faint">
           Saolrian ships with <b>Turf</b> green — but the accent is yours. Live preview, saved to this device and your
           profile.
+        </p>
+
+        <div className="mt-4">
+          <span className="text-xs font-semibold text-text-muted">Appearance</span>
+          <Segmented
+            className="mt-2"
+            aria-label="Appearance"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'light', label: 'Light' },
+              { value: 'system', label: 'System' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+          />
         </div>
-        <div className="swatches">
-          {THEME_PRESETS.map((t) => (
-            <button
-              key={t.color}
-              className={'sw' + (theme.toLowerCase() === t.color.toLowerCase() ? ' on' : '')}
-              onClick={() => void applyTheme(t.color)}
-              aria-label={`Theme ${t.name}`}
-            >
-              <span className="chip" style={{ background: t.color }} />
-              <span className="nm">{t.name}</span>
-            </button>
-          ))}
+
+        <div className="mt-4 grid grid-cols-4 gap-2.5">
+          {THEME_PRESETS.map((t) => {
+            const on = theme.toLowerCase() === t.color.toLowerCase();
+            return (
+              <button
+                key={t.color}
+                type="button"
+                className={cn(
+                  'rounded-md border-[1.5px] border-border p-2 text-center transition hover:-translate-y-px',
+                  on && 'border-text',
+                )}
+                onClick={() => void applyTheme(t.color)}
+                aria-label={`Theme ${t.name}`}
+              >
+                <span
+                  className="mx-auto mb-1.5 block h-[26px] w-[26px] rounded-full shadow-[inset_0_0_0_2px_rgba(255,255,255,.55),0_1px_4px_rgba(10,37,64,.25)]"
+                  style={{ background: t.color }}
+                />
+                <span className={cn('text-2xs font-semibold', on ? 'text-text' : 'text-text-muted')}>{t.name}</span>
+              </button>
+            );
+          })}
         </div>
-        <div className="custom-row">
+
+        <div className="mt-3.5 flex items-center gap-2.5 rounded-lg border-[1.5px] border-dashed border-border px-3 py-2.5">
           <input
             type="color"
+            className="h-[34px] w-[34px] flex-none cursor-pointer rounded-md border-0 bg-transparent p-0"
             value={/^#[0-9a-fA-F]{6}$/.test(theme) ? theme : '#0f7a5f'}
             onChange={(e) => void applyTheme(e.target.value)}
             aria-label="Custom accent colour"
           />
-          <span>Custom colour — tap the chip to pick any shade</span>
+          <span className="flex-1 text-xs font-medium text-text-muted">
+            Custom colour — tap the chip to pick any shade
+          </span>
         </div>
-        <button className="done" onClick={() => setSheetOpen(false)}>
+
+        <Button className="mt-4" block onClick={() => setSheetOpen(false)}>
           Save theme
-        </button>
-      </div>
+        </Button>
+      </Sheet>
     </div>
   );
 }
