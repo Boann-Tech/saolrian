@@ -419,6 +419,7 @@ export default function AddFood() {
                 step={10}
                 min={0}
                 suffix="g"
+                inputMode="numeric"
                 aria-label="Serving size in grams"
               />
               <span className="ml-auto text-2xs text-text-faint">Source: Open Food Facts ↗</span>

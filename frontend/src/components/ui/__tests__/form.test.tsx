@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Field, TextInput, Select } from '../Field';
 import { Stepper } from '../Stepper';
@@ -48,6 +48,49 @@ describe('Stepper', () => {
     expect(onChange).toHaveBeenLastCalledWith(4);
     await user.click(screen.getByRole('button', { name: /decrease/i }));
     expect(onChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it('commits an exact typed value via the editable field', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    const { container } = render(
+      <Stepper value={100} step={10} min={0} onChange={onChange} aria-label="servings" />,
+    );
+    const input = container.querySelector('input')!;
+    await user.clear(input);
+    await user.type(input, '137');
+    expect(onChange).toHaveBeenLastCalledWith(137);
+  });
+
+  it('clamps a typed value above max', () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <Stepper value={100} step={10} min={0} max={200} onChange={onChange} aria-label="servings" />,
+    );
+    const input = container.querySelector('input')!;
+    fireEvent.change(input, { target: { value: '999' } });
+    expect(onChange).toHaveBeenLastCalledWith(200);
+  });
+
+  it('numeric mode strips non-digits', () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <Stepper value={0} min={0} onChange={onChange} aria-label="servings" />,
+    );
+    const input = container.querySelector('input')!;
+    fireEvent.change(input, { target: { value: '1a3' } });
+    expect(onChange).toHaveBeenLastCalledWith(13);
+    expect((input as HTMLInputElement).value).toBe('13');
+  });
+
+  it('decimal mode keeps a single decimal point', () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <Stepper value={1} min={0} inputMode="decimal" onChange={onChange} aria-label="grams" />,
+    );
+    const input = container.querySelector('input')!;
+    fireEvent.change(input, { target: { value: '2.5x' } });
+    expect(onChange).toHaveBeenLastCalledWith(2.5);
   });
 });
 
