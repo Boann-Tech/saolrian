@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
+import { Spinner } from './feedback';
 
 const button = cva(
   'inline-flex items-center justify-center gap-2 font-semibold transition ' +
@@ -35,13 +36,7 @@ export function Button({ variant, size, block, loading, disabled, className, chi
       aria-busy={loading || undefined}
       {...rest}
     >
-      {loading && (
-        <span
-          role="status"
-          aria-label="Loading"
-          className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
-        />
-      )}
+      {loading && <Spinner tone="onAccent" />}
       {children}
     </button>
   );
