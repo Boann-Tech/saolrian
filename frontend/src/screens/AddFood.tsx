@@ -7,7 +7,7 @@ import { createDiaryEntry } from '../lib/offline';
 import { foodMath } from '../lib/nutrition';
 import { normalizeSearch, normalizeBarcode } from '../lib/normalize';
 import { formatInt } from '../lib/format';
-import { Spinner, useToast } from '../components/ui';
+import { Field, Spinner, useToast } from '../components/ui';
 import ScanSheet from '../components/ScanSheet';
 import './addfood.css';
 
@@ -41,6 +41,13 @@ export default function AddFood() {
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [barcodeVal, setBarcodeVal] = useState('');
   const [newSlotName, setNewSlotName] = useState('');
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [qaKcal, setQaKcal] = useState('');
+  const [qaP, setQaP] = useState('');
+  const [qaC, setQaC] = useState('');
+  const [qaF, setQaF] = useState('');
+  const [qaAdding, setQaAdding] = useState(false);
+  const [qaErr, setQaErr] = useState('');
   const debounce = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -126,6 +133,46 @@ export default function AddFood() {
     }
   };
 
+  const submitQuickAdd = async () => {
+    const kcal = parseInt(qaKcal, 10);
+    if (!Number.isFinite(kcal) || kcal <=  0) {
+      setQaErr('Enter a calorie amount first.');
+      return;
+    }
+    if (!slotId) {
+      setQaErr('Pick a meal slot first.');
+      return;
+    }
+    setQaAdding(true);
+    setQaErr('');
+    const num = (s: string) => { const v = parseFloat(s); return Number.isFinite(v) ? v :  0; };
+    const result = await createDiaryEntry(endpoint, userId ?? '', {
+      meal_slot: slotId,
+      name_snapshot: 'Quick add',
+      brand_snapshot: '',
+      kcal,
+      protein: num(qaP),
+      carbs: num(qaC),
+      fat: num(qaF),
+      logged_at: new Date().toISOString(),
+    });
+    setQaAdding(false);
+    if (result.queued) {
+      toast('Saved offline — will sync when you reconnect');
+    } else if (!result.ok) {
+      toast(result.error ?? 'Could not add entry', 'err');
+      return;
+    } else {
+      toast(`Quick add · ${formatInt(kcal)} kcal`);
+    }
+    setQuickOpen(false);
+    setQaKcal('');
+    setQaP('');
+    setQaC('');
+    setQaF('');
+    navigate('/today');
+  };
+
   const addEntry = async () => {
     if (!selected || !slotId) return;
     setAdding(true);
@@ -196,6 +243,23 @@ export default function AddFood() {
       </div>
 
       {stage === 'search' && (
+        <>
+        <button className="qa-tile" onClick={() => setQuickOpen(true)}>
+          <span className="qa-ic">
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </span>
+          <span className="qa-t">
+            <span className="qa-tt">Quick add</span>
+            <span className="qa-td">Just calories — no food search</span>
+          </span>
+          <span className="qa-chev">
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
+        </button>
         <div className="addfood-results">
           {searching && (
             <div className="addfood-status">
@@ -248,6 +312,7 @@ export default function AddFood() {
             <p className="empty">Type at least 2 characters to search the food database.</p>
           )}
         </div>
+        </>
       )}
 
       {stage === 'detail' && selected && math && (
@@ -342,6 +407,56 @@ export default function AddFood() {
               <button className="btn" style={{ marginTop: 16 }} onClick={() => void addEntry()} disabled={adding || !slotId}>
                 {adding ? 'Adding…' : 'Add to diary'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {quickOpen && (
+        <div className="scan-scrim" onClick={() => setQuickOpen(false)}>
+          <div className="scan-sheet" role="dialog" aria-label="Quick add calories" onClick={(e) => e.stopPropagation()}>
+            <div className="grab" />
+            <h3>Quick add</h3>
+            <div className="sub">Calories with no search — macros optional. Pick a meal, done.</div>
+            <Field label="Calories (kcal)">
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                autoFocus
+                placeholder="e.g. 250"
+                value={qaKcal}
+                onChange={(e) => setQaKcal(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={(e) => { if (e.key === 'Enter') void submitQuickAdd(); }}
+              />
+            </Field>
+            <div className="qa-grid">
+              <Field label="Protein (g)">
+                <input type="number" min={0} inputMode="decimal" placeholder="0" value={qaP} onChange={(e) => setQaP(e.target.value.replace(/[^\d.]/g, ''))} />
+              </Field>
+              <Field label="Carbs (g)">
+                <input type="number" min={0} inputMode="decimal" placeholder="0" value={qaC} onChange={(e) => setQaC(e.target.value.replace(/[^\d.]/g, ''))} />
+              </Field>
+              <Field label="Fat (g)">
+                <input type="number" min={0} inputMode="decimal" placeholder="0" value={qaF} onChange={(e) => setQaF(e.target.value.replace(/[^\d.]/g, ''))} />
+              </Field>
+            </div>
+            <div className="cap" style={{ fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', marginBottom:  8 }}>Add to meal</div>
+            <div className="mealpills">
+              {slots.map((s) => (
+                <button key={s.id} className={s.id === slotId ? 'mp on' : 'mp'} onClick={() => setSlotId(s.id)}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+            <div className="new-slot">
+              <input placeholder="＋ New slot name…" value={newSlotName} onChange={(e) => setNewSlotName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void createSlot(); }} />
+              <button className="btn outline sm" onClick={() => void createSlot()} disabled={!newSlotName.trim()}>New</button>
+            </div>
+            {qaErr && <div className="scan-err">{qaErr}</div>}
+            <div className="scan-actions">
+              <button className="btn outline" onClick={() => setQuickOpen(false)}>Cancel</button>
+              <button className="btn" onClick={() => void submitQuickAdd()} disabled={qaAdding}>Add</button>
             </div>
           </div>
         </div>

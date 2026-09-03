@@ -72,3 +72,100 @@
   margin-bottom: 10px;
   line-height: 1.5;
 }
+
+
+/* ───────── Quick add ───────── */
+.qa-tile {
+  display: flex;
+  align-items: center;
+  gap:  ​12px;
+  width: 100%;
+  margin-top:  ​14px;
+  padding: 13px 16px;
+  background: #fff;
+  border:  ​1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(10,37,64,.04);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease;
+}
+.qa-tile:active { transform: scale(0.99); }
+.qa-tile:hover { border-color: var(--accent-line); }
+
+.qa-tile .qa-ic {
+  width:  ​36px;
+  height:​ 36px;
+​  border-radius:​ 9px;
+​  background:​var(--accent-soft);
+​  border:​ ​1px solid var(--accent-line);
+​  display:​flex;align-items:​center;justify-content:​center;
+​  color:​var(--accent-ink);
+​  flex-shrink:​0;
+}
+.qa-tile .qa-ic svg {
+  width:​ 18px;
+​  height:​ 18px;
+​  stroke:​currentColor;
+​  fill:​none;
+​  stroke-width:​2;
+​  stroke-linecap:​round;
+​  stroke-linejoin:​round;
+}
+.qa-tile .qa-t {
+  display:​flex;flex-direction:​column;gap:​​2px;
+}
+.qa-tile .qa-tt {
+  font-size:​​14px;
+​  font-weight:​700;
+​  color:​var(--ink);
+}
+.qa-tile .qa-td {
+​  font-size:​​12.5px;
+​  color:​var(--faint);
+}
+.qa-tile .qa-chev {
+​  margin-left:​auto;
+​  color:​var(--faint);
+​  display:​flex;
+}
+.qa-tile .qa-chev svg {
+​  width:​​16px;
+​  height:​​16px;
+​  stroke:​currentColor;
+​  fill:​none;
+​  stroke-width:​2;
+​  stroke-linecap:​round;
+​  stroke-linejoin:​round;
+}
+
+.qa-grid {
+​  display:​grid;
+​  grid-template-columns:​repeat(3, 1fr);
+​  gap:​​10px;
+​  margin:​​2px ​0 14px;
+}
+.qa-grid .field {
+​  display:​flex;flex-direction:​column;gap:​​5px;
+}
+.qa-grid .field .lbl2 {
+​  font-size:​​12px;
+​  font-weight:​600;
+​  color:​var(--muted);
+}
+.qa-grid input {
+​  width:​100%;
+​  border:​​1px solid var(--line);
+​  border-radius:​​10px;
+​  background:​#fff;
+​  padding:​​10px ​12px;
+​  font-family:​inherit;
+​  font-size:​​16px;
+​  color:​var(--ink);
+​  outline:​none;
+​  transition:​border-color ​0.15s ease;
+}
+.qa-grid input:focus {
+​  border-color:​var(--accent);
+}
