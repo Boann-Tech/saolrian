@@ -3,7 +3,8 @@ import { useApp } from '../state/AppContext';
 import { getClient } from '../lib/pb';
 import './auth.css';
 
-/** Sign-up / sign-in against the PocketBase 'users' collection. */
+/** Sign-up / sign-in against the PocketBase 'users' collection —
+ * prototype-styled centered card with wordmark + display h1. */
 
 export default function Auth() {
   const { endpoint, refreshProfile, refreshSlots } = useApp();
@@ -43,8 +44,21 @@ export default function Auth() {
   return (
     <div className="auth">
       <form className="auth-card" onSubmit={submit}>
-        <span className="auth-mark">S</span>
-        <h1>{mode === 'signin' ? 'Welcome back' : 'Create your account'}</h1>
+        <div className="wordmark">
+          <span className="dot" />
+          SAOLRIAN
+        </div>
+        <h1>
+          {mode === 'signin' ? (
+            <>
+              Welcome <em>back.</em>
+            </>
+          ) : (
+            <>
+              Create your <em>account.</em>
+            </>
+          )}
+        </h1>
 
         <label className="field">
           <span className="field-label">Email</span>
@@ -74,12 +88,20 @@ export default function Auth() {
           </div>
         )}
 
-        <button className="btn btn-primary btn-md" type="submit" disabled={busy}>
-          {busy ? 'Working…' : mode === 'signin' ? 'Sign in' : 'Sign up'}
+        <button className="btn" type="submit" disabled={busy}>
+          {busy ? (
+            <>
+              <span className="spin" /> Working…
+            </>
+          ) : mode === 'signin' ? (
+            'Sign in'
+          ) : (
+            'Sign up'
+          )}
         </button>
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="btn ghost"
           onClick={() => {
             setMode(mode === 'signin' ? 'signup' : 'signin');
             setErr('');

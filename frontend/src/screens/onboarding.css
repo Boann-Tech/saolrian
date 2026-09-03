@@ -1,116 +1,233 @@
+/* Onboarding — prototype .onb styling (structure in app-level classes). */
+
 .onb {
   min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 16px;
-}
-
-.onb-card {
-  width: 100%;
-  max-width: 400px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(10, 37, 64, 0.04), 0 10px 30px rgba(10, 37, 64, 0.06);
-  padding: 28px 24px;
-}
-
-.onb-brand {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-.onb-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 800;
-  font-size: 22px;
-  margin-bottom: 10px;
-}
-
-.onb-brand h1 {
-  margin: 0;
-  font-size: 22px;
-  letter-spacing: -0.02em;
-}
-
-.onb-tag {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.onb-choices {
+  padding: 34px 26px 24px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--bg);
 }
 
-.onb-choice {
-  text-align: left;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.onb-choice:hover {
-  border-color: var(--accent-line);
-  box-shadow: 0 0 0 3px var(--accent-glow);
-}
-
-.onb-choice strong {
-  font-size: 15px;
-}
-
-.onb-choice span {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.onb-self {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.onb-status {
-  margin-top: 14px;
+.onb .wordmark {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+}
+
+.onb .wordmark .dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.onb h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.024em;
+  line-height: 1.1;
+  margin-top: 38px;
+}
+
+.onb h1 em {
+  font-style: normal;
+  color: var(--accent);
+  font-family: 'Fraunces', 'Georgia', 'Times New Roman', serif;
+  font-style: italic;
+}
+
+.onb .tag {
+  font-size: 14.5px;
+  color: var(--muted);
+  margin-top: 10px;
+  line-height: 1.55;
+}
+
+.opt {
+  margin-top: 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  background: #fff;
+}
+
+.opt:hover {
+  border-color: var(--accent-line);
+}
+
+.opt.sel {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.opt .r {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.opt .radio {
+  width: 20px;
+  height: 20px;
+  border-radius: 99px;
+  border: 2px solid var(--line);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.opt.sel .radio {
+  border-color: var(--accent);
+}
+
+.opt .radio i {
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+  background: var(--accent);
+  transform: scale(0);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.opt.sel .radio i {
+  transform: scale(1);
+}
+
+.opt .t {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.opt .d {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.ep {
+  margin-top: 12px;
+}
+
+.ep input {
+  width: 100%;
+  border: 1.5px solid var(--accent-line);
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  outline: none;
+  background: #fff;
+  transition: border-color 0.15s ease;
+}
+
+.ep input:focus {
+  border-color: var(--accent);
+}
+
+.ep .hint {
+  font-size: 11.5px;
+  color: var(--faint);
+  margin-top: 6px;
+}
+
+.onb .grow {
+  flex: 1;
+}
+
+.onb-status {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
   color: var(--muted);
 }
 
 .onb-error {
-  margin-top: 14px;
-  background: #fdf2f2;
-  border: 1px solid #f5c6c6;
-  border-radius: 12px;
-  padding: 12px 14px;
+  margin-top: 16px;
+  border: 1.5px solid #f3d4da;
+  background: #fdf2f4;
+  border-radius: 14px;
+  padding: 14px 16px;
 }
 
 .onb-error p {
-  margin: 0 0 8px;
   font-size: 13px;
   color: #8c2f39;
+  line-height: 1.5;
+  margin-bottom: 10px;
 }
 
 .onb-foot {
-  margin: 18px 0 0;
-  text-align: center;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--faint);
+  margin-top: 18px;
+  text-align: center;
+}
+
+/* success state (prototype .success) */
+.success {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: 52px;
+  flex: 1;
+}
+
+.success .ck {
+  width: 74px;
+  height: 74px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.success .ck svg {
+  width: 34px;
+  height: 34px;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.success h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-top: 18px;
+  letter-spacing: -0.02em;
+}
+
+.success .pill {
+  margin-top: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.success .pill .led {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--good);
 }

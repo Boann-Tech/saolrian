@@ -11,6 +11,7 @@ import ProfileGoals from './screens/ProfileGoals';
 import Import from './screens/Import';
 import { AppShell } from './components/AppShell';
 import './styles/tokens.css';
+import './styles/app.css';
 
 /** Routing gate:
  *   no endpoint set        → Onboarding

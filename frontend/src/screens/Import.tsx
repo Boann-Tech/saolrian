@@ -1,19 +1,20 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import { parseLoseItCsv, type LoseItRow } from '../lib/loseit';
 import { toCsv, buildExportFilename, downloadText, type ExportRow } from '../lib/export';
 import { getClient } from '../lib/pb';
 import type { DiaryEntry } from '../lib/types';
-import { Button, Card, CardTitle, useToast } from '../components/ui';
+import { useToast } from '../components/ui';
 import { formatInt } from '../lib/format';
 import './import.css';
 
-/** Import (Lose It! CSV) + diary CSV export. */
+/** Import (Lose It! CSV) + diary CSV export — prototype hairline cards. */
 
 export default function Import() {
   const { endpoint } = useApp();
   const toast = useToast();
+  const navigate = useNavigate();
   const [rows, setRows] = useState<LoseItRow[] | null>(null);
   const [fileName, setFileName] = useState('');
   const [importing, setImporting] = useState(false);
@@ -101,72 +102,87 @@ export default function Import() {
 
   return (
     <div className="import">
-      <Link to="/profile" className="btn btn-ghost btn-sm back-link">
-        ← Profile
-      </Link>
-      <h1 className="page-title">Import &amp; export</h1>
+      <div className="subhead">
+        <button className="backbtn" onClick={() => navigate('/profile')} aria-label="Back to profile">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+        <h2>Import &amp; export</h2>
+        <span style={{ width: 36 }} />
+      </div>
 
-      <Card>
-        <CardTitle>Import from Lose It!</CardTitle>
-        <p className="import-hint">
-          Upload a Lose It! CSV export. Columns are detected from the header row, so reordered exports work too.
-        </p>
-        <input type="file" accept=".csv,text/csv" onChange={onFile} className="file-input" />
-        {fileName && <p className="import-file">File: {fileName}</p>}
+      <div className="sec" style={{ paddingTop: 4 }}>
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <div className="lbl2">Import from Lose It!</div>
+          <p className="import-hint">
+            Upload a Lose It! CSV export. Columns are detected from the header row, so reordered exports work too.
+          </p>
+          <input type="file" accept=".csv,text/csv" onChange={onFile} className="file-input" />
+          {fileName && <p className="import-file">File: {fileName}</p>}
 
-        {rows && (
-          <div className="import-preview">
-            <p>
-              <strong>{formatInt(rows.length)}</strong> entr{rows.length === 1 ? 'y' : 'ies'} ready to import.
-            </p>
-            {rows.length > 0 && (
-              <table className="preview-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Name</th>
-                    <th>Meal</th>
-                    <th>kcal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.slice(0, 5).map((r, i) => (
-                    <tr key={i}>
-                      <td>{r.date}</td>
-                      <td>{r.name}</td>
-                      <td>{r.meal}</td>
-                      <td>{r.kcal}</td>
+          {rows && (
+            <div className="import-preview">
+              <p>
+                <strong>{formatInt(rows.length)}</strong> entr{rows.length === 1 ? 'y' : 'ies'} ready to import.
+              </p>
+              {rows.length > 0 && (
+                <table className="preview-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Name</th>
+                      <th>Meal</th>
+                      <th>kcal</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {rows.length > 5 && <p className="preview-more">…and {formatInt(rows.length - 5)} more</p>}
-            <Button onClick={() => void doImport()} disabled={importing || rows.length === 0}>
-              {importing ? 'Importing…' : `Import ${formatInt(rows.length)} entries`}
-            </Button>
-          </div>
-        )}
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 5).map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.date}</td>
+                        <td>{r.name}</td>
+                        <td>{r.meal}</td>
+                        <td>{r.kcal}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {rows.length > 5 && <p className="preview-more">…and {formatInt(rows.length - 5)} more</p>}
+              <button className="btn" onClick={() => void doImport()} disabled={importing || rows.length === 0}>
+                {importing ? 'Importing…' : `Import ${formatInt(rows.length)} entries`}
+              </button>
+            </div>
+          )}
 
-        {result && (
-          <div className="import-result" role="status">
-            Imported {formatInt(result.imported)}, skipped {formatInt(result.skipped)}.
-          </div>
-        )}
-        {importErr && (
-          <div className="import-err" role="alert">
-            {importErr}
-          </div>
-        )}
-      </Card>
+          {result && (
+            <div className="import-result" role="status">
+              Imported {formatInt(result.imported)}, skipped {formatInt(result.skipped)}.
+            </div>
+          )}
+          {importErr && (
+            <div className="import-err" role="alert">
+              {importErr}
+            </div>
+          )}
+        </div>
+      </div>
 
-      <Card>
-        <CardTitle>Export diary</CardTitle>
-        <p className="import-hint">Download every diary entry as a CSV file, newest first.</p>
-        <Button variant="outline" onClick={() => void doExport()} disabled={exporting}>
-          {exporting ? 'Exporting…' : 'Export CSV'}
-        </Button>
-      </Card>
+      <div className="sec" style={{ paddingBottom: 26 }}>
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <div className="lbl2">Export diary</div>
+          <p className="import-hint">Download every diary entry as a CSV file, newest first.</p>
+          <button className="btn outline" onClick={() => void doExport()} disabled={exporting}>
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
+        </div>
+      </div>
+
+      <div className="sec" style={{ paddingBottom: 26 }}>
+        <Link to="/profile" className="btn ghost" style={{ width: '100%', textAlign: 'center' }}>
+          ← Back to profile
+        </Link>
+      </div>
     </div>
   );
 }

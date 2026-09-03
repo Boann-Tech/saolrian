@@ -1,252 +1,74 @@
+/* AddFood screen — layout rests on the shared prototype system (app.css). */
+
 .addfood {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding-top: 4px;
+  padding-bottom: 24px;
 }
 
-.addfood-searchrow {
-  display: flex;
-  gap: 8px;
-}
-
-.addfood-search {
-  flex: 1;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 11px 14px;
-  font-size: 15px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(10, 37, 64, 0.04);
-}
-
-.addfood-search:focus {
-  border-color: var(--accent-line);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+.addfood-results {
+  padding-bottom: 16px;
 }
 
 .addfood-status {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  padding: 4px 2px;
+  color: var(--faint);
+  font-size: 13.5px;
+  padding: 16px 26px 0;
+}
+
+.addfood-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--faint);
 }
 
 .addfood-err {
-  background: #fdf2f2;
-  border: 1px solid #f5c6c6;
   color: #8c2f39;
+  background: #fdf2f4;
+  border: 1px solid #f3d4da;
   border-radius: 10px;
-  padding: 8px 12px;
+  padding: 9px 13px;
   font-size: 13px;
+  margin: 12px 26px 0;
 }
 
-.addfood-results {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.food-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.addfood-detail .ste input input,
+.ste input {
   width: 100%;
-  text-align: left;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px 14px;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.food-card:hover {
-  border-color: var(--accent-line);
-  box-shadow: 0 0 0 3px var(--accent-glow);
-}
-
-.food-card-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.food-card-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--ink);
-}
-
-.food-card-sub {
-  font-size: 12px;
-  color: var(--faint);
-}
-
-.food-card-kcal {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--accent-ink);
-  white-space: nowrap;
-}
-
-.food-card-kcal small {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--faint);
-}
-
-/* Detail */
-.addfood-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.detail-head h2 {
-  margin: 4px 0 2px;
-  font-size: 19px;
-  letter-spacing: -0.01em;
-}
-
-.detail-head p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-/* Stepper */
-.stepper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px;
-}
-
-.stepper .btn {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  font-size: 20px;
-  border-radius: 12px;
-}
-
-.stepper-val {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.stepper-val input {
-  width: 84px;
-  font-size: 26px;
-  font-weight: 700;
+  border: none;
+  background: none;
   text-align: center;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 6px 4px;
-  color: var(--ink);
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-.stepper-val input::-webkit-outer-spin-button,
-.stepper-val input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.stepper-val span {
-  font-size: 14px;
+  outline: none;
+  font-size: 13.5px;
   font-weight: 600;
-  color: var(--faint);
-}
-
-/* Live macro math */
-.detail-macros {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-line);
-  border-radius: 12px;
-  padding: 12px;
-  text-align: center;
-}
-
-.dm-label {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-
-.dm-val {
-  display: block;
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--accent-ink);
-  margin-top: 2px;
-}
-
-/* Slot pills */
-.slot-pills {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding: 2px;
-  scrollbar-width: thin;
-}
-
-.slot-pill {
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 999px;
-  padding: 6px 13px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.slot-pill-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
 }
 
 .new-slot {
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
 }
 
 .new-slot input {
   flex: 1;
-  border: 1px dashed var(--line);
+  min-width: 0;
+  border: 1.5px dashed var(--line);
   border-radius: 10px;
-  padding: 7px 10px;
+  padding: 9px 12px;
+  background: #fff;
+  outline: none;
   font-size: 13px;
-  background: var(--surface);
+}
+
+.new-slot input:focus {
+  border-color: var(--accent);
 }
 
 .barcode-hint {
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.addfood-add {
-  width: 100%;
-  padding: 13px;
-  font-size: 15px;
-  border-radius: 12px;
+  font-size: 12.5px;
+  color: var(--faint);
+  margin-bottom: 10px;
+  line-height: 1.5;
 }

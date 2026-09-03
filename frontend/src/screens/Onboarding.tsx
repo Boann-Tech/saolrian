@@ -3,7 +3,9 @@ import { useApp } from '../state/AppContext';
 import { HOSTED_ENDPOINT, isValidHttpUrl, normalizeUrl, probeEndpoint } from '../lib/pb';
 import './onboarding.css';
 
-/** First-run screen: pick Hosted or Self-hosted, validate reachability, persist endpoint. */
+/** First-run screen — prototype onboarding: wordmark, display h1 with
+ * accent em, radio option cards, self-host URL field, connecting state,
+ * success check + "Enter Saolrian". Behavior unchanged. */
 
 type Mode = 'pick' | 'hosted' | 'self';
 
@@ -13,6 +15,7 @@ export default function Onboarding() {
   const [url, setUrl] = useState('');
   const [err, setErr] = useState('');
   const [connecting, setConnecting] = useState(false);
+  const [connected, setConnected] = useState(false);
 
   const proceed = (endpoint: string) => {
     setErr('');
@@ -23,11 +26,10 @@ export default function Onboarding() {
       .then((ok) => {
         if (ok) {
           setEndpoint(endpoint);
+          setConnected(true);
         } else {
           setConnecting(false);
-          setErr(
-            `Couldn't reach ${endpoint}. Check the URL and that the server is running.`,
-          );
+          setErr(`Couldn't reach ${endpoint}. Check the URL and that the server is running.`);
         }
       })
       .catch(() => {
@@ -56,85 +58,120 @@ export default function Onboarding() {
 
   return (
     <div className="onb">
-      <div className="onb-card">
-        <div className="onb-brand">
-          <span className="onb-mark">S</span>
-          <h1>Saolrian</h1>
-          <p className="onb-tag">Calorie tracking you can host yourself.</p>
-        </div>
-
-        {mode === 'pick' && (
-          <div className="onb-choices">
-            <button className="onb-choice" onClick={chooseHosted}>
-              <strong>Hosted</strong>
-              <span>Use the managed Saolrian server — nothing to install.</span>
-            </button>
-            <button className="onb-choice" onClick={chooseSelf}>
-              <strong>Self-hosted</strong>
-              <span>Point the app at your own PocketBase instance.</span>
-            </button>
+      {connected ? (
+        <div className="onb success show">
+          <div className="ck">
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <path d="M4.5 12.5l5 5 10-11" />
+            </svg>
           </div>
-        )}
+          <h2>Connected</h2>
+          <div className="pill">
+            <span className="led" />
+            <span>{new URL(typeof window !== 'undefined' ? localStorage.getItem('saolrian-endpoint') || '' : '').host}</span>
+          </div>
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={() => setConnected(false)}>
+            Continue →
+          </button>
+        </div>
+      ) : (
+        <div className="onb-form">
+          <div className="wordmark">
+            <span className="dot" />
+            SAOLRIAN
+          </div>
+          <h1>
+            Your life, <em>tracked.</em>
+          </h1>
+          <div className="tag">Calories, training, and everything in between — in one calm place.</div>
 
-        {mode === 'self' && (
-          <form
-            className="onb-self"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitSelf();
+          <div className="opt" style={{ marginTop: 30 }} role="button" tabIndex={0} onClick={chooseHosted} onKeyDown={(e) => { if (e.key === 'Enter') chooseHosted(); }}>
+            <div className="r">
+              <span className={`radio${mode === 'hosted' ? ' sel' : ''}`}>
+                <i />
+              </span>
+              <div>
+                <div className="t">Hosted — saolrian.com</div>
+                <div className="d">We host it. Works everywhere. Export anytime.</div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className={`opt${mode === 'self' ? ' sel' : ''}`}
+            role="button"
+            tabIndex={0}
+            onClick={chooseSelf}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') chooseSelf();
             }}
           >
-            <label className="field">
-              <span className="field-label">Server URL</span>
-              <input
-                autoFocus
-                type="url"
-                inputMode="url"
-                placeholder="https://pb.example.com or http://192.168.1.20:8090"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-              />
-            </label>
-            <button className="btn btn-primary btn-md" type="submit" disabled={connecting}>
-              {connecting ? 'Connecting…' : 'Connect'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setMode('pick');
-                setErr('');
-              }}
-            >
-              Back
-            </button>
-          </form>
-        )}
-
-        {(mode === 'hosted' || connecting) && (
-          <div className="onb-status">
-            <span className="spinner" /> Connecting to {HOSTED_ENDPOINT}…
+            <div className="r">
+              <span className={`radio${mode === 'self' ? ' sel' : ''}`}>
+                <i />
+              </span>
+              <div>
+                <div className="t">Self-hosted — your own server</div>
+                <div className="d">Your data, your hardware. Same app, full control.</div>
+              </div>
+            </div>
+            {mode === 'self' && (
+              <div className="ep show">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    submitSelf();
+                  }}
+                >
+                  <input
+                    type="url"
+                    placeholder="https://saolrian.example.com"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                  />
+                  <div className="hint">Point me at your instance — everything stays on your server.</div>
+                  <button className="btn" type="submit" disabled={connecting} style={{ marginTop: 12 }}>
+                    {connecting ? (
+                      <>
+                        <span className="spin" /> Connecting…
+                      </>
+                    ) : (
+                      'Continue'
+                    )}
+                  </button>
+                </form>
+              </div>
+            )}
           </div>
-        )}
 
-        {err && (
-          <div className="onb-error" role="alert">
-            <p>{err}</p>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => {
-                setMode('pick');
-                setErr('');
-                setConnecting(false);
-              }}
-            >
-              Change endpoint
-            </button>
-          </div>
-        )}
+          {(mode === 'hosted' || connecting) && (
+            <div className="onb-status">
+              {mode === 'hosted' && <span className="spin ink" />}
+              Connecting to {mode === 'hosted' ? HOSTED_ENDPOINT : 'your server'}…
+            </div>
+          )}
 
-        <p className="onb-foot">Your data stays on the server you choose.</p>
-      </div>
+          {err && (
+            <div className="onb-error" role="alert">
+              <p>{err}</p>
+              <button
+                className="btn outline"
+                onClick={() => {
+                  setMode('pick');
+                  setErr('');
+                  setConnecting(false);
+                }}
+              >
+                Change endpoint
+              </button>
+            </div>
+          )}
+
+          <div className="grow" />
+          <p className="onb-foot">Your data stays on the server you choose.</p>
+        </div>
+      )}
     </div>
   );
 }

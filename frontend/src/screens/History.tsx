@@ -5,10 +5,12 @@ import { dateFromOffset, formatInt, prettyDate, todayISO, weekdayLabel } from '.
 import { getClient } from '../lib/pb';
 import { normalizeSummary } from '../lib/normalize';
 import { MealGroup } from '../components/MealGroup';
-import { Card, CardTitle, Empty, Spinner } from '../components/ui';
+import { Spinner } from '../components/ui';
 import './history.css';
 
-/** History: 7-day strip with adherence dots + selected-day breakdown. */
+/** History — prototype structure: subhead, 7-day .dpill strip with
+ * adherence dots, .daycard summary (Budget/Eaten/Remaining), week stat
+ * tiles, meals in shared .mealgrp groups. */
 
 interface DaySummary extends Summary {
   date: string;
@@ -55,7 +57,16 @@ export default function History() {
 
   return (
     <div className="history">
-      <h1 className="page-title">History</h1>
+      <div className="subhead">
+        <h2>History</h2>
+        <span className="monthsel" role="presentation">
+          {new Date(sel?.date ?? todayISO() + 'T12:00:00').toLocaleDateString('en-GB', {
+            month: 'long',
+            year: 'numeric',
+          })}{' '}
+          <span style={{ color: 'var(--faint)' }}>▾</span>
+        </span>
+      </div>
 
       {loading ? (
         <div className="history-loading">
@@ -63,65 +74,91 @@ export default function History() {
         </div>
       ) : (
         <>
-          {/* Week strip */}
-          <div className="week-strip">
+          {/* Week strip (prototype .dpill pills with adherence dot) */}
+          <div className="weekstrip">
             {days.map((d) => {
               const over = d.budget != null && d.totals.kcal > d.budget;
-              const isToday = d.date === todayISO();
               return (
                 <button
                   key={d.date}
-                  className={
-                    'day-pill' +
-                    (d.date === selected ? ' day-pill-active' : '') +
-                    (isToday ? ' day-pill-today' : '')
-                  }
+                  className={'dpill' + (d.date === selected ? ' on' : '')}
                   onClick={() => setSelected(d.date)}
                 >
-                  <span className="day-pill-dow">{weekdayLabel(d.date)}</span>
+                  <div className="dw">{weekdayLabel(d.date)}</div>
+                  <div className="dn">{new Date(d.date + 'T12:00:00').getDate()}</div>
                   <span
-                    className={
-                      'day-dot' + (d.totals.kcal === 0 ? ' day-dot-none' : over ? ' day-dot-over' : ' day-dot-good')
-                    }
+                    className={'ad' + (d.totals.kcal === 0 ? ' none' : over ? ' over' : '')}
                     title={d.budget == null ? 'No budget set' : over ? 'Over budget' : 'Within budget'}
                   />
-                  <span className="day-pill-date">{prettyDate(d.date)}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Selected day summary */}
+          {/* Selected day summary (prototype .daycard) */}
           {sel && (
             <>
-              <Card>
-                <CardTitle>{sel.date === todayISO() ? 'Today' : prettyDate(sel.date)}</CardTitle>
-                <div className="hist-stats">
-                  <div>
-                    <span className="hs-label">Budget</span>
-                    <span className="hs-val">{sel.budget == null ? '—' : formatInt(sel.budget)}</span>
-                  </div>
-                  <div>
-                    <span className="hs-label">Eaten</span>
-                    <span className="hs-val">{formatInt(sel.totals.kcal)}</span>
-                  </div>
-                  <div>
-                    <span className="hs-label">Remaining</span>
-                    <span className={'hs-val' + (remaining != null && remaining < 0 ? ' hs-over' : '')}>
-                      {remaining == null ? '—' : formatInt(remaining)}
-                    </span>
+              <div className="sec" style={{ paddingTop: 4 }}>
+                <div className="card daycard" style={{ padding: '18px 20px' }}>
+                  <div className="cap">{sel.date === todayISO() ? 'Today' : prettyDate(sel.date)}</div>
+                  <div className="daygrid">
+                    <div>
+                      <div className="lbl2">Budget</div>
+                      <div className="v2">{sel.budget == null ? '—' : formatInt(sel.budget)}</div>
+                    </div>
+                    <div>
+                      <div className="lbl2">Eaten</div>
+                      <div className="v2">{formatInt(sel.totals.kcal)}</div>
+                    </div>
+                    <div>
+                      <div className="lbl2">Remaining</div>
+                      <div className={'v2' + (remaining != null ? (remaining < 0 ? ' bad' : ' good') : '')}>
+                        {remaining == null ? '—' : formatInt(remaining)}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </Card>
+              </div>
 
-              <Card>
-                <CardTitle>Meals</CardTitle>
+              {/* Week at a glance (prototype .stats tiles) */}
+              <div className="sec">
+                <div className="sec-h">
+                  <h2>This week</h2>
+                </div>
+                <div className="stats">
+                  <div className="stat">
+                    <div className="k">Avg intake</div>
+                    <div className="v">{formatInt(days.reduce((s, d) => s + d.totals.kcal, 0) / days.length)}</div>
+                  </div>
+                  <div className="stat">
+                    <div className="k">On target</div>
+                    <div className="v">
+                      {days.filter((d) => d.budget != null && d.totals.kcal <= d.budget && d.totals.kcal > 0).length}/
+                      {days.length}
+                    </div>
+                  </div>
+                  <div className="stat">
+                    <div className="k">Logged days</div>
+                    <div className="v">{days.filter((d) => d.totals.kcal > 0).length}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Meals in prototype mealgrp groups */}
+              <div className="sec" style={{ paddingBottom: 24 }}>
+                <div className="sec-h">
+                  <h2>
+                    Meals — <span style={{ color: 'var(--faint)', fontWeight: 600 }}>{prettyDate(sel.date)}</span>
+                  </h2>
+                </div>
                 {sel.groups.length === 0 ? (
-                  <Empty>No meal data for this day.</Empty>
+                  <p className="empty" style={{ textAlign: 'left', padding: 0 }}>
+                    No meal data for this day.
+                  </p>
                 ) : (
-                  sel.groups.map((g) => <MealGroup key={g.slot_id} group={g} addLabel="Add food for this day" />)
+                  sel.groups.map((g) => <MealGroup key={g.slot_id} group={g} addLabel="Add food" />)
                 )}
-              </Card>
+              </div>
             </>
           )}
         </>

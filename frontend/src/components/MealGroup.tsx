@@ -1,10 +1,67 @@
 import { useState } from 'react';
+import type { ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import type { SummaryGroup } from '../lib/types';
 import { formatInt } from '../lib/format';
 import './meals.css';
 
-/** Expandable meal group shared by Today and History. */
+/** Expandable meal group shared by Today and History — prototype
+ *  .mealgrp structure: .gh header (name + chevron, kcal right) toggling
+ *  a .meals list of .mrow entries with 36px SVG icon tiles. */
+
+/* Small inline line icons reused from the prototype's log views. */
+const ICONS: Record<string, ReactElement> = {
+  bowl: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M4 19h16M6 19v-2a6 6 0 0 1 12 0v2M12 7V5" />
+    </svg>
+  ),
+  plate: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="3.5" />
+    </svg>
+  ),
+  cup: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9zM16 9a3 3 0 0 1 0 6" />
+    </svg>
+  ),
+  apple: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <circle cx="12" cy="13" r="6" />
+      <path d="M12 7c0-2 2-2 2-4" />
+    </svg>
+  ),
+  bottle: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M12 3v18M5 8c0 2 3 2 3 0M8 8v9a4 4 0 0 0 8 0V8c0 2-3 2-3 0" />
+    </svg>
+  ),
+  fork: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M7 3v7M4 3v4a3 3 0 0 0 6 0V3M7 13v8M15 3c-1.5 2-2 5-2 8h4c0-3-.5-6-2-8zM15 11v10" />
+    </svg>
+  ),
+};
+
+/** Deterministic icon per entry name so lists feel alive without data. */
+function pickIcon(name: string): ReactElement {
+  const n = name.toLowerCase();
+  if (/(yogurt|oat|porridge|cereal|soup|stew|chili|bowl|rice|pasta|noodle)/.test(n)) return ICONS.bowl;
+  if (/(coffee|latte|tea|cup|cappuccino|espresso)/.test(n)) return ICONS.cup;
+  if (/(apple|banana|fruit|berry|orange|pear)/.test(n)) return ICONS.apple;
+  if (/(milk|water|juice|smoothie|drink|soda|cola)/.test(n)) return ICONS.bottle;
+  if (/(salad|chicken|beef|fish|sandwich|wrap|toast|bread|egg|cheese)/.test(n)) return ICONS.plate;
+  return ICONS.fork;
+}
+
+function timeOf(iso: string): string {
+  const d = new Date(iso);
+  return isNaN(d.getTime())
+    ? ''
+    : new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(d);
+}
 
 export function MealGroup({
   group,
@@ -15,55 +72,65 @@ export function MealGroup({
   addLabel?: string;
   onAddFood?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(group.entries.length > 0);
   const groupKcal = group.entries.reduce((s, e) => s + e.kcal, 0);
 
+  const body = (
+    <div className="meals">
+      {group.entries.length === 0 ? (
+        <div className="mrow" onClick={onAddFood} role={onAddFood ? 'button' : undefined}>
+          <div className="ic">{ICONS.fork}</div>
+          <div className="b">
+            <div className="n" style={{ color: 'var(--faint)' }}>
+              Nothing logged yet — tap to add
+            </div>
+          </div>
+        </div>
+      ) : (
+        group.entries.map((e) => (
+          <div key={e.id} className="mrow">
+            <div className="ic">{pickIcon(e.name)}</div>
+            <div className="b">
+              <div className="n">{e.name}</div>
+              <div className="d">
+                {e.brand ? `${e.brand} · ` : ''}
+                {formatInt(e.grams)} g
+                {e.source !== 'manual' ? ` · ${e.source}` : ''}
+                {timeOf(e.logged_at) ? ` · ${timeOf(e.logged_at)}` : ''}
+              </div>
+            </div>
+            <div className="k">
+              {formatInt(e.kcal)} <small>kcal</small>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+
   return (
-    <div className="meal-group">
-      <button className="meal-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="meal-chevron" aria-hidden>
-          {open ? '▾' : '▸'}
+    <div className={`mealgrp${open ? '' : ' closed'}`}>
+      <button className="gh" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="n">
+          {group.slot_name} <span className="chev">{open ? '▾' : '▸'}</span>
         </span>
-        <span className="meal-name">{group.slot_name}</span>
-        <span className="meal-meta">
+        <span className="k">
           {group.entries.length === 0
-            ? 'No food logged'
+            ? '0 kcal · nothing logged'
             : `${group.entries.length} item${group.entries.length === 1 ? '' : 's'} · ${formatInt(groupKcal)} kcal`}
         </span>
       </button>
-
-      {open && (
-        <div className="meal-body">
-          {group.entries.length === 0 ? (
-            <p className="meal-empty">Nothing logged yet.</p>
-          ) : (
-            <ul className="meal-entries">
-              {group.entries.map((e) => (
-                <li key={e.id} className="meal-entry">
-                  <div className="meal-entry-main">
-                    <span className="meal-entry-name">{e.name}</span>
-                    <span className="meal-entry-sub">
-                      {e.brand ? `${e.brand} · ` : ''}
-                      {formatInt(e.grams)} g
-                      {e.source !== 'manual' ? ` · ${e.source}` : ''}
-                    </span>
-                  </div>
-                  <span className="meal-entry-kcal">{formatInt(e.kcal)} kcal</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {onAddFood ? (
-            <button className="btn btn-outline btn-sm" onClick={onAddFood}>
-              {addLabel}
-            </button>
-          ) : (
-            <Link className="btn btn-outline btn-sm" to="/add">
-              {addLabel}
-            </Link>
-          )}
-        </div>
-      )}
+      {body}
+      {open &&
+        (onAddFood ? (
+          <button className="addmeal" onClick={onAddFood}>
+            + {addLabel}
+          </button>
+        ) : (
+          <Link className="addmeal" to="/add">
+            + {addLabel}
+          </Link>
+        ))}
     </div>
   );
 }

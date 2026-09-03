@@ -41,7 +41,7 @@ afterEach(() => {
 describe('Onboarding (no backend running)', () => {
   it('renders the choice screen on first run', () => {
     renderOnboarding();
-    expect(screen.getByText('Saolrian')).toBeInTheDocument();
+    expect(screen.getByText(/SAOLRIAN/i, { selector: '.wordmark' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Hosted/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Self-hosted/ })).toBeInTheDocument();
     expect(localStorage.getItem('saolrian-endpoint')).toBeNull();
@@ -91,6 +91,6 @@ describe('Onboarding (no backend running)', () => {
     await user.click(screen.getByRole('button', { name: /^Hosted/ }));
     await screen.findByText(/Couldn't reach/i);
     await user.click(screen.getByRole('button', { name: /change endpoint/i }));
-    expect(await screen.findByText('Self-hosted')).toBeInTheDocument();
+    expect(await screen.findByText(/Self-hosted/)).toBeInTheDocument();
   });
 });
