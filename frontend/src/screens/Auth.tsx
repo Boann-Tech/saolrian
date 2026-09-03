@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { getClient } from '../lib/pb';
-import './auth.css';
+import { Button, Field, TextInput } from '../components/ui';
 
 /** Sign-up / sign-in against the PocketBase 'users' collection —
  * prototype-styled centered card with wordmark + display h1. */
@@ -42,37 +42,53 @@ export default function Auth() {
   };
 
   return (
-    <div className="auth">
-      <form className="auth-card" onSubmit={submit}>
-        <div className="wordmark">
-          <span className="dot" />
+    <div
+      className="flex min-h-[100dvh] items-center justify-center px-6 py-7"
+      style={{
+        background:
+          'radial-gradient(600px 320px at 85% -10%, var(--color-accent-soft), transparent 70%), var(--color-bg)',
+      }}
+    >
+      <form className="flex w-full max-w-[380px] flex-col gap-3.5" onSubmit={submit}>
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.08em] text-text-muted">
+          <span className="h-2.5 w-2.5 rounded-[3px] bg-accent" />
           SAOLRIAN
         </div>
-        <h1>
+        <h1 className="mb-2.5 text-[30px] font-bold leading-[1.12] tracking-[-.024em]">
           {mode === 'signin' ? (
             <>
-              Welcome <em>back.</em>
+              Welcome{' '}
+              <em
+                className="italic text-accent"
+                style={{ fontFamily: "'Fraunces','Georgia','Times New Roman',serif" }}
+              >
+                back.
+              </em>
             </>
           ) : (
             <>
-              Create your <em>account.</em>
+              Create your{' '}
+              <em
+                className="italic text-accent"
+                style={{ fontFamily: "'Fraunces','Georgia','Times New Roman',serif" }}
+              >
+                account.
+              </em>
             </>
           )}
         </h1>
 
-        <label className="field">
-          <span className="field-label">Email</span>
-          <input
+        <Field label="Email">
+          <TextInput
             type="email"
             required
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-        </label>
-        <label className="field">
-          <span className="field-label">Password</span>
-          <input
+        </Field>
+        <Field label="Password">
+          <TextInput
             type="password"
             required
             minLength={8}
@@ -80,35 +96,31 @@ export default function Auth() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-        </label>
+        </Field>
 
         {err && (
-          <div className="auth-err" role="alert">
+          <div
+            className="rounded-lg border-[1.5px] border-danger/30 bg-danger/10 px-3.5 py-2.5 text-sm leading-normal text-danger"
+            role="alert"
+          >
             {err}
           </div>
         )}
 
-        <button className="btn" type="submit" disabled={busy}>
-          {busy ? (
-            <>
-              <span className="spin" /> Working…
-            </>
-          ) : mode === 'signin' ? (
-            'Sign in'
-          ) : (
-            'Sign up'
-          )}
-        </button>
-        <button
+        <Button type="submit" loading={busy} block>
+          {mode === 'signin' ? 'Sign in' : 'Sign up'}
+        </Button>
+        <Button
           type="button"
-          className="btn ghost"
+          variant="ghost"
+          block
           onClick={() => {
             setMode(mode === 'signin' ? 'signup' : 'signin');
             setErr('');
           }}
         >
           {mode === 'signin' ? 'Need an account? Sign up' : 'Already registered? Sign in'}
-        </button>
+        </Button>
       </form>
     </div>
   );
