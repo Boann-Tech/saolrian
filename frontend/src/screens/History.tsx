@@ -6,12 +6,12 @@ import { dateFromOffset, formatInt, prettyDate, todayISO, weekdayLabel } from '.
 import { getClient } from '../lib/pb';
 import { normalizeSummary } from '../lib/normalize';
 import { MealGroup } from '../components/MealGroup';
-import { Spinner, useToast } from '../components/ui';
-import './history.css';
+import { Card, Empty, Spinner, StatTile, useToast } from '../components/ui';
+import { cn } from '../lib/cn';
 
-/** History — prototype structure: subhead, 7-day .dpill strip with
- * adherence dots, .daycard summary (Budget/Eaten/Remaining), week stat
- * tiles, meals in shared .mealgrp groups. */
+/** History — prototype structure: subhead, 7-day day-pill strip with
+ * adherence dots, day summary card (Budget/Eaten/Remaining), week stat
+ * tiles, meals in shared MealGroup groups. */
 
 interface DaySummary extends Summary {
   date: string;
@@ -70,38 +70,51 @@ export default function History() {
   const remaining = sel && sel.budget != null ? sel.budget - sel.totals.kcal : null;
 
   return (
-    <div className="history">
-      <div className="subhead">
-        <h2>History</h2>
-        <span className="monthsel" role="presentation">
+    <div>
+      <div className="flex items-center justify-between px-6 pb-3 pt-4">
+        <h2 className="text-xl font-bold tracking-[-.02em]">History</h2>
+        <span
+          role="presentation"
+          className="flex items-center gap-1.5 rounded-full border border-border bg-raised px-3.5 py-2 text-xs font-semibold text-text"
+        >
           {new Date(sel?.date ?? todayISO() + 'T12:00:00').toLocaleDateString('en-GB', {
             month: 'long',
             year: 'numeric',
           })}{' '}
-          <span style={{ color: 'var(--faint)' }}>▾</span>
+          <span className="text-text-faint">▾</span>
         </span>
       </div>
 
       {loading ? (
-        <div className="history-loading">
+        <div className="flex items-center gap-2 px-6 py-5 text-sm text-text-muted">
           <Spinner /> Loading the week…
         </div>
       ) : (
         <>
-          {/* Week strip (prototype .dpill pills with adherence dot) */}
-          <div className="weekstrip">
+          {/* Week strip — day pills with an adherence dot */}
+          <div className="flex gap-1.5 px-6 pb-3">
             {days.map((d) => {
               const over = d.budget != null && d.totals.kcal > d.budget;
               return (
                 <button
                   key={d.date}
-                  className={'dpill' + (d.date === selected ? ' on' : '')}
+                  className={cn(
+                    'flex-1 min-w-0 cursor-pointer rounded-lg border bg-raised py-2 text-center transition',
+                    d.date === selected
+                      ? 'border-accent bg-accent-soft'
+                      : 'border-border hover:border-accent-line',
+                  )}
                   onClick={() => setSelected(d.date)}
                 >
-                  <div className="dw">{weekdayLabel(d.date)}</div>
-                  <div className="dn">{new Date(d.date + 'T12:00:00').getDate()}</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[.05em] text-text-faint">
+                    {weekdayLabel(d.date)}
+                  </div>
+                  <div className="mt-0.5 text-sm font-bold">{new Date(d.date + 'T12:00:00').getDate()}</div>
                   <span
-                    className={'ad' + (d.totals.kcal === 0 ? ' none' : over ? ' over' : '')}
+                    className={cn(
+                      'mx-auto mt-1 h-[5px] w-[5px] rounded-full',
+                      d.totals.kcal === 0 ? 'bg-border' : over ? 'bg-warn' : 'bg-good',
+                    )}
                     title={d.budget == null ? 'No budget set' : over ? 'Over budget' : 'Within budget'}
                   />
                 </button>
@@ -109,66 +122,67 @@ export default function History() {
             })}
           </div>
 
-          {/* Selected day summary (prototype .daycard) */}
+          {/* Selected day summary */}
           {sel && (
             <>
-              <div className="sec" style={{ paddingTop: 4 }}>
-                <div className="card daycard" style={{ padding: '18px 20px' }}>
-                  <div className="cap">{sel.date === todayISO() ? 'Today' : prettyDate(sel.date)}</div>
-                  <div className="daygrid">
-                    <div>
-                      <div className="lbl2">Budget</div>
-                      <div className="v2">{sel.budget == null ? '—' : formatInt(sel.budget)}</div>
+              <div className="px-6 pt-5">
+                <Card className="p-5">
+                  <div className="text-xs font-semibold uppercase tracking-[.05em] text-text-faint">
+                    {sel.date === todayISO() ? 'Today' : prettyDate(sel.date)}
+                  </div>
+                  <div className="mt-2.5 flex [&>div+div]:border-l [&>div+div]:border-border [&>div+div]:pl-3.5">
+                    <div className="flex-1">
+                      <div className="text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Budget</div>
+                      <div className="mt-0.5 text-xl font-bold tracking-[-.01em]">
+                        {sel.budget == null ? '—' : formatInt(sel.budget)}
+                      </div>
                     </div>
-                    <div>
-                      <div className="lbl2">Eaten</div>
-                      <div className="v2">{formatInt(sel.totals.kcal)}</div>
+                    <div className="flex-1">
+                      <div className="text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Eaten</div>
+                      <div className="mt-0.5 text-xl font-bold tracking-[-.01em]">{formatInt(sel.totals.kcal)}</div>
                     </div>
-                    <div>
-                      <div className="lbl2">Remaining</div>
-                      <div className={'v2' + (remaining != null ? (remaining < 0 ? ' bad' : ' good') : '')}>
+                    <div className="flex-1">
+                      <div className="text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Remaining</div>
+                      <div
+                        className={cn(
+                          'mt-0.5 text-xl font-bold tracking-[-.01em]',
+                          remaining != null && (remaining < 0 ? 'text-warn' : 'text-good-ink'),
+                        )}
+                      >
                         {remaining == null ? '—' : formatInt(remaining)}
                       </div>
                     </div>
                   </div>
+                </Card>
+              </div>
+
+              {/* Week at a glance */}
+              <div className="px-6 pt-5">
+                <div className="mb-3 flex items-baseline justify-between">
+                  <h2 className="text-md font-bold tracking-[-.01em]">This week</h2>
+                </div>
+                <div className="flex gap-2.5">
+                  <StatTile
+                    label="Avg intake"
+                    value={formatInt(days.reduce((s, d) => s + d.totals.kcal, 0) / days.length)}
+                  />
+                  <StatTile
+                    label="On target"
+                    value={`${days.filter((d) => d.budget != null && d.totals.kcal <= d.budget && d.totals.kcal > 0).length}/${days.length}`}
+                  />
+                  <StatTile label="Logged days" value={days.filter((d) => d.totals.kcal > 0).length} />
                 </div>
               </div>
 
-              {/* Week at a glance (prototype .stats tiles) */}
-              <div className="sec">
-                <div className="sec-h">
-                  <h2>This week</h2>
-                </div>
-                <div className="stats">
-                  <div className="stat">
-                    <div className="k">Avg intake</div>
-                    <div className="v">{formatInt(days.reduce((s, d) => s + d.totals.kcal, 0) / days.length)}</div>
-                  </div>
-                  <div className="stat">
-                    <div className="k">On target</div>
-                    <div className="v">
-                      {days.filter((d) => d.budget != null && d.totals.kcal <= d.budget && d.totals.kcal > 0).length}/
-                      {days.length}
-                    </div>
-                  </div>
-                  <div className="stat">
-                    <div className="k">Logged days</div>
-                    <div className="v">{days.filter((d) => d.totals.kcal > 0).length}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Meals in prototype mealgrp groups */}
-              <div className="sec" style={{ paddingBottom: 24 }}>
-                <div className="sec-h">
-                  <h2>
-                    Meals — <span style={{ color: 'var(--faint)', fontWeight: 600 }}>{prettyDate(sel.date)}</span>
+              {/* Meals in shared MealGroup groups */}
+              <div className="px-6 pb-6 pt-5">
+                <div className="mb-3 flex items-baseline justify-between">
+                  <h2 className="text-md font-bold tracking-[-.01em]">
+                    Meals — <span className="font-semibold text-text-faint">{prettyDate(sel.date)}</span>
                   </h2>
                 </div>
                 {sel.groups.length === 0 ? (
-                  <p className="empty" style={{ textAlign: 'left', padding: 0 }}>
-                    No meal data for this day.
-                  </p>
+                  <Empty align="left">No meal data for this day.</Empty>
                 ) : (
                   sel.groups.map((g) => (
                     <MealGroup
