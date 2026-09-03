@@ -1,0 +1,5 @@
+# Caddy reverse proxy for the Saolrian stack.
+# Proxies everything to the PocketBase backend on :8090.
+:8080 {
+	reverse_proxy backend:8090
+}

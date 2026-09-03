@@ -1,0 +1,98 @@
+.meal-group {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.meal-group + .meal-group {
+  margin-top: 8px;
+}
+
+.meal-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.meal-head:hover {
+  background: var(--surface);
+}
+
+.meal-chevron {
+  color: var(--faint);
+  font-size: 12px;
+  width: 12px;
+}
+
+.meal-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+  flex: 1;
+}
+
+.meal-meta {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.meal-body {
+  padding: 0 14px 12px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meal-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.meal-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.meal-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.meal-entry:last-child {
+  border-bottom: 0;
+}
+
+.meal-entry-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.meal-entry-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.meal-entry-sub {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.meal-entry-kcal {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}

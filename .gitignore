@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# build output
+frontend/dist/
+
+# PocketBase data (user data — never commit)
+pb_data/
+backend/pb_data/
+*.db
+*.db-shm
+*.db-wal
+
+# local env & secrets
+.env
+.env.*
+
+# test artifacts
+/tmp/
+coverage/
+*.log
+
+# OS junk
+.DS_Store

@@ -1,0 +1,97 @@
+.import {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.back-link {
+  align-self: flex-start;
+  padding-left: 0;
+}
+
+.import-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.file-input {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.import-file {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.import-preview {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.import-preview p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.preview-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.preview-table td {
+  padding: 5px 8px 5px 0;
+  border-bottom: 1px solid var(--surface);
+  color: var(--muted);
+}
+
+.preview-more {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.import-result {
+  margin-top: 12px;
+  background: color-mix(in srgb, var(--good) 12%, #fff);
+  border: 1px solid color-mix(in srgb, var(--good) 40%, #fff);
+  color: var(--good-ink);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.import-err {
+  margin-top: 12px;
+  background: #fdf2f2;
+  border: 1px solid #f5c6c6;
+  color: #8c2f39;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+}

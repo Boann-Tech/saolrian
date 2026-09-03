@@ -1,0 +1,61 @@
+:root {
+  --accent: #0f7a5f; /* user-overridable, persisted in localStorage 'saolrian-theme' */
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, #fff);
+  --accent-ink: color-mix(in srgb, var(--accent) 78%, #000);
+  --accent-line: color-mix(in srgb, var(--accent) 28%, #fff);
+  --accent-glow: color-mix(in srgb, var(--accent) 22%, transparent);
+  --ink: #0a2540;
+  --surface: #f6f9fc;
+  --line: #e3e8ee;
+  --faint: #8792a2;
+  --muted: #425466;
+  --good: #3ecf8e;
+  --good-ink: #057f5b;
+  --danger: #d64545;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter Tight', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input,
+select {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent-glow);
+  outline-offset: 1px;
+}
+
+a {
+  color: var(--accent-ink);
+}
