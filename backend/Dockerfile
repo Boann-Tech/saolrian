@@ -1,5 +1,5 @@
 # Saolrian backend — multi-stage build producing a static binary.
-FROM golang:1.24-alpine AS build
+FROM golang:1.27-alpine AS build
 
 WORKDIR /src
 
@@ -17,9 +17,13 @@ RUN adduser -D -H -u 1000 saolrian
 
 COPY --from=build /saolrian-backend /saolrian-backend
 
-USER saolrian
+COPY backend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# root only long enough for the entrypoint to chown the volume,
+# then it drops to the unprivileged 'saolrian' user.
 WORKDIR /app
 
 EXPOSE 8090
 
-CMD ["/saolrian-backend", "serve", "--http", "0.0.0.0:8090", "--dir", "/app/pb_data"]
+ENTRYPOINT ["/entrypoint.sh"]

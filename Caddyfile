@@ -1,5 +1,13 @@
-# Caddy reverse proxy for the Saolrian stack.
-# Proxies everything to the PocketBase backend on :8090.
+# Saolrian reverse proxy — one public entry point on :8080.
+# API + admin UI → backend (PocketBase); everything else → frontend (SPA).
 :8080 {
-	reverse_proxy backend:8090
+	handle /api/* {
+		reverse_proxy backend:8090
+	}
+	handle /_/* {
+		reverse_proxy backend:8090
+	}
+	handle {
+		reverse_proxy frontend:80
+	}
 }

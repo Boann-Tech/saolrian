@@ -47,8 +47,10 @@ litestream replicate ./pb_data/saolrian.db s3://your-bucket
 ### Docker
 
 ```bash
-docker compose up -d   # backend on 8090 + Caddy reverse proxy on 8080
+docker compose up -d   # full stack: backend + frontend + Caddy on :8080
 ```
+
+One command brings up everything — the app UI at `http://server:8080`, the PocketBase admin at `http://server:8080/_/`, and Caddy routing `/api/*` to the backend. Data persists in the `pb_data` volume.
 
 ## Development
 

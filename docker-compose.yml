@@ -9,6 +9,14 @@ services:
     expose:
       - "8090"
 
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -20,6 +28,7 @@ services:
       - caddy_config:/config
     depends_on:
       - backend
+      - frontend
 
 volumes:
   pb_data:
