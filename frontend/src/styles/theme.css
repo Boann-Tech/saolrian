@@ -27,6 +27,12 @@
 
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
 
+  --z-tabbar: 15;
+  --z-sheet-scrim: 28;
+  --z-sheet: 30;
+  --z-toast: 40;
+  --z-modal: 50;
+
   /* Colors — semantic. `--accent` is set at runtime by AppContext. */
   --color-bg: #ffffff;
   --color-surface: #f6f9fc;

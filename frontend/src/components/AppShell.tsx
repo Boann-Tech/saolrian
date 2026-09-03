@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { queueDepth } from '../lib/offline';
-import './shell.css';
+import { cn } from '../lib/cn';
 
 /** Bottom tab bar + content frame for signed-in screens.
  *  Visual system ported from the approved prototype: fixed glass tabbar
@@ -53,6 +53,11 @@ const TABS = [
   },
 ];
 
+/** SVG glyph sizing/stroke — glyphs inherit `stroke: currentColor`, so the
+ *  nav item's text colour (faint, or accent when active) drives the icon. */
+const NV_GLYPH =
+  '[&_svg]:size-[22px] [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:[stroke-width:1.9] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]';
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { clearEndpoint, pb } = useApp();
   const navigate = useNavigate();
@@ -67,28 +72,51 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className={`shell${noTabs ? ' no-tabs' : ''}`}>
+    <div className="mx-auto flex min-h-[100dvh] max-w-[640px] flex-col bg-bg">
       {/* fade+slide wrapper keyed on route — prototype view transitions */}
-      <main className="view-wrap" key={location.pathname}>
+      <main className="view-wrap flex-1 [&>*]:min-h-full" key={location.pathname}>
         {children}
       </main>
-      <nav className="tabbar" aria-label="Main navigation">
+      <nav
+        className={cn(
+          'flex px-3 pb-[calc(20px+env(safe-area-inset-bottom))] pt-2',
+          'tabbar',
+          noTabs && 'tabbar--hidden',
+        )}
+        aria-label="Main navigation"
+      >
         {pending > 0 && (
           <span
-            className="queue-pill"
-            style={{ position: 'absolute', top: -34, right: 10 }}
+            className="queue-pill absolute -top-[34px] right-2.5 rounded-full border border-[#fde68a] bg-[#fef3c7] px-2.5 py-0.5 text-xs font-semibold text-[#92400e]"
             title={`${pending} entr${pending === 1 ? 'y' : 'ies'} waiting to sync`}
           >
             ⇣{pending} offline
           </span>
         )}
         {TABS.map((t) => (
-          <NavLink key={t.to} to={t.to} className={({ isActive }) => (isActive ? 'nv on' : 'nv')}>
+          <NavLink
+            key={t.to}
+            to={t.to}
+            className={({ isActive }) =>
+              cn(
+                'flex flex-1 flex-col items-center gap-[3px] text-2xs font-semibold no-underline',
+                NV_GLYPH,
+                isActive ? 'text-accent' : 'text-text-faint',
+              )
+            }
+          >
             {t.glyph}
             <span>{t.label}</span>
           </NavLink>
         ))}
-        <button className="nv nv-signout" onClick={signOut} title="Sign out">
+        <button
+          className={cn(
+            'flex flex-[0.55] flex-col items-center gap-[3px] border-none bg-transparent text-2xs font-semibold text-text-faint',
+            NV_GLYPH,
+          )}
+          onClick={signOut}
+          title="Sign out"
+        >
           <svg viewBox="0 0 24 24" aria-hidden>
             <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
           </svg>

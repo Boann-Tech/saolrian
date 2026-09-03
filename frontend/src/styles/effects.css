@@ -1,0 +1,108 @@
+/* ─────────────────────────────────────────────────────────────
+   Bespoke visuals that don't reduce to utilities. Token-driven.
+   ───────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* Hero — brandline gradient wash + decorative rotated blob */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(150deg, var(--color-accent-soft) 0%, var(--color-surface) 45%, var(--color-bg) 100%);
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -40px;
+    right: -70px;
+    width: 240px;
+    height: 340px;
+    background: linear-gradient(
+      135deg,
+      var(--color-accent) 0%,
+      color-mix(in srgb, var(--color-accent) 55%, #fff) 60%,
+      transparent 130%
+    );
+    transform: rotate(18deg);
+    border-radius: 32px;
+    opacity: 0.16;
+    pointer-events: none;
+  }
+
+  /* Route change: directional slide + fade */
+  .view-wrap {
+    animation: view-in 0.32s var(--ease-out);
+  }
+  @keyframes view-in {
+    from {
+      opacity: 0;
+      transform: translateX(30px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Fixed bottom tab bar with translucency */
+  .tabbar {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    width: 100%;
+    max-width: 640px;
+    transform: translateX(-50%);
+    z-index: var(--z-tabbar, 15);
+    background: color-mix(in srgb, var(--color-bg) 94%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid var(--color-border);
+    transition:
+      transform 0.32s var(--ease-out),
+      opacity 0.25s ease;
+  }
+  .tabbar--hidden {
+    transform: translateX(-50%) translateY(110%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Bottom sheet (Sheet primitive) */
+  .sheet-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 28;
+    background: rgba(10, 37, 64, 0.32);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .sheet-scrim.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 20px 24px 26px;
+    background: var(--color-raised);
+    border-radius: 22px 22px 0 0;
+    box-shadow: var(--shadow-sheet);
+    transform: translateY(105%);
+    transition: transform 0.3s var(--ease-out);
+  }
+  .sheet.open {
+    transform: translateY(0);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
