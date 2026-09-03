@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+@import './theme.css';
+@import './effects.css';
+
+/* Form controls keep a 16px floor — iOS Safari auto-zooms below it. */
+input,
+select,
+textarea {
+  font-size: 16px;
+  line-height: 1.4;
+}

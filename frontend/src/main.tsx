@@ -12,6 +12,7 @@ import Import from './screens/Import';
 import Welcome from './screens/Welcome';
 import EditEntry from './screens/EditEntry';
 import { AppShell } from './components/AppShell';
+import './styles/index.css';
 import './styles/tokens.css';
 import './styles/app.css';
 
