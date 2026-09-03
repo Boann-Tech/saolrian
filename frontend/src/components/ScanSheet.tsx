@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Field } from './ui';
-import './scansheet.css';
+import { Button, Field, Sheet, Spinner, TextInput } from './ui';
 
 /**
  * Barcode scan sheet — camera-first when the browser supports it
@@ -16,8 +15,12 @@ interface ScanSheetProps {
 type CamState = 'idle' | 'starting' | 'on' | 'denied' | 'unsupported';
 
 interface DetectorLike {
-  detect(image: CanvasImageSource): Promise<{ rawValue: string }[]>; 
+  detect(image: CanvasImageSource): Promise<{ rawValue: string }[]>;
 }
+
+/* Dark camera viewport box — reused by the "starting" and "on" states. */
+const CAM_BOX =
+  'relative mb-2 flex min-h-[170px] items-center justify-center overflow-hidden rounded-lg bg-[#0b1622]';
 
 export default function ScanSheet({ open, onClose, onCode }: ScanSheetProps) {
   const [code, setCode] = useState('');
@@ -127,53 +130,57 @@ export default function ScanSheet({ open, onClose, onCode }: ScanSheetProps) {
 
   if (!open) return null;
   return (
-    <div className="scan-scrim" onClick={onClose}>
-      <div className="scan-sheet" role="dialog" aria-label="Scan barcode" onClick={(e) => e.stopPropagation()}>
-        <div className="grab" />
-        <h3>Scan a barcode</h3>
-        <div className="sub">Point your camera at the barcode — it resolves automatically. No camera? Type the digits under the code below.</div>
-
-        {cam === 'starting' && (
-          <div className="scan-cam scan-status">
-            <span className="spinner-sm" aria-hidden /> Starting camera…
-          </div>
-        )}
-
-        {cam === 'on' && (
-          <>
-            <div className="scan-cam">
-              <video ref={videoRef} playsInline muted aria-label="Camera preview" />
-              <div className="scan-frame" />
-            </div>
-            <p className="scan-hint">Align the barcode inside the frame.</p>
-          </>
-        )}
-
-        {(cam === 'unsupported' || cam === 'denied') && (
-          <div className="scan-cam scan-fallback">
-            {cam === 'unsupported'
-              ? 'Camera scanning isn’t supported on this browser — the server-side food DB still works via manual codes.'
-              : camErr}
-          </div>
-        )}
-
-        <Field label="Or enter barcode manually">
-          <input
-            autoFocus
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="e.g. 3017620422003"
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            onKeyDown={(e) => { if (e.key === 'Enter') submitManual(); }}
-          />
-        </Field>
-        {err && <div className="scan-err">{err}</div>}
-        <div className="scan-actions">
-          <button className="btn outline" onClick={onClose}>Cancel</button>
-          <button className="btn" onClick={submitManual}>Look up</button>
-        </div>
+    <Sheet open={open} onClose={onClose} title="Scan barcode">
+      <div className="mb-3.5 mt-2 text-sm leading-normal text-text-muted">
+        Point your camera at the barcode — it resolves automatically. No camera? Type the digits under the code below.
       </div>
-    </div>
+
+      {cam === 'starting' && (
+        <div className={`${CAM_BOX} gap-2 text-sm text-white/70`}>
+          <Spinner /> Starting camera…
+        </div>
+      )}
+
+      {cam === 'on' && (
+        <>
+          <div className={CAM_BOX}>
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              aria-label="Camera preview"
+              className="block h-auto max-h-[240px] w-full object-cover"
+            />
+            <div className="pointer-events-none absolute inset-x-[26px] inset-y-[22px] rounded-lg border-2 border-white/85 shadow-[0_0_0_9999px_rgba(11,22,34,.45)]" />
+          </div>
+          <p className="mb-3 mt-1 text-xs text-text-faint">Align the barcode inside the frame.</p>
+        </>
+      )}
+
+      {(cam === 'unsupported' || cam === 'denied') && (
+        <div className="mb-3 rounded-lg border border-border bg-surface px-[18px] py-5 text-sm leading-normal text-text-muted">
+          {cam === 'unsupported'
+            ? 'Camera scanning isn’t supported on this browser — the server-side food DB still works via manual codes.'
+            : camErr}
+        </div>
+      )}
+
+      <Field label="Or enter barcode manually">
+        <TextInput
+          autoFocus
+          inputMode="numeric"
+          pattern="[0-9]*"
+          placeholder="e.g. 3017620422003"
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+          onKeyDown={(e) => { if (e.key === 'Enter') submitManual(); }}
+        />
+      </Field>
+      {err && <div className="mt-2 text-xs text-danger">{err}</div>}
+      <div className="mt-3.5 flex gap-2.5">
+        <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+        <Button className="flex-1" onClick={submitManual}>Look up</Button>
+      </div>
+    </Sheet>
   );
 }

@@ -7,13 +7,13 @@ import { createDiaryEntry } from '../lib/offline';
 import { foodMath } from '../lib/nutrition';
 import { normalizeSearch, normalizeBarcode } from '../lib/normalize';
 import { formatInt } from '../lib/format';
-import { Field, Spinner, useToast } from '../components/ui';
+import { Button, Card, Empty, Field, Sheet, Spinner, Stepper, TextInput, useToast } from '../components/ui';
+import { cn } from '../lib/cn';
 import ScanSheet from '../components/ScanSheet';
-import './addfood.css';
 
 /** Add food — prototype log-food view: subhead + search with scan button,
- * hairline result rows (.mrow), detail card with nutri cells, gram
- * stepper, live kcal readout and pill meal-slot picker. */
+ * hairline result rows, detail card with nutri cells, gram stepper, live
+ * kcal readout and pill meal-slot picker. */
 
 type Stage = 'search' | 'detail';
 
@@ -23,6 +23,15 @@ const scanGlyph = (
     <path d="M3 5v14M7 8v8M11 6v12M15 8v8M19 5v14" />
   </svg>
 );
+
+/* Line-icon chip — matches MealGroup's IC_CHIP sizing pattern. */
+const IC_CHIP =
+  'flex h-9 w-9 flex-none items-center justify-center rounded-md border border-accent-line bg-accent-soft ' +
+  '[&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:fill-none [&_svg]:stroke-accent-ink ' +
+  '[&_svg]:[stroke-width:2] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]';
+
+const NCELL = 'min-w-0 flex-1 rounded-md border px-2.5 py-2.5';
+const NLABEL = 'mt-1 text-2xs font-semibold uppercase tracking-[.04em] text-text-faint';
 
 export default function AddFood() {
   const { endpoint, slots, refreshSlots, userId } = useApp();
@@ -216,253 +225,256 @@ export default function AddFood() {
       )
     : null;
 
+  /* Meal-slot pill row + inline "new slot" control — identical in the detail
+   * card and the Quick add sheet, so built once and rendered in both. */
+  const slotControls = (
+    <>
+      <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+        {slots.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={cn(
+              'flex-none rounded-full border px-4 py-2 text-sm transition',
+              s.id === slotId
+                ? 'border-accent bg-accent font-semibold text-white'
+                : 'border-border bg-raised font-medium text-text hover:border-accent-line',
+            )}
+            onClick={() => setSlotId(s.id)}
+          >
+            {s.name}
+          </button>
+        ))}
+      </div>
+      <div className="mt-2.5 flex items-center gap-2">
+        <TextInput
+          className="min-w-0 flex-1 border-dashed"
+          placeholder="＋ New slot name…"
+          value={newSlotName}
+          onChange={(e) => setNewSlotName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void createSlot(); }}
+        />
+        <Button variant="outline" size="sm" onClick={() => void createSlot()} disabled={!newSlotName.trim()}>
+          New
+        </Button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="addfood">
-      <div className="subhead">
-        <button className="backbtn" onClick={() => navigate('/today')} aria-label="Back">
+    <div className="pb-6">
+      <div className="flex items-center justify-between px-6 pb-3 pt-4">
+        <button
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
+          onClick={() => navigate('/today')}
+          aria-label="Back"
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h2>Add food</h2>
-        <span style={{ width: 36 }} />
+        <h2 className="text-xl font-bold tracking-[-.02em]">Add food</h2>
+        <span className="w-9" />
       </div>
 
-      <div className="searchwrap">
-        <input
+      <div className="relative mt-0.5 px-6">
+        <TextInput
           type="text"
-          className="search"
           autoFocus
+          className="pr-12"
           placeholder="Search foods or scan barcode"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button className="scanbtn" aria-label="Barcode lookup" title="Barcode lookup" onClick={() => setBarcodeOpen(true)}>
+        <button
+          className="absolute right-8 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md bg-accent-soft text-accent-ink"
+          aria-label="Barcode lookup"
+          title="Barcode lookup"
+          onClick={() => setBarcodeOpen(true)}
+        >
           {scanGlyph}
         </button>
       </div>
 
       {stage === 'search' && (
-        <>
-        <button className="qa-tile" onClick={() => setQuickOpen(true)}>
-          <span className="qa-ic">
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </span>
-          <span className="qa-t">
-            <span className="qa-tt">Quick add</span>
-            <span className="qa-td">Just calories — no food search</span>
-          </span>
-          <span className="qa-chev">
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-          </span>
-        </button>
-        <div className="addfood-results">
-          {searching && (
-            <div className="addfood-status">
-              <Spinner /> Searching…
-            </div>
-          )}
-          {searchErr && <div className="addfood-err">{searchErr}</div>}
-          {!searching && query.trim().length >= 2 && results.length === 0 && !searchErr && (
-            <p className="empty">No foods match “{query.trim()}”.</p>
-          )}
-          {results.length > 0 && (
-            <div className="sec" style={{ paddingTop: 16 }}>
-              <div className="sec-h">
-                <h2>Results</h2>
-                <span className="addfood-count">{results.length} found</span>
+        <div className="px-6">
+          <button
+            className="mt-3.5 flex w-full items-center gap-3 rounded-lg border border-border bg-raised px-4 py-3.5 text-left shadow-card transition hover:border-accent-line active:scale-[.99]"
+            onClick={() => setQuickOpen(true)}
+          >
+            <span className={IC_CHIP}>
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </span>
+            <span className="flex flex-col gap-0.5">
+              <span className="text-base font-bold text-text">Quick add</span>
+              <span className="text-xs text-text-faint">Just calories — no food search</span>
+            </span>
+            <span className="ml-auto flex text-text-faint [&_svg]:h-4 [&_svg]:w-4 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:[stroke-width:2] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]">
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </span>
+          </button>
+
+          <div className="pb-4">
+            {searching && (
+              <div className="flex items-center gap-2 pt-4 text-sm text-text-faint">
+                <Spinner /> Searching…
               </div>
-              <div className="meals">
-                {results.map((f, i) => (
-                  <div
-                    key={`${f.name}-${f.brand ?? ''}-${i}`}
-                    className="mrow"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openDetail(f)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') openDetail(f);
-                    }}
-                  >
-                    <div className="ic">
-                      <svg viewBox="0 0 24 24" aria-hidden>
-                        <path d="M4 19h16M6 19v-2a6 6 0 0 1 12 0v2" />
-                      </svg>
-                    </div>
-                    <div className="b">
-                      <div className="n">{f.name}</div>
-                      <div className="d">
-                        {f.brand || 'Generic'}
-                        {f.local ? ' · your food' : ''}
+            )}
+            {searchErr && (
+              <div className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+                {searchErr}
+              </div>
+            )}
+            {!searching && query.trim().length >= 2 && results.length === 0 && !searchErr && (
+              <Empty>No foods match “{query.trim()}”.</Empty>
+            )}
+            {results.length > 0 && (
+              <div className="pt-4">
+                <div className="mb-3 flex items-baseline justify-between">
+                  <h2 className="text-md font-bold tracking-[-.01em]">Results</h2>
+                  <span className="text-xs font-semibold text-text-faint">{results.length} found</span>
+                </div>
+                <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised shadow-card">
+                  {results.map((f, i) => (
+                    <div
+                      key={`${f.name}-${f.brand ?? ''}-${i}`}
+                      className="flex items-center gap-3 p-3.5"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openDetail(f)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') openDetail(f);
+                      }}
+                    >
+                      <div className={IC_CHIP}>
+                        <svg viewBox="0 0 24 24" aria-hidden>
+                          <path d="M4 19h16M6 19v-2a6 6 0 0 1 12 0v2" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-base font-semibold tracking-[-.01em]">{f.name}</div>
+                        <div className="mt-0.5 text-xs text-text-faint">
+                          {f.brand || 'Generic'}
+                          {f.local ? ' · your food' : ''}
+                        </div>
+                      </div>
+                      <div className="whitespace-nowrap text-base font-bold tracking-[-.01em]">
+                        {formatInt(f.kcal_per_100g)} <small className="text-2xs font-medium text-text-faint">kcal/100g</small>
                       </div>
                     </div>
-                    <div className="k">
-                      {formatInt(f.kcal_per_100g)} <small>kcal/100g</small>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-          {query.trim().length < 2 && !searchErr && (
-            <p className="empty">Type at least 2 characters to search the food database.</p>
-          )}
+            )}
+            {query.trim().length < 2 && !searchErr && (
+              <Empty>Type at least 2 characters to search the food database.</Empty>
+            )}
+          </div>
         </div>
-        </>
       )}
 
       {stage === 'detail' && selected && math && (
-        <div className="addfood-detail">
-          <div className="sec" style={{ paddingTop: 16 }}>
-            <div className="card" style={{ padding: '16px 18px' }}>
-              <div className="brand">{selected.brand || 'Generic'}</div>
-              <div className="fname">{selected.name}</div>
-              <div className="nutri">
-                <div className="ncell big">
-                  <div className="nv2">{formatInt(math.kcal)}</div>
-                  <div className="nl">kcal</div>
-                </div>
-                <div className="ncell">
-                  <div className="nv2">{math.protein}g</div>
-                  <div className="nl">Protein</div>
-                </div>
-                <div className="ncell">
-                  <div className="nv2">{math.carbs}g</div>
-                  <div className="nl">Carbs</div>
-                </div>
-                <div className="ncell">
-                  <div className="nv2">{math.fat}g</div>
-                  <div className="nl">Fat</div>
-                </div>
-              </div>
-              <div className="perserv">
-                for {grams} g · {formatInt(selected.kcal_per_100g)} kcal per 100 g
-                {selected.barcode ? ` · ${selected.barcode}` : ''}
-              </div>
-
-              <div className="steprow">
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Serving</span>
-                <div className="stepper">
-                  <button onClick={() => setGrams(Math.max(0, grams - 10))} aria-label="Less">
-                    −
-                  </button>
-                  <span className="ste">
-                    <input
-                      type="number"
-                      value={grams}
-                      min={0}
-                      step={10}
-                      onChange={(e) => setGrams(Math.max(0, Math.round(Number(e.target.value) || 0)))}
-                    />
-                    g
-                  </span>
-                  <button onClick={() => setGrams(grams + 10)} aria-label="More">
-                    +
-                  </button>
-                </div>
-                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--faint)' }}>Source: Open Food Facts ↗</span>
-              </div>
-
-              <div
-                style={{
-                  margin: '14px 0 6px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: 'var(--faint)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                Add to meal
-              </div>
-              <div className="mealpills">
-                {slots.map((s) => (
-                  <button
-                    key={s.id}
-                    className={s.id === slotId ? 'mp on' : 'mp'}
-                    onClick={() => setSlotId(s.id)}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-              <div className="new-slot">
-                <input
-                  placeholder="＋ New slot name…"
-                  value={newSlotName}
-                  onChange={(e) => setNewSlotName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void createSlot();
-                  }}
-                />
-                <button className="btn outline sm" onClick={() => void createSlot()} disabled={!newSlotName.trim()}>
-                  New
-                </button>
-              </div>
-
-              <button className="btn" style={{ marginTop: 16 }} onClick={() => void addEntry()} disabled={adding || !slotId}>
-                {adding ? 'Adding…' : 'Add to diary'}
-              </button>
+        <div className="px-6 pt-4">
+          <Card className="px-[18px] py-4">
+            <div className="text-2xs font-semibold uppercase tracking-[.06em] text-text-faint">
+              {selected.brand || 'Generic'}
             </div>
-          </div>
+            <div className="mt-1 text-lg font-bold tracking-[-.01em]">{selected.name}</div>
+
+            <div className="mt-3.5 flex gap-2.5">
+              <div className={cn(NCELL, 'border-accent-line bg-accent-soft')}>
+                <div className="whitespace-nowrap text-lg font-bold tracking-[-.01em] text-accent-ink">
+                  {formatInt(math.kcal)}
+                </div>
+                <div className={NLABEL}>kcal</div>
+              </div>
+              {(
+                [
+                  ['Protein', `${math.protein}g`],
+                  ['Carbs', `${math.carbs}g`],
+                  ['Fat', `${math.fat}g`],
+                ] as const
+              ).map(([label, val]) => (
+                <div key={label} className={cn(NCELL, 'border-border bg-surface')}>
+                  <div className="whitespace-nowrap text-lg font-bold tracking-[-.01em]">{val}</div>
+                  <div className={NLABEL}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-2 text-2xs text-text-faint">
+              for {grams} g · {formatInt(selected.kcal_per_100g)} kcal per 100 g
+              {selected.barcode ? ` · ${selected.barcode}` : ''}
+            </div>
+
+            <div className="mt-3.5 flex items-center gap-3">
+              <span className="text-sm font-semibold">Serving</span>
+              <Stepper
+                value={grams}
+                onChange={setGrams}
+                step={10}
+                min={0}
+                suffix="g"
+                aria-label="Serving size in grams"
+              />
+              <span className="ml-auto text-2xs text-text-faint">Source: Open Food Facts ↗</span>
+            </div>
+
+            <div className="mb-1.5 mt-3.5 text-xs font-semibold uppercase tracking-[.05em] text-text-faint">
+              Add to meal
+            </div>
+            {slotControls}
+
+            <Button className="mt-4" block onClick={() => void addEntry()} disabled={adding || !slotId}>
+              {adding ? 'Adding…' : 'Add to diary'}
+            </Button>
+          </Card>
         </div>
       )}
 
       {quickOpen && (
-        <div className="scan-scrim" onClick={() => setQuickOpen(false)}>
-          <div className="scan-sheet" role="dialog" aria-label="Quick add calories" onClick={(e) => e.stopPropagation()}>
-            <div className="grab" />
-            <h3>Quick add</h3>
-            <div className="sub">Calories with no search — macros optional. Pick a meal, done.</div>
-            <Field label="Calories (kcal)">
-              <input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                autoFocus
-                placeholder="e.g. 250"
-                value={qaKcal}
-                onChange={(e) => setQaKcal(e.target.value.replace(/\D/g, ''))}
-                onKeyDown={(e) => { if (e.key === 'Enter') void submitQuickAdd(); }}
-              />
-            </Field>
-            <div className="qa-grid">
-              <Field label="Protein (g)">
-                <input type="number" min={0} inputMode="decimal" placeholder="0" value={qaP} onChange={(e) => setQaP(e.target.value.replace(/[^\d.]/g, ''))} />
-              </Field>
-              <Field label="Carbs (g)">
-                <input type="number" min={0} inputMode="decimal" placeholder="0" value={qaC} onChange={(e) => setQaC(e.target.value.replace(/[^\d.]/g, ''))} />
-              </Field>
-              <Field label="Fat (g)">
-                <input type="number" min={0} inputMode="decimal" placeholder="0" value={qaF} onChange={(e) => setQaF(e.target.value.replace(/[^\d.]/g, ''))} />
-              </Field>
-            </div>
-            <div className="cap" style={{ fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', marginBottom:  8 }}>Add to meal</div>
-            <div className="mealpills">
-              {slots.map((s) => (
-                <button key={s.id} className={s.id === slotId ? 'mp on' : 'mp'} onClick={() => setSlotId(s.id)}>
-                  {s.name}
-                </button>
-              ))}
-            </div>
-            <div className="new-slot">
-              <input placeholder="＋ New slot name…" value={newSlotName} onChange={(e) => setNewSlotName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void createSlot(); }} />
-              <button className="btn outline sm" onClick={() => void createSlot()} disabled={!newSlotName.trim()}>New</button>
-            </div>
-            {qaErr && <div className="scan-err">{qaErr}</div>}
-            <div className="scan-actions">
-              <button className="btn outline" onClick={() => setQuickOpen(false)}>Cancel</button>
-              <button className="btn" onClick={() => void submitQuickAdd()} disabled={qaAdding}>Add</button>
-            </div>
+        <Sheet open onClose={() => setQuickOpen(false)} title="Quick add">
+          <div className="mb-3.5 mt-2 text-sm leading-normal text-text-muted">
+            Calories with no search — macros optional. Pick a meal, done.
           </div>
-        </div>
+          <Field label="Calories (kcal)">
+            <TextInput
+              type="number"
+              min={0}
+              inputMode="numeric"
+              autoFocus
+              placeholder="e.g. 250"
+              value={qaKcal}
+              onChange={(e) => setQaKcal(e.target.value.replace(/\D/g, ''))}
+              onKeyDown={(e) => { if (e.key === 'Enter') void submitQuickAdd(); }}
+            />
+          </Field>
+          <div className="mb-3.5 mt-2.5 grid grid-cols-3 gap-2.5">
+            <Field label="Protein (g)">
+              <TextInput type="number" min={0} inputMode="decimal" placeholder="0" value={qaP} onChange={(e) => setQaP(e.target.value.replace(/[^\d.]/g, ''))} />
+            </Field>
+            <Field label="Carbs (g)">
+              <TextInput type="number" min={0} inputMode="decimal" placeholder="0" value={qaC} onChange={(e) => setQaC(e.target.value.replace(/[^\d.]/g, ''))} />
+            </Field>
+            <Field label="Fat (g)">
+              <TextInput type="number" min={0} inputMode="decimal" placeholder="0" value={qaF} onChange={(e) => setQaF(e.target.value.replace(/[^\d.]/g, ''))} />
+            </Field>
+          </div>
+          <div className="mb-2 text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Add to meal</div>
+          {slotControls}
+          {qaErr && <div className="mt-2 text-xs text-danger">{qaErr}</div>}
+          <div className="mt-3.5 flex gap-2.5">
+            <Button variant="outline" className="flex-1" onClick={() => setQuickOpen(false)}>Cancel</Button>
+            <Button className="flex-1" loading={qaAdding} onClick={() => void submitQuickAdd()}>Add</Button>
+          </div>
+        </Sheet>
       )}
 
-      <ScanSheet open={barcodeOpen} onClose={() => setBarcodeOpen(false)} onCode={(code) => { void lookupBarcode(code); } } />
+      <ScanSheet open={barcodeOpen} onClose={() => setBarcodeOpen(false)} onCode={(code) => { void lookupBarcode(code); }} />
     </div>
   );
 }
