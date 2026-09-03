@@ -30,6 +30,7 @@ func init() {
 
 		profiles.Fields.Add(
 			&core.RelationField{Name: "user", CollectionId: users.Id, Required: true, MaxSelect: 1},
+			&core.TextField{Name: "name"},
 			&core.AutodateField{Name: "created", OnCreate: true},
 			&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 			&core.NumberField{Name: "height_cm"},

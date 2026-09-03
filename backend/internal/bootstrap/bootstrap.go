@@ -47,6 +47,9 @@ func seedUser(app core.App, user *core.Record) error {
 
 	profile := core.NewRecord(profileCol)
 	profile.Set("user", user.Id)
+	if n := user.GetString("name"); n != "" {
+		profile.Set("name", n)
+	}
 	profile.Set("activity_level", "moderate")
 	profile.Set("tdee_formula", "mifflin")
 	profile.Set("goal", "maintain")

@@ -4,7 +4,15 @@
    Phone frame removed; tabbar fixed for full-viewport use.
    ══════════════════════════════════════════════════════════════ */
 
-/* ───────── shared bits ───────── */
+/* iOS Safari auto-zooms the page when focusing any input/select under
+   16px font. All form controls get a floor of 16px (mobile-first; the
+   visual delta on desktop is negligible). */
+input,
+select,
+textarea {
+  font-size: 16px;
+  line-height: 1.4;
+}
 
 .hero {
   position: relative;

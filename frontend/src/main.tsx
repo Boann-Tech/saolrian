@@ -9,6 +9,7 @@ import AddFood from './screens/AddFood';
 import History from './screens/History';
 import ProfileGoals from './screens/ProfileGoals';
 import Import from './screens/Import';
+import Welcome from './screens/Welcome';
 import { AppShell } from './components/AppShell';
 import './styles/tokens.css';
 import './styles/app.css';
@@ -22,7 +23,7 @@ import './styles/app.css';
  * it never renders <Routes> outside <BrowserRouter>.
  */
 function AppRoutes() {
-  const { endpoint, userId } = useApp();
+  const { endpoint, userId, profile, latestWeight } = useApp();
 
   if (!endpoint) {
     return (
@@ -35,6 +36,19 @@ function AppRoutes() {
     return (
       <Routes>
         <Route path="*" element={<Auth />} />
+      </Routes>
+    );
+  }
+  // First-run setup: whiler the profile is still bootstrapping, show no UI;
+  // once loaded, if key setup fields are missing, route to the wizard.
+  if (!profile) return null;
+  const needsSetup =
+    !profile.sex || !profile.height_cm || !profile.activity_level || latestWeight == null;
+  if (needsSetup) {
+    return (
+      <Routes>
+        <Route path="/welcome" element={<Welcome />} />
+        <Route path="*" element={<Navigate to="/welcome" replace />} />
       </Routes>
     );
   }

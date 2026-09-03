@@ -7,7 +7,8 @@ import { createDiaryEntry } from '../lib/offline';
 import { foodMath } from '../lib/nutrition';
 import { normalizeSearch, normalizeBarcode } from '../lib/normalize';
 import { formatInt } from '../lib/format';
-import { Field, Modal, Spinner, useToast } from '../components/ui';
+import { Spinner, useToast } from '../components/ui';
+import ScanSheet from '../components/ScanSheet';
 import './addfood.css';
 
 /** Add food — prototype log-food view: subhead + search with scan button,
@@ -39,7 +40,6 @@ export default function AddFood() {
   const [adding, setAdding] = useState(false);
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [barcodeVal, setBarcodeVal] = useState('');
-  const [barcodeErr, setBarcodeErr] = useState('');
   const [newSlotName, setNewSlotName] = useState('');
   const debounce = useRef<number | undefined>(undefined);
 
@@ -87,13 +87,12 @@ export default function AddFood() {
     setStage('detail');
   };
 
-  const lookupBarcode = async () => {
-    const code = barcodeVal.trim();
+  const lookupBarcode = async (codeArg?: string) => {
+    const code = (codeArg ?? barcodeVal).trim();
     if (!/^\d{6,}$/.test(code)) {
-      setBarcodeErr('Enter a numeric barcode (at least 6 digits).');
+      toast('Enter a numeric barcode (at least 6 digits.', 'err');
       return;
     }
-    setBarcodeErr('');
     try {
       const pb = getClient(endpoint);
       const raw = await saolrianSend<unknown>(pb, 'GET', `/api/saolrian/food/barcode/${code}`);
@@ -103,8 +102,8 @@ export default function AddFood() {
       setBarcodeVal('');
       openDetail(food);
     } catch (ex) {
-      if (ex instanceof UnreachableError) setBarcodeErr('Server unreachable — try again when online.');
-      else setBarcodeErr('No product found for that code.');
+      if (ex instanceof UnreachableError) toast('Server unreachable — try again when online.', 'err');
+      else toast('No product found for that code.', 'err');
     }
   };
 
@@ -348,26 +347,7 @@ export default function AddFood() {
         </div>
       )}
 
-      <Modal open={barcodeOpen} onClose={() => setBarcodeOpen(false)} title="Enter a barcode">
-        <p className="barcode-hint">Type the digits printed under the barcode. Camera scanning arrives in v2.</p>
-        <Field label="Barcode">
-          <input
-            autoFocus
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="e.g. 3017620422003"
-            value={barcodeVal}
-            onChange={(e) => setBarcodeVal(e.target.value.replace(/\D/g, ''))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void lookupBarcode();
-            }}
-          />
-        </Field>
-        {barcodeErr && <div className="addfood-err">{barcodeErr}</div>}
-        <button className="btn" style={{ marginTop: 12 }} onClick={() => void lookupBarcode()}>
-          Look up
-        </button>
-      </Modal>
+      <ScanSheet open={barcodeOpen} onClose={() => setBarcodeOpen(false)} onCode={(code) => { void lookupBarcode(code); } } />
     </div>
   );
 }

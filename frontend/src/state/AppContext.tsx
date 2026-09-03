@@ -14,6 +14,7 @@ interface AppState {
   pb: PocketBase | null;
   profile: Profile | null;
   slots: MealSlot[];
+  latestWeight: number | null;
   theme: string;
   refreshProfile: () => Promise<void>;
   refreshSlots: () => Promise<void>;
@@ -29,6 +30,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [endpoint, setEndpointState] = useState<string>(() => getStoredEndpoint());
   const [profile, setProfile] = useState<Profile | null>(null);
   const [slots, setSlots] = useState<MealSlot[]>([]);
+  const [latestWeight, setLatestWeight] = useState<number | null>(null);
   const [theme, setThemeState] = useState<string>(() => getStoredTheme() || '#0f7a5f');
   // PocketBase's authStore is external mutable state React can't see —
   // bump this counter whenever auth changes so the Gate re-renders.
@@ -44,6 +46,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         filter: `user="${pb.authStore.record?.id}"`,
       });
       setProfile((recs[0] as unknown as Profile) ?? null);
+      try {
+        const w = await pb.collection('weights').getList(1, 1, {
+          filter: `user="${pb.authStore.record?.id}"`,
+          sort: '-measured_at',
+        });
+        setLatestWeight((w.items[0]?.['kg'] as number | undefined) ?? null);
+      } catch {
+        setLatestWeight(null);
+      }
     } catch {
       setProfile(null);
     }
@@ -105,6 +116,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setProfile(null);
     setSlots([]);
+    setLatestWeight(null);
     setEndpointState('');
   }, []);
 
@@ -129,6 +141,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       pb: endpoint ? getClient(endpoint) : null,
       profile,
       slots,
+      latestWeight,
       theme,
       refreshProfile,
       refreshSlots,
@@ -137,7 +150,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTheme,
       userId,
     }),
-    [endpoint, profile, slots, theme, refreshProfile, refreshSlots, setEndpoint, clearEndpoint, setTheme, userId],
+    [endpoint, profile, slots, latestWeight, theme, refreshProfile, refreshSlots, setEndpoint, clearEndpoint, setTheme, userId],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
