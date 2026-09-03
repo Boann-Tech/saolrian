@@ -21,6 +21,8 @@ export default function Today() {
   const [err, setErr] = useState('');
   const [newSlot, setNewSlot] = useState('');
   const [addingSlot, setAddingSlot] = useState(false);
+  const [waterMl, setWaterMl] = useState<number>(0);
+  const [steps, setSteps] = useState<number>(0);
 
   const load = useCallback(async () => {
     if (!endpoint) return;
@@ -30,6 +32,7 @@ export default function Today() {
       const pb = getClient(endpoint);
       const raw = await saolrianSend<Record<string, unknown>>(pb, 'GET', `/api/saolrian/summary?date=${todayISO()}`);
       setSummary(normalizeSummary(raw));
+      await loadMetrics(pb);
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : 'Failed to load summary');
     } finally {
@@ -69,6 +72,54 @@ export default function Today() {
   const remaining = budget != null ? budget - eaten : null;
   const over = remaining != null && remaining < 0;
   const firstName = (profile?.['name'] as string | undefined) ?? '';
+
+  const loadMetrics = async (pb: ReturnType<typeof getClient>) => {
+    try {
+      const uid = pb.authStore.record?.id;
+      if (!uid) return;
+      const list = await pb.collection('daily_metrics').getFullList({
+        filter: `user="${uid}" && date~"${todayISO()}"`,
+      });
+      const row = list[0];
+      setWaterMl(row?.['water_ml'] ?? 0);
+      setSteps(row?.['steps'] ?? 0);
+    } catch {
+      /* ignore — defaults shown */
+    }
+  };
+
+  const upsertMetric = async (patchObj: { water_ml?: number; steps?: number }) => {
+    const pb = getClient(endpoint);
+    const uid = pb.authStore.record?.id;
+    if (!uid) return;
+    const list = await pb.collection('daily_metrics').getFullList({
+      filter: `user="${uid}" && date~"${todayISO()}"`,
+    });
+    const next = {
+      user: uid,
+      date: new Date().toISOString(),
+      source: 'manual',
+      ...(list[0] ? {} : { water_ml: waterMl, steps }),
+      ...patchObj,
+    };
+    if (list[0]) {
+      await pb.collection('daily_metrics').update(list[0].id, patchObj);
+    } else {
+      await pb.collection('daily_metrics').create(next);
+    }
+    await loadMetrics(pb);
+  };
+
+  const destroyEntry = async (entryId: string) => {
+    const pb = getClient(endpoint);
+    try {
+      await pb.collection('diary_entries').delete(entryId);
+      await load();
+      toast('Entry deleted');
+    } catch (ex) {
+      toast(ex instanceof Error ? ex.message : 'Could not delete entry', 'err');
+    }
+  };
 
   return (
     <div className="today">
@@ -181,7 +232,13 @@ export default function Today() {
               </p>
             )}
             {summary.groups.map((g) => (
-              <MealGroup key={g.slot_id} group={g} onAddFood={() => navigate('/add')} />
+              <MealGroup
+                key={g.slot_id}
+                group={g}
+                onAddFood={() => navigate('/add')}
+                onDelete={(id) => void destroyEntry(id)}
+                onEdit={(id) => navigate(`/edit/${id}`)}
+              />
             ))}
 
             <div className="add-slot">
@@ -200,23 +257,43 @@ export default function Today() {
             </div>
           </div>
 
-          {/* ── Movement (prototype .move card, static v2 preview) ── */}
+          {/* ── Hydration + Steps (live per-day) ── */}
           <div className="sec" style={{ paddingBottom: 24 }}>
-            <div className="move">
-              <div className="cap">Movement</div>
+            <div className="sec-h">
+              <h2>Hydration</h2>
+            </div>
+            <div className="card" style={{ padding: '16px 18px' }}>
               <div className="row">
-                <div className="v">
-                  {formatInt(8340)} <small>/ {formatInt(10000)} steps</small>
-                </div>
-                <div className="sync">
+                <span className="v" style={{ fontSize: 20, fontWeight: 700 }}>
+                  {formatInt(waterMl)} <small>/ {formatInt(2000)} ml</small>
+                </span>
+                <span className="sync">
                   <span className="led" />
-                  v2 preview
-                </div>
+                  water
+                </span>
               </div>
-              <div className="movebar">
-                <i />
+              <div className="movebar"><i style={{ width: `${Math.min(100, (waterMl / 2000) * 100)}%` }} /></div>
+              <div className="addmeals">
+                <button className="btn outline sm" onClick={() => void upsertMetric({ water_ml: waterMl + 250 })}>+250 ml</button>
+                <button className="btn outline sm" onClick={() => void upsertMetric({ water_ml: waterMl + 500 })}>+500 ml</button>
               </div>
-              <div className="move-sync-note">Step tracking arrives in v2 — this card is a preview.</div>
+            </div>
+
+            <div className="sec-h" style={{ marginTop: 16 }}>
+              <h2>Steps</h2>
+            </div>
+            <div className="card" style={{ padding: '16px 18px' }}>
+              <div className="row">
+                <span className="v" style={{ fontSize: 20, fontWeight: 700 }}>
+                  {formatInt(steps)} <small>/ {formatInt(10000)} steps</small>
+                </span>
+                <span className="sync"><span className="led" /> manual</span>
+              </div>
+              <div className="movebar"><i style={{ width: `${Math.min(100, (steps / 10000) * 100)}%` }} /></div>
+              <div className="addmeals">
+                <button className="btn outline sm" onClick={() => void upsertMetric({ steps: steps + 1000 })}>+1,000</button>
+                <button className="btn outline sm" onClick={() => void upsertMetric({ steps: steps + 5000 })}>+5,000</button>
+              </div>
             </div>
           </div>
         </>

@@ -18,6 +18,8 @@ Same app either way. Your data either way.
 
 - 🍽️ **Food logging** — search 3M+ foods via [Open Food Facts](https://world.openfoodfacts.org), scan barcodes (camera + manual), custom foods
 - ⚡ **Quick add** — log just calories (macros optional) in one tap, no search needed
+- ✏️ **Edit & delete** — kebab menu on any diary entry; edit kcal/grams/meal in place, or delete
+- 💧 **Water & steps** — per-day hydration (+250/+500 ml) and step counters (+1,000/+5,000) on Today
 - 🗓️ **Customizable meal slots** — Breakfast, second breakfast, pre-workout — name your meals whatever you want, add as many as you like
 - 🎯 **TDEE & goals** — Mifflin-St Jeor / Katch-McArdle, five activity levels, lose/maintain/gain with macro targets
 - 📊 **History & trends** — week view, adherence dots, weight tracking

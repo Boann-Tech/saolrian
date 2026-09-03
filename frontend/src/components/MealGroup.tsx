@@ -67,12 +67,17 @@ export function MealGroup({
   group,
   addLabel = 'Add food',
   onAddFood,
+  onDelete,
+  onEdit,
 }: {
   group: SummaryGroup;
   addLabel?: string;
   onAddFood?: () => void;
+  onDelete?: (entryId: string) => void;
+  onEdit?: (entryId: string) => void;
 }) {
   const [open, setOpen] = useState(group.entries.length > 0);
+  const [menuEntry, setMenuEntry] = useState<string | null>(null);
   const groupKcal = group.entries.reduce((s, e) => s + e.kcal, 0);
 
   const body = (
@@ -102,6 +107,38 @@ export function MealGroup({
             <div className="k">
               {formatInt(e.kcal)} <small>kcal</small>
             </div>
+            {(onDelete || onEdit) && (
+              <button
+                className="entry-menu"
+                aria-label={`Actions for ${e.name}`}
+                onClick={() => setMenuEntry(menuEntry === e.id ? null : e.id)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden>
+                  <circle cx="5" cy="12" r="1.6" />
+                  <circle cx="12" cy="12" r="1.6" />
+                  <circle cx="19" cy="12" r="1.6" />
+                </svg>
+              </button>
+            )}
+            {menuEntry === e.id && (
+              <div className="entry-menu-pop">
+                {onEdit && (
+                  <button onClick={() => { setMenuEntry(null); onEdit(e.id); }}>
+                    <svg viewBox="0 0 24 24" aria-hidden><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z" /></svg>
+                    Edit
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    className="danger"
+                    onClick={() => { setMenuEntry(null); onDelete(e.id); }}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden><path d="M6 7h12M9 7V5h6v2m-8 0 1 13h8l1-13" /></svg>
+                    Delete
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ))
       )}

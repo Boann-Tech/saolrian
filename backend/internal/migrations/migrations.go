@@ -160,10 +160,33 @@ func init() {
 		)
 		weights.AddIndex("idx_weights_user_measuredAt", false, "user, measured_at", "")
 
-		return app.Save(weights)
+		if err := app.Save(weights); err != nil {
+			return err
+		}
+
+		// ---------------------------------------------------------------
+		// daily_metrics — water + steps, one row per user per day
+		// ---------------------------------------------------------------
+		metrics := core.NewBaseCollection("daily_metrics")
+		metrics.ListRule = types.Pointer(ownerRule)
+		metrics.ViewRule = types.Pointer(ownerRule)
+		metrics.CreateRule = types.Pointer(ownerRule)
+		metrics.UpdateRule = types.Pointer(ownerRule)
+		metrics.DeleteRule = types.Pointer(ownerRule)
+
+		metrics.Fields.Add(
+			&core.RelationField{Name: "user", CollectionId: users.Id, Required: true, MaxSelect: 1},
+			&core.DateField{Name: "date", Required: true},
+			&core.NumberField{Name: "water_ml", Min: types.Pointer(0.0)},
+			&core.NumberField{Name: "steps", Min: types.Pointer(0.0)},
+			&core.TextField{Name: "source"},
+		)
+		metrics.AddIndex("idx_metrics_user_date", true, "user, date", "")
+
+		return app.Save(metrics)
 	}, func(app core.App) error {
 		// down migration: drop in reverse dependency order
-		for _, name := range []string{"weights", "diary_entries", "foods", "meal_slots", "profiles"} {
+		for _, name := range []string{"daily_metrics", "weights", "diary_entries", "foods", "meal_slots", "profiles"} {
 			col, err := app.FindCollectionByNameOrId(name)
 			if err != nil {
 				continue

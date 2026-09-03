@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import type { Summary } from '../lib/types';
 import { dateFromOffset, formatInt, prettyDate, todayISO, weekdayLabel } from '../lib/format';
 import { getClient } from '../lib/pb';
 import { normalizeSummary } from '../lib/normalize';
 import { MealGroup } from '../components/MealGroup';
-import { Spinner } from '../components/ui';
+import { Spinner, useToast } from '../components/ui';
 import './history.css';
 
 /** History — prototype structure: subhead, 7-day .dpill strip with
@@ -18,9 +19,22 @@ interface DaySummary extends Summary {
 
 export default function History() {
   const { endpoint } = useApp();
+  const navigate = useNavigate();
   const [days, setDays] = useState<DaySummary[]>([]);
   const [selected, setSelected] = useState<string>(todayISO());
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
+
+  const destroyEntry = async (entryId: string) => {
+    const pb = getClient(endpoint);
+    try {
+      await pb.collection('diary_entries').delete(entryId);
+      await load();
+      toast('Entry deleted');
+    } catch (ex) {
+      toast(ex instanceof Error ? ex.message : 'Could not delete entry', 'err');
+    }
+  };
 
   const load = useCallback(async () => {
     if (!endpoint) return;
@@ -156,7 +170,15 @@ export default function History() {
                     No meal data for this day.
                   </p>
                 ) : (
-                  sel.groups.map((g) => <MealGroup key={g.slot_id} group={g} addLabel="Add food" />)
+                  sel.groups.map((g) => (
+                    <MealGroup
+                      key={g.slot_id}
+                      group={g}
+                      addLabel="Add food"
+                      onDelete={(id) => void destroyEntry(id)}
+                      onEdit={(id) => navigate(`/edit/${id}`)}
+                    />
+                  ))
                 )}
               </div>
             </>

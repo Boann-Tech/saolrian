@@ -10,6 +10,7 @@ import History from './screens/History';
 import ProfileGoals from './screens/ProfileGoals';
 import Import from './screens/Import';
 import Welcome from './screens/Welcome';
+import EditEntry from './screens/EditEntry';
 import { AppShell } from './components/AppShell';
 import './styles/tokens.css';
 import './styles/app.css';
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<ProfileGoals />} />
         <Route path="/profile/import" element={<Import />} />
+        <Route path="/edit/:id" element={<EditEntry />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Routes>
     </AppShell>

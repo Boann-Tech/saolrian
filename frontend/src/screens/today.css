@@ -40,3 +40,33 @@
   margin-top: 10px;
   line-height: 1.5;
 }
+
+
+/* ───────── Hydration / Steps cards ───────── */
+.addmeals {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.movebar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  overflow: hidden;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+}
+.movebar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #fff));
+  border-radius: 999px;
+  width: 0;
+  transition: width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.card .row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
