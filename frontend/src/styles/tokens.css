@@ -1,20 +1,3 @@
-:root {
-  --accent: #0f7a5f; /* user-overridable, persisted in localStorage 'saolrian-theme' */
-  --accent-soft: color-mix(in srgb, var(--accent) 9%, #fff);
-  --accent-ink: color-mix(in srgb, var(--accent) 82%, #000);
-  --accent-line: color-mix(in srgb, var(--accent) 26%, #fff);
-  --accent-glow: color-mix(in srgb, var(--accent) 42%, transparent);
-  --bg: #ffffff;
-  --ink: #0a2540;
-  --surface: #f6f9fc;
-  --line: #e3e8ee;
-  --faint: #8792a2;
-  --muted: #425466;
-  --good: #3ecf8e;
-  --good-ink: #057f5b;
-  --danger: #d64545;
-}
-
 * {
   margin: 0;
   padding: 0;

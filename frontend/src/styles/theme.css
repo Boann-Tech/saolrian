@@ -1,0 +1,131 @@
+/* ─────────────────────────────────────────────────────────────
+   Design tokens. Single source of truth for the Tailwind theme.
+   Semantic color names; light values here, dark values below.
+   ───────────────────────────────────────────────────────────── */
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme {
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+
+  --shadow-card: 0 1px 2px rgba(10, 37, 64, 0.04);
+  --shadow-pop: 0 3px 10px rgba(10, 37, 64, 0.07);
+  --shadow-sheet: 0 12px 40px rgba(10, 37, 64, 0.18);
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Colors — semantic. `--accent` is set at runtime by AppContext. */
+  --color-bg: #ffffff;
+  --color-surface: #f6f9fc;
+  --color-raised: #ffffff;
+  --color-border: #e3e8ee;
+  --color-text: #0a2540;
+  --color-text-muted: #425466;
+  --color-text-faint: #8792a2;
+
+  --color-accent: var(--accent, #0f7a5f);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-line: var(--accent-line);
+
+  --color-good: #3ecf8e;
+  --color-good-ink: #057f5b;
+  --color-warn: #b4530a;
+  --color-warn-soft: rgba(224, 163, 75, 0.14);
+  --color-danger: #d64545;
+}
+
+/* Runtime-derived accent tints. Kept as :root custom props (not @theme
+   literals) so they re-mix whenever AppContext rewrites --accent.
+   Redefined per-theme below. */
+:root {
+  --accent: #0f7a5f;
+  --accent-soft: color-mix(in srgb, var(--accent) 9%, #fff);
+  --accent-ink: color-mix(in srgb, var(--accent) 82%, #000);
+  --accent-line: color-mix(in srgb, var(--accent) 26%, #fff);
+  --accent-glow: color-mix(in srgb, var(--accent) 42%, transparent);
+  color-scheme: light;
+}
+
+/* ── Dark palette ──────────────────────────────────────────────
+   Applied when data-theme=dark, OR when the OS prefers dark and no
+   explicit data-theme=light is set. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #0c1622;
+  --color-surface: #12202f;
+  --color-raised: #16273a;
+  --color-border: #24384d;
+  --color-text: #e7eef6;
+  --color-text-muted: #9fb2c4;
+  --color-text-faint: #6d8299;
+  --color-good: #4ade9e;
+  --color-good-ink: #4ade9e;
+  --color-warn: #e0a34b;
+  --color-warn-soft: rgba(224, 163, 75, 0.18);
+  --color-danger: #ef6a6a;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --shadow-sheet: 0 12px 48px rgba(0, 0, 0, 0.6);
+  /* Dark accent tints: mix toward the dark base, not white. */
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, #16273a);
+  --accent-ink: color-mix(in srgb, var(--accent) 70%, #fff);
+  --accent-line: color-mix(in srgb, var(--accent) 40%, #24384d);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --color-bg: #0c1622;
+    --color-surface: #12202f;
+    --color-raised: #16273a;
+    --color-border: #24384d;
+    --color-text: #e7eef6;
+    --color-text-muted: #9fb2c4;
+    --color-text-faint: #6d8299;
+    --color-good: #4ade9e;
+    --color-good-ink: #4ade9e;
+    --color-warn: #e0a34b;
+    --color-warn-soft: rgba(224, 163, 75, 0.18);
+    --color-danger: #ef6a6a;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-pop: 0 4px 14px rgba(0, 0, 0, 0.5);
+    --shadow-sheet: 0 12px 48px rgba(0, 0, 0, 0.6);
+    --accent-soft: color-mix(in srgb, var(--accent) 22%, #16273a);
+    --accent-ink: color-mix(in srgb, var(--accent) 70%, #fff);
+    --accent-line: color-mix(in srgb, var(--accent) 40%, #24384d);
+  }
+}
+
+/* ── Legacy aliases ───────────────────────────────────────────
+   Keep app.css + un-migrated screen CSS working (and theme-aware)
+   until Task 17 removes them. */
+:root {
+  --bg: var(--color-bg);
+  --ink: var(--color-text);
+  --surface: var(--color-surface);
+  --line: var(--color-border);
+  --faint: var(--color-text-faint);
+  --muted: var(--color-text-muted);
+  --good: var(--color-good);
+  --good-ink: var(--color-good-ink);
+  --danger: var(--color-danger);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
