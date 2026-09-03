@@ -22,3 +22,6 @@ coverage/
 
 # OS junk
 .DS_Store
+
+# TypeScript incremental build info (regenerated on every build)
+frontend/tsconfig.tsbuildinfo
