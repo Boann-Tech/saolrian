@@ -6,8 +6,8 @@ import { todayISO, greeting, formatInt } from '../lib/format';
 import { getClient } from '../lib/pb';
 import { normalizeSummary } from '../lib/normalize';
 import { MealGroup } from '../components/MealGroup';
-import { Spinner, useToast } from '../components/ui';
-import './today.css';
+import { Button, Card, CardTitle, Empty, Meter, ProgressBar, Spinner, StatTile, TextInput, useToast } from '../components/ui';
+import { cn } from '../lib/cn';
 
 /** Today dashboard — prototype structure: brandline hero with balance card,
  * meter, macro stat tiles, collapsible meal groups, movement card. */
@@ -122,114 +122,113 @@ export default function Today() {
   };
 
   return (
-    <div className="today">
+    <div className="pb-2">
       {/* ── Hero (prototype: brandline, greeting, date, balance) ── */}
-      <section className="hero">
-        <div className="brandline">
-          <span className="dot" />
+      <section className="hero border-b border-border px-6 pb-6 pt-5">
+        <div className="flex items-center gap-2 text-xs font-bold tracking-[.02em]">
+          <span className="h-2.5 w-2.5 rounded-[3px] bg-accent" />
           SAOLRIAN
         </div>
-        <h1>
-          {greeting()}, <em>{firstName || 'there'}</em>
+        <h1 className="mt-3 text-2xl font-bold leading-[1.15] tracking-[-.022em]">
+          {greeting()}, <em className="italic text-accent [font-family:'Fraunces','Georgia',serif]">{firstName || 'there'}</em>
         </h1>
-        <div className="date">
+        <div className="mt-1.5 text-sm text-text-faint">
           {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
         </div>
-        <div className="balance">
-          <div className="l">
-            <div className="cap">Calories today</div>
-            <div className="v">
-              {formatInt(eaten)} <small>/ {budget != null ? formatInt(budget) : '—'}</small>
+
+        <Card as="section" className="relative z-10 mt-5 flex items-center justify-between">
+          <div>
+            <div className="text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Calories today</div>
+            <div className="mt-0.5 text-2xl font-bold tracking-[-.02em]">
+              {formatInt(eaten)}{' '}
+              <small className="text-base font-medium text-text-muted">
+                / {budget != null ? formatInt(budget) : '—'}
+              </small>
             </div>
           </div>
           {budget != null && (
-            <div className={`delta${over ? ' over' : ''}`}>
+            <div
+              className={cn(
+                'rounded-full px-3 py-1.5 text-right text-sm font-semibold',
+                over ? 'bg-warn-soft text-warn' : 'bg-good/12 text-good-ink',
+              )}
+            >
               {over ? `${formatInt(-remaining!)} over` : `${formatInt(remaining!)} left`}
-              <small>
+              <small className="mt-0.5 block text-2xs font-medium text-text-faint">
                 {pct}% of budget{over ? ' — over' : ''}
               </small>
             </div>
           )}
-        </div>
+        </Card>
       </section>
 
       {loading && (
-        <div className="today-loading">
+        <div className="flex items-center gap-2 px-6 py-5 text-sm text-text-muted">
           <Spinner /> Loading your day…
         </div>
       )}
 
       {!loading && err && (
-        <div className="sec">
-          <div className="card" style={{ padding: '16px 18px' }} role="alert">
+        <div className="px-6 pt-5">
+          <Card role="alert">
             <p>{err}</p>
-            <button className="btn outline" style={{ marginTop: 10 }} onClick={() => void load()}>
+            <Button variant="outline" className="mt-2.5" onClick={() => void load()}>
               Retry
-            </button>
-          </div>
+            </Button>
+          </Card>
         </div>
       )}
 
       {!loading && summary && (
         <>
           {/* ── Meter (prototype: full-width track + cap row) ── */}
-          <div className="meter">
-            <div className="track">
-              <div
-                className={`fill${over ? ' over' : ''}`}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <div className="cap">
+          <div className="px-6 pt-4">
+            <Meter value={eaten} max={budget ?? 0} over={over} />
+            <div className="mt-2 flex justify-between text-xs font-medium text-text-faint">
               <span>
-                <b>{pct}%</b> used
+                <b className="font-semibold text-text">{pct}%</b> used
               </span>
               <span>{budget != null ? `budget ${formatInt(budget)} kcal` : 'no budget set'}</span>
             </div>
           </div>
 
           {/* ── Macros (prototype .stats tiles with mini bars) ── */}
-          <div className="sec">
-            <div className="sec-h">
-              <h2>Macros</h2>
-              <button className="a" onClick={() => navigate('/profile')}>
+          <section className="px-6 pt-5">
+            <div className="mb-3 flex items-baseline justify-between">
+              <h2 className="text-md font-bold tracking-[-.01em]">Macros</h2>
+              <button
+                className="text-sm font-semibold text-accent hover:underline"
+                onClick={() => navigate('/profile')}
+              >
                 Adjust
               </button>
             </div>
-            <div className="stats">
+            <div className="flex gap-2.5">
               {(
                 [
-                  ['Protein', summary.totals.protein, 'g'],
-                  ['Carbs', summary.totals.carbs, 'g'],
-                  ['Fat', summary.totals.fat, 'g'],
+                  ['Protein', summary.totals.protein],
+                  ['Carbs', summary.totals.carbs],
+                  ['Fat', summary.totals.fat],
                 ] as const
-              ).map(([label, val, unit]) => (
-                <div key={label} className="stat">
-                  <div className="k">{label}</div>
-                  <div className="v">
-                    {formatInt(val)}
-                    {unit} <small>/ 150</small>
-                  </div>
-                  <div className="mini">
-                    <i style={{ width: `${Math.min(100, Math.round((val / 150) * 100))}%` }} />
-                  </div>
-                </div>
+              ).map(([label, val]) => (
+                <StatTile key={label} label={label} value={`${formatInt(val)}g`} sub="/ 150" progress={(val / 150) * 100} />
               ))}
             </div>
-          </div>
+          </section>
 
           {/* ── Meals (prototype .mealgrp groups) ── */}
-          <div className="sec">
-            <div className="sec-h">
-              <h2>Today’s meals</h2>
-              <button className="a" onClick={() => navigate('/add')}>
+          <section className="px-6 pt-5">
+            <div className="mb-3 flex items-baseline justify-between">
+              <h2 className="text-md font-bold tracking-[-.01em]">Today’s meals</h2>
+              <button
+                className="text-sm font-semibold text-accent hover:underline"
+                onClick={() => navigate('/add')}
+              >
                 + Add food
               </button>
             </div>
             {summary.groups.length === 0 && (
-              <p className="empty" style={{ textAlign: 'left', padding: '0 2px 12px' }}>
-                No meal slots yet — add your first below.
-              </p>
+              <Empty align="left">No meal slots yet — add your first below.</Empty>
             )}
             {summary.groups.map((g) => (
               <MealGroup
@@ -241,9 +240,9 @@ export default function Today() {
               />
             ))}
 
-            <div className="add-slot">
-              <input
-                className="add-slot-input"
+            <div className="mt-3.5 flex gap-2">
+              <TextInput
+                className="min-w-0 flex-1"
                 placeholder="New meal slot name…"
                 value={newSlot}
                 onChange={(e) => setNewSlot(e.target.value)}
@@ -251,51 +250,64 @@ export default function Today() {
                   if (e.key === 'Enter') void addSlot();
                 }}
               />
-              <button className="btn outline sm" onClick={() => void addSlot()} disabled={addingSlot || !newSlot.trim()}>
+              <Button
+                variant="outline"
+                size="sm"
+                loading={addingSlot}
+                disabled={!newSlot.trim()}
+                onClick={() => void addSlot()}
+              >
                 Add slot
-              </button>
+              </Button>
             </div>
-          </div>
+          </section>
 
           {/* ── Hydration + Steps (live per-day) ── */}
-          <div className="sec" style={{ paddingBottom: 24 }}>
-            <div className="sec-h">
-              <h2>Hydration</h2>
-            </div>
-            <div className="card" style={{ padding: '16px 18px' }}>
-              <div className="row">
-                <span className="v" style={{ fontSize: 20, fontWeight: 700 }}>
-                  {formatInt(waterMl)} <small>/ {formatInt(2000)} ml</small>
+          <section className="px-6 pb-6 pt-5">
+            <Card>
+              <CardTitle>Hydration</CardTitle>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold">
+                  {formatInt(waterMl)} <small className="text-sm font-medium text-text-faint">/ {formatInt(2000)} ml</small>
                 </span>
-                <span className="sync">
-                  <span className="led" />
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
+                  <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
                   water
                 </span>
               </div>
-              <div className="movebar"><i style={{ width: `${Math.min(100, (waterMl / 2000) * 100)}%` }} /></div>
-              <div className="addmeals">
-                <button className="btn outline sm" onClick={() => void upsertMetric({ water_ml: waterMl + 250 })}>+250 ml</button>
-                <button className="btn outline sm" onClick={() => void upsertMetric({ water_ml: waterMl + 500 })}>+500 ml</button>
+              <ProgressBar pct={(waterMl / 2000) * 100} tone="good" />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => void upsertMetric({ water_ml: waterMl + 250 })}>
+                  +250 ml
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => void upsertMetric({ water_ml: waterMl + 500 })}>
+                  +500 ml
+                </Button>
               </div>
-            </div>
+            </Card>
 
-            <div className="sec-h" style={{ marginTop: 16 }}>
-              <h2>Steps</h2>
-            </div>
-            <div className="card" style={{ padding: '16px 18px' }}>
-              <div className="row">
-                <span className="v" style={{ fontSize: 20, fontWeight: 700 }}>
-                  {formatInt(steps)} <small>/ {formatInt(10000)} steps</small>
+            <Card className="mt-4">
+              <CardTitle>Steps</CardTitle>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold">
+                  {formatInt(steps)} <small className="text-sm font-medium text-text-faint">/ {formatInt(10000)} steps</small>
                 </span>
-                <span className="sync"><span className="led" /> manual</span>
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
+                  <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
+                  manual
+                </span>
               </div>
-              <div className="movebar"><i style={{ width: `${Math.min(100, (steps / 10000) * 100)}%` }} /></div>
-              <div className="addmeals">
-                <button className="btn outline sm" onClick={() => void upsertMetric({ steps: steps + 1000 })}>+1,000</button>
-                <button className="btn outline sm" onClick={() => void upsertMetric({ steps: steps + 5000 })}>+5,000</button>
+              <ProgressBar pct={(steps / 10000) * 100} tone="good" />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => void upsertMetric({ steps: steps + 1000 })}>
+                  +1,000
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => void upsertMetric({ steps: steps + 5000 })}>
+                  +5,000
+                </Button>
               </div>
-            </div>
-          </div>
+            </Card>
+          </section>
         </>
       )}
     </div>

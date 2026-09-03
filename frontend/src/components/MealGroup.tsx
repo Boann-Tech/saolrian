@@ -3,11 +3,28 @@ import type { ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import type { SummaryGroup } from '../lib/types';
 import { formatInt } from '../lib/format';
-import './meals.css';
+import { Card } from './ui';
 
 /** Expandable meal group shared by Today and History — prototype
  *  .mealgrp structure: .gh header (name + chevron, kcal right) toggling
- *  a .meals list of .mrow entries with 36px SVG icon tiles. */
+ *  a list of entry rows with 36px SVG icon tiles. */
+
+/* Icon chip — line-icon SVGs inherit stroke; sizing/stroke via [&_svg] utils
+ * (mirrors AppShell's NV_GLYPH pattern). */
+const IC_CHIP =
+  'flex h-9 w-9 flex-none items-center justify-center rounded-md border border-accent-line bg-accent-soft ' +
+  '[&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:fill-none [&_svg]:stroke-accent-ink ' +
+  '[&_svg]:[stroke-width:2] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]';
+
+/* Popover action buttons — 15px line-icon SVGs. */
+const POP_BTN =
+  'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left text-sm font-semibold ' +
+  '[&_svg]:h-[15px] [&_svg]:w-[15px] [&_svg]:flex-none [&_svg]:fill-none [&_svg]:stroke-current ' +
+  '[&_svg]:[stroke-width:1.8] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]';
+
+const ADDMEAL =
+  'mt-3 block w-full rounded-lg border-[1.5px] border-dashed border-accent-line py-2.5 text-center ' +
+  'text-sm font-semibold text-accent no-underline hover:bg-accent-soft';
 
 /* Small inline line icons reused from the prototype's log views. */
 const ICONS: Record<string, ReactElement> = {
@@ -81,35 +98,37 @@ export function MealGroup({
   const groupKcal = group.entries.reduce((s, e) => s + e.kcal, 0);
 
   const body = (
-    <div className="meals">
+    <Card padding="none" className="divide-y divide-border">
       {group.entries.length === 0 ? (
-        <div className="mrow" onClick={onAddFood} role={onAddFood ? 'button' : undefined}>
-          <div className="ic">{ICONS.fork}</div>
-          <div className="b">
-            <div className="n" style={{ color: 'var(--faint)' }}>
-              Nothing logged yet — tap to add
-            </div>
+        <div
+          className="flex items-center gap-3 p-3.5"
+          onClick={onAddFood}
+          role={onAddFood ? 'button' : undefined}
+        >
+          <div className={IC_CHIP}>{ICONS.fork}</div>
+          <div className="min-w-0 flex-1">
+            <div className="text-text-faint">Nothing logged yet — tap to add</div>
           </div>
         </div>
       ) : (
         group.entries.map((e) => (
-          <div key={e.id} className="mrow">
-            <div className="ic">{pickIcon(e.name)}</div>
-            <div className="b">
-              <div className="n">{e.name}</div>
-              <div className="d">
+          <div key={e.id} className="relative flex items-center gap-3 p-3.5">
+            <div className={IC_CHIP}>{pickIcon(e.name)}</div>
+            <div className="min-w-0 flex-1">
+              <div className="text-base font-semibold tracking-[-.01em]">{e.name}</div>
+              <div className="mt-0.5 text-xs text-text-faint">
                 {e.brand ? `${e.brand} · ` : ''}
                 {formatInt(e.grams)} g
                 {e.source !== 'manual' ? ` · ${e.source}` : ''}
                 {timeOf(e.logged_at) ? ` · ${timeOf(e.logged_at)}` : ''}
               </div>
             </div>
-            <div className="k">
-              {formatInt(e.kcal)} <small>kcal</small>
+            <div className="whitespace-nowrap text-base font-bold tracking-[-.01em]">
+              {formatInt(e.kcal)} <small className="text-2xs font-medium text-text-faint">kcal</small>
             </div>
             {(onDelete || onEdit) && (
               <button
-                className="entry-menu"
+                className="ml-1.5 flex flex-none rounded-md px-1 py-1.5 leading-none text-text-faint hover:bg-surface hover:text-text-muted [&_svg]:h-4 [&_svg]:w-4 [&_svg]:fill-current"
                 aria-label={`Actions for ${e.name}`}
                 onClick={() => setMenuEntry(menuEntry === e.id ? null : e.id)}
               >
@@ -121,19 +140,32 @@ export function MealGroup({
               </button>
             )}
             {menuEntry === e.id && (
-              <div className="entry-menu-pop">
+              <div className="absolute right-1 top-[calc(100%-8px)] z-20 flex min-w-[132px] flex-col gap-0.5 rounded-lg border border-border bg-raised p-1.5 shadow-[0_8px_24px_rgba(10,37,64,.12)]">
                 {onEdit && (
-                  <button onClick={() => { setMenuEntry(null); onEdit(e.id); }}>
-                    <svg viewBox="0 0 24 24" aria-hidden><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z" /></svg>
+                  <button
+                    className={`${POP_BTN} text-text hover:bg-surface`}
+                    onClick={() => {
+                      setMenuEntry(null);
+                      onEdit(e.id);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden>
+                      <path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z" />
+                    </svg>
                     Edit
                   </button>
                 )}
                 {onDelete && (
                   <button
-                    className="danger"
-                    onClick={() => { setMenuEntry(null); onDelete(e.id); }}
+                    className={`${POP_BTN} text-danger hover:bg-[#fdf0f0]`}
+                    onClick={() => {
+                      setMenuEntry(null);
+                      onDelete(e.id);
+                    }}
                   >
-                    <svg viewBox="0 0 24 24" aria-hidden><path d="M6 7h12M9 7V5h6v2m-8 0 1 13h8l1-13" /></svg>
+                    <svg viewBox="0 0 24 24" aria-hidden>
+                      <path d="M6 7h12M9 7V5h6v2m-8 0 1 13h8l1-13" />
+                    </svg>
                     Delete
                   </button>
                 )}
@@ -142,29 +174,33 @@ export function MealGroup({
           </div>
         ))
       )}
-    </div>
+    </Card>
   );
 
   return (
-    <div className={`mealgrp${open ? '' : ' closed'}`}>
-      <button className="gh" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="n">
-          {group.slot_name} <span className="chev">{open ? '▾' : '▸'}</span>
+    <div className="mb-3.5">
+      <button
+        className="flex w-full items-baseline justify-between px-0.5 pb-2 pt-0.5 text-left"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-1.5 text-base font-bold tracking-[-.01em] text-text">
+          {group.slot_name} <span className="text-[9px] text-text-faint">{open ? '▾' : '▸'}</span>
         </span>
-        <span className="k">
+        <span className="text-sm font-semibold text-text-muted">
           {group.entries.length === 0
             ? '0 kcal · nothing logged'
             : `${group.entries.length} item${group.entries.length === 1 ? '' : 's'} · ${formatInt(groupKcal)} kcal`}
         </span>
       </button>
-      {body}
+      {open && body}
       {open &&
         (onAddFood ? (
-          <button className="addmeal" onClick={onAddFood}>
+          <button className={ADDMEAL} onClick={onAddFood}>
             + {addLabel}
           </button>
         ) : (
-          <Link className="addmeal" to="/add">
+          <Link className={ADDMEAL} to="/add">
             + {addLabel}
           </Link>
         ))}
