@@ -35,6 +35,26 @@ export function setStoredTheme(color: string): void {
   }
 }
 
+export const THEME_MODE_KEY = 'saolrian-theme-mode';
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+export function getStoredMode(): ThemeMode {
+  try {
+    const v = localStorage.getItem(THEME_MODE_KEY);
+    return v === 'light' || v === 'dark' ? v : 'system';
+  } catch {
+    return 'system';
+  }
+}
+
+export function setStoredMode(m: ThemeMode): void {
+  try {
+    localStorage.setItem(THEME_MODE_KEY, m);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Offline queue for diary creates: [{endpoint, payload}] flushed on reconnect. */
 export const QUEUE_KEY = 'saolrian-offline-queue';
 

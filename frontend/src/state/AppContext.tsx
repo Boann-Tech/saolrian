@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import PocketBase from 'pocketbase';
 import { getClient, saolrianSend } from '../lib/pb';
-import { getStoredEndpoint, setStoredEndpoint as persistEndpoint, getStoredTheme, setStoredTheme as persistTheme } from '../lib/storage';
+import { getStoredEndpoint, setStoredEndpoint as persistEndpoint, getStoredTheme, setStoredTheme as persistTheme, getStoredMode, setStoredMode, type ThemeMode } from '../lib/storage';
 import { useOfflineFlush } from '../lib/offline';
 import type { MealSlot, Profile } from '../lib/types';
 
@@ -16,6 +16,9 @@ interface AppState {
   slots: MealSlot[];
   latestWeight: number | null;
   theme: string;
+  mode: ThemeMode;
+  resolvedTheme: 'light' | 'dark';
+  setMode: (m: ThemeMode) => void;
   refreshProfile: () => Promise<void>;
   refreshSlots: () => Promise<void>;
   setEndpoint: (url: string) => void;
@@ -32,6 +35,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [slots, setSlots] = useState<MealSlot[]>([]);
   const [latestWeight, setLatestWeight] = useState<number | null>(null);
   const [theme, setThemeState] = useState<string>(() => getStoredTheme() || '#0f7a5f');
+  const [mode, setModeState] = useState<ThemeMode>(() => getStoredMode());
+  const [systemDark, setSystemDark] = useState<boolean>(
+    () => typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches,
+  );
+
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return;
+    const mq = matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const resolvedTheme: 'light' | 'dark' =
+    mode === 'system' ? (systemDark ? 'dark' : 'light') : mode;
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
+  }, [resolvedTheme]);
+
+  const setMode = useCallback((m: ThemeMode) => {
+    setStoredMode(m);
+    setModeState(m);
+  }, []);
   // PocketBase's authStore is external mutable state React can't see —
   // bump this counter whenever auth changes so the Gate re-renders.
   const [authVersion, setAuthVersion] = useState(0);
@@ -100,8 +127,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', theme);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme);
-  }, [theme]);
+    if (meta) meta.setAttribute('content', resolvedTheme === 'dark' ? '#0c1622' : theme);
+  }, [theme, resolvedTheme]);
 
   const setEndpoint = useCallback((url: string) => {
     persistEndpoint(url);
@@ -143,6 +170,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       slots,
       latestWeight,
       theme,
+      mode,
+      resolvedTheme,
+      setMode,
       refreshProfile,
       refreshSlots,
       setEndpoint,
@@ -150,7 +180,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTheme,
       userId,
     }),
-    [endpoint, profile, slots, latestWeight, theme, refreshProfile, refreshSlots, setEndpoint, clearEndpoint, setTheme, userId],
+    [endpoint, profile, slots, latestWeight, theme, mode, resolvedTheme, setMode, refreshProfile, refreshSlots, setEndpoint, clearEndpoint, setTheme, userId],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
