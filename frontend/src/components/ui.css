@@ -1,3 +1,0 @@
-/* ui.tsx shared primitives now draw entirely from the prototype system
-   in src/styles/app.css (hairline cards, pill toasts, spinners, fields,
-   modals). This file intentionally left minimal to avoid overriding it. */

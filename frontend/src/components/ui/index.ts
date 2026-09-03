@@ -6,3 +6,4 @@ export { Segmented } from './Segmented';
 export { Sheet } from './Sheet';
 export { Modal } from './Modal';
 export { Spinner, Empty, ToastProvider, useToast } from './feedback';
+export { StatTile, Meter, ProgressBar } from './StatTile';
