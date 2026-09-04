@@ -1,14 +1,49 @@
-@import './app.css' layer(legacy);
-@import './tokens.css' layer(legacy);
 @import 'tailwindcss';
 @import './theme.css';
 @import './effects.css';
 
-/* Form controls keep a 16px floor — iOS Safari auto-zooms below it.
-   Unlayered on purpose: this must beat even a migrated utility. */
+/* Base element rules. Unlayered on purpose: this must beat even a
+   migrated Tailwind utility (notably the 16px input floor below,
+   which stops iOS Safari auto-zooming on focus). */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+#root {
+  min-height: 100dvh;
+}
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
 input,
 select,
 textarea {
+  font-family: inherit;
+  color: var(--color-text);
   font-size: 16px;
   line-height: 1.4;
+}
+a {
+  color: var(--color-accent-ink);
+}
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent-glow);
+  outline-offset: 1px;
 }

@@ -116,21 +116,6 @@
   }
 }
 
-/* ── Legacy aliases ───────────────────────────────────────────
-   Keep app.css + un-migrated screen CSS working (and theme-aware)
-   until Task 17 removes them. */
-:root {
-  --bg: var(--color-bg);
-  --ink: var(--color-text);
-  --surface: var(--color-surface);
-  --line: var(--color-border);
-  --faint: var(--color-text-faint);
-  --muted: var(--color-text-muted);
-  --good: var(--color-good);
-  --good-ink: var(--color-good-ink);
-  --danger: var(--color-danger);
-}
-
 body {
   background: var(--color-bg);
   color: var(--color-text);
