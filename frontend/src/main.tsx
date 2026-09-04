@@ -12,6 +12,7 @@ import Import from './screens/Import';
 import Welcome from './screens/Welcome';
 import EditEntry from './screens/EditEntry';
 import { AppShell } from './components/AppShell';
+import { ToastProvider } from './components/ui';
 import './styles/index.css';
 
 /** Routing gate:
@@ -71,9 +72,11 @@ function AppRoutes() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </ToastProvider>
     </AppProvider>
   </StrictMode>,
 );
