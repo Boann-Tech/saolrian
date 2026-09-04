@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/boanntech/saolrian/backend/internal/food"
@@ -81,21 +82,48 @@ func buildCmd(args []string) error {
 		return fmt.Errorf("no sources produced any foods; pass at least one source directory")
 	}
 
-	f, err := os.Create(*out)
+	size, err := writePackAtomically(*out, pack)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	if err := format.Write(f, pack); err != nil {
-		return err
+	fmt.Printf("wrote %s: %d foods, %.1f MB\n", *out, len(pack.Foods), float64(size)/(1<<20))
+	return nil
+}
+
+// writePackAtomically writes pack to a temp file in the same directory as
+// out, then renames it into place only once the write has fully succeeded.
+// This keeps a pre-existing file at out untouched (and no truncated file
+// left behind at all) if the write fails partway — a real risk against a
+// dataset the size of the full USDA download. It returns the size in bytes
+// of the file left at out.
+func writePackAtomically(out string, pack format.Pack) (int64, error) {
+	dir := filepath.Dir(out)
+	tmp, err := os.CreateTemp(dir, filepath.Base(out)+".tmp-*")
+	if err != nil {
+		return 0, err
+	}
+	tmpPath := tmp.Name()
+	// Clean up the temp file on any path that returns before the rename
+	// succeeds; once renamed, tmpPath no longer exists so this is a no-op.
+	defer os.Remove(tmpPath)
+
+	if err := format.Write(tmp, pack); err != nil {
+		tmp.Close()
+		return 0, err
+	}
+	if err := tmp.Close(); err != nil {
+		return 0, err
 	}
 
-	st, err := f.Stat()
-	if err != nil {
-		return err
+	if err := os.Rename(tmpPath, out); err != nil {
+		return 0, err
 	}
-	fmt.Printf("wrote %s: %d foods, %.1f MB\n", *out, len(pack.Foods), float64(st.Size())/(1<<20))
-	return nil
+
+	st, err := os.Stat(out)
+	if err != nil {
+		return 0, err
+	}
+	return st.Size(), nil
 }
 
 func verifyCmd(args []string) error {

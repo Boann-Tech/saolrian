@@ -27,6 +27,7 @@ const atwaterMaxSuspectFraction = 0.10
 // runChecks runs every structural check over a built pack.
 func runChecks(p format.Pack) []CheckResult {
 	return []CheckResult{
+		checkNonEmpty(p),
 		checkVocabulary(p),
 		checkEnergyPresent(p),
 		checkRanges(p),
@@ -35,6 +36,26 @@ func runChecks(p format.Pack) []CheckResult {
 	}
 }
 
+// checkNonEmpty fails a pack that carries no foods. Every other check
+// degrades to a vacuous pass over an empty slice, so an empty or truncated
+// pack must be caught explicitly rather than relying on the others to
+// notice.
+func checkNonEmpty(p format.Pack) CheckResult {
+	if len(p.Foods) == 0 {
+		return CheckResult{"non_empty", false,
+			fmt.Sprintf("pack has 0 foods from %d sources", len(p.Sources))}
+	}
+	return CheckResult{"non_empty", true,
+		fmt.Sprintf("%d foods from %d sources", len(p.Foods), len(p.Sources))}
+}
+
+// checkVocabulary compares the pack's nutrient key list against the
+// binary's. Through the foodpack verify CLI this is defence-in-depth, not
+// the primary guard: format.Read already rejects a pack whose
+// NutrientKeys mismatch food.Keys() with ErrVocabularyMismatch before
+// runChecks ever sees it, so verifyCmd never reaches this check with a
+// mismatched pack. It still matters for any caller that constructs a
+// format.Pack directly and calls runChecks without going through Read.
 func checkVocabulary(p format.Pack) CheckResult {
 	want := food.Keys()
 	if len(p.NutrientKeys) != len(want) {

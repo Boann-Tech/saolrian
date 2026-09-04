@@ -83,3 +83,15 @@ func TestVocabularyCheck(t *testing.T) {
 		t.Error("vocabulary passed on a pack built with a stale key list")
 	}
 }
+
+func TestNonEmptyCheck(t *testing.T) {
+	empty := packOf()
+	if result(t, empty, "non_empty").Pass {
+		t.Error("non_empty passed on a pack with no foods")
+	}
+
+	populated := packOf(food.Profile{"energy_kcal": 89, "protein": 1})
+	if !result(t, populated, "non_empty").Pass {
+		t.Error("non_empty failed on a pack containing a food")
+	}
+}
