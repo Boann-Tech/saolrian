@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
-import { getClient } from '../lib/pb';
+import { getClient, saolrianSend } from '../lib/pb';
 import { saveRecipe, type IngredientDraft } from '../lib/recipes';
-import { sumIngredients, perServing } from '../lib/nutrition';
+import { sumIngredients, perServing, foodMath } from '../lib/nutrition';
+import { normalizeSearch } from '../lib/normalize';
+import type { Food } from '../lib/types';
 import { formatInt } from '../lib/format';
-import { Button, Card, Field, Sheet, Stepper, TextInput, useToast } from '../components/ui';
+import { Button, Card, Empty, Field, Sheet, Spinner, Stepper, TextInput, useToast } from '../components/ui';
 
 /** Create/edit a recipe: name, servings, an ingredient list, and live
  * total/per-serving totals. Ingredient sourcing (search vs. quick add) and
@@ -33,12 +35,43 @@ export default function RecipeEditor() {
   const [saving, setSaving] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [addStage, setAddStage] = useState<'menu' | 'quick'>('menu');
+  const [addStage, setAddStage] = useState<'menu' | 'quick' | 'search' | 'searchDetail'>('menu');
   const [qaName, setQaName] = useState('');
   const [qaKcal, setQaKcal] = useState('');
   const [qaP, setQaP] = useState('');
   const [qaC, setQaC] = useState('');
   const [qaF, setQaF] = useState('');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Food[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedFood, setSelectedFood] = useState<Food | null>(null);
+  const [grams, setGrams] = useState(100);
+  const debounce = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (addStage !== 'search' || !endpoint) return;
+    window.clearTimeout(debounce.current);
+    const q = query.trim();
+    if (q.length < 2) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    debounce.current = window.setTimeout(async () => {
+      try {
+        const pb = getClient(endpoint);
+        const raw = await saolrianSend<{ results?: Food[]; local?: Food[]; remote?: Food[] }>(
+          pb,
+          'GET',
+          `/api/saolrian/food/search?q=${encodeURIComponent(q)}`,
+        );
+        setResults(normalizeSearch(raw));
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => window.clearTimeout(debounce.current);
+  }, [query, addStage, endpoint]);
 
   const totals = sumIngredients(ingredients);
   const perServingTotals = perServing(totals, servings || 1);
@@ -51,6 +84,10 @@ export default function RecipeEditor() {
     setQaP('');
     setQaC('');
     setQaF('');
+    setQuery('');
+    setResults([]);
+    setSelectedFood(null);
+    setGrams(100);
   };
 
   const addQuickIngredient = () => {
@@ -72,6 +109,27 @@ export default function RecipeEditor() {
         protein: num(qaP),
         carbs: num(qaC),
         fat: num(qaF),
+        sort_order: prev.length,
+      },
+    ]);
+    closeAddSheet();
+  };
+
+  const addSearchIngredient = () => {
+    if (!selectedFood) return;
+    const m = foodMath(selectedFood.kcal_per_100g, selectedFood.protein_per_100g, selectedFood.carbs_per_100g, selectedFood.fat_per_100g, grams);
+    setIngredients((prev) => [
+      ...prev,
+      {
+        uid: nextUid(),
+        food: null, // this app's `foods` rows aren't fetched with an id in search results; grams-scaled macros are snapshotted instead
+        name_snapshot: selectedFood.name,
+        brand_snapshot: selectedFood.brand,
+        grams,
+        kcal: m.kcal,
+        protein: m.protein,
+        carbs: m.carbs,
+        fat: m.fat,
         sort_order: prev.length,
       },
     ]);
@@ -179,9 +237,60 @@ export default function RecipeEditor() {
       <Sheet open={addOpen} onClose={closeAddSheet} title="Add ingredient">
         {addStage === 'menu' && (
           <div className="mt-2 flex flex-col gap-2.5">
+            <Button variant="outline" onClick={() => setAddStage('search')}>
+              Search foods
+            </Button>
             <Button variant="outline" onClick={() => setAddStage('quick')}>
               Quick add
             </Button>
+          </div>
+        )}
+        {addStage === 'search' && (
+          <div className="mt-2">
+            <TextInput
+              autoFocus
+              placeholder="Search foods"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <div className="pt-3">
+              {searching && (
+                <div className="flex items-center gap-2 text-sm text-text-faint">
+                  <Spinner /> Searching…
+                </div>
+              )}
+              {!searching && query.trim().length >= 2 && results.length === 0 && <Empty>No foods match "{query.trim()}".</Empty>}
+              {results.length > 0 && (
+                <ul className="divide-y divide-border">
+                  {results.map((f, i) => (
+                    <li key={`${f.name}-${i}`}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between py-2.5 text-left"
+                        onClick={() => {
+                          setSelectedFood(f);
+                          setGrams(Math.round(f.default_serving_g || 100) || 100);
+                          setAddStage('searchDetail');
+                        }}
+                      >
+                        <span className="text-sm font-semibold">{f.name}</span>
+                        <span className="text-xs text-text-faint">{formatInt(f.kcal_per_100g)} kcal/100g</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+        {addStage === 'searchDetail' && selectedFood && (
+          <div className="mt-2 flex flex-col gap-3.5">
+            <div className="text-sm font-semibold">{selectedFood.name}</div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold">Amount</span>
+              <Stepper value={grams} onChange={setGrams} step={10} min={0} suffix="g" inputMode="numeric" aria-label="Grams" />
+            </div>
+            <Button onClick={addSearchIngredient}>Add ingredient</Button>
           </div>
         )}
         {addStage === 'quick' && (

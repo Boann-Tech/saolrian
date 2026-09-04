@@ -20,7 +20,14 @@ const fakePb = {
 
 vi.mock('../../lib/pb', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/pb')>();
-  return { ...actual, getClient: () => fakePb };
+  return {
+    ...actual,
+    getClient: () => fakePb,
+    saolrianSend: vi.fn().mockResolvedValue({
+      local: [{ name: 'Black beans', brand: 'Acme', kcal_per_100g: 110, protein_per_100g: 7, carbs_per_100g: 20, fat_per_100g: 0.5, local: true, barcode: null, default_serving_g: 100 }],
+      remote: [],
+    }),
+  };
 });
 
 const saveRecipeMock = vi.fn().mockResolvedValue('recipe-1');
@@ -101,5 +108,25 @@ describe('RecipeEditor — create flow', () => {
       ],
       [],
     );
+  });
+});
+
+describe('RecipeEditor — search-sourced ingredient', () => {
+  it('adds a searched food as an ingredient scaled to the entered grams', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+
+    await user.type(await screen.findByLabelText('Name'), 'Chili');
+    await user.click(screen.getByRole('button', { name: /\+ add ingredient/i }));
+    await user.click(screen.getByRole('button', { name: /search foods/i }));
+
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'beans');
+    expect(await screen.findByText('Black beans')).toBeInTheDocument();
+    await user.click(screen.getByText('Black beans'));
+
+    await user.click(screen.getByRole('button', { name: /^add ingredient$/i }));
+
+    expect(screen.getByText('Black beans')).toBeInTheDocument();
+    expect(saveRecipeMock).not.toHaveBeenCalled(); // not saved yet, just added to the draft
   });
 });
