@@ -21,9 +21,9 @@ func samplePack() Pack {
 		Foods: []RefFood{{
 			Source: "usda_sr", SourceID: "09040", Region: "us",
 			Licence: "public-domain", Name: "Bananas, raw",
-			SearchText: "bananas raw",
-			Nutrients:  food.Encode(food.Profile{"energy_kcal": 89, "protein": 1.09}),
-			Portions:   []Portion{{Label: "1 medium", Grams: 118}},
+			SearchText:      "bananas raw",
+			Nutrients:       food.Encode(food.Profile{"energy_kcal": 89, "protein": 1.09}),
+			Portions:        []Portion{{Label: "1 medium", Grams: 118}},
 			DefaultServingG: 118,
 		}},
 	}

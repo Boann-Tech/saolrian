@@ -106,7 +106,7 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, error) {
 			Region:          usdaRegion,
 			Licence:         usdaLicence,
 			Name:            f.name,
-			SearchText:      SearchText(f.name),
+			SearchText:      food.SearchText(f.name),
 			Nutrients:       food.Encode(prof),
 			Portions:        p,
 			DefaultServingG: defaultServing,
