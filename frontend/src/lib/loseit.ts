@@ -233,3 +233,121 @@ export function parseLoseItExerciseCsv(text: string): LoseItExerciseRow[] {
   }
   return rows;
 }
+
+// ---------------------------------------------------------------------
+// custom-foods.csv / recipes.csv (shared shape)
+// ---------------------------------------------------------------------
+
+export interface LoseItFoodCatalogRow {
+  name: string;
+  unique_id: string;
+  brand: string;
+  quantity: number;
+  measure: string;
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+}
+
+function looksLikeFoodCatalogHeader(cells: string[]): boolean {
+  const lower = cells.map((c) => c.trim().toLowerCase());
+  return lower.includes('uniqueid') && lower.includes('measure');
+}
+
+export function parseLoseItFoodCatalogCsv(text: string): LoseItFoodCatalogRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const headerIdx = lines.findIndex((l) => looksLikeFoodCatalogHeader(splitCsvLine(l)));
+  if (headerIdx === -1) return [];
+  const header = splitCsvLine(lines[headerIdx]).map((c) => c.trim().toLowerCase());
+  const col = (name: string) => header.indexOf(name);
+  const nameIdx = col('name');
+  const uidIdx = col('uniqueid');
+  const brandIdx = col('brand');
+  const qtyIdx = col('quantity');
+  const measureIdx = col('measure');
+  const kcalIdx = col('calories');
+  const fatIdx = col('fat (g)');
+  const proteinIdx = col('protein (g)');
+  const carbsIdx = col('carbohydrates (g)');
+
+  const rows: LoseItFoodCatalogRow[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cells = splitCsvLine(lines[i]);
+    const name = (cells[nameIdx] ?? '').trim();
+    const uniqueId = (cells[uidIdx] ?? '').trim();
+    const quantity = num(cells[qtyIdx]);
+    if (!name || !uniqueId || quantity <= 0) continue;
+    rows.push({
+      name,
+      unique_id: uniqueId,
+      brand: brandIdx !== -1 ? (cells[brandIdx] ?? '').trim() : '',
+      quantity,
+      measure: (cells[measureIdx] ?? '').trim(),
+      kcal: num(cells[kcalIdx]),
+      protein_g: num(cells[proteinIdx]),
+      carbs_g: num(cells[carbsIdx]),
+      fat_g: num(cells[fatIdx]),
+    });
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------------
+// profile.csv
+// ---------------------------------------------------------------------
+
+export interface LoseItProfileSnapshot {
+  birth_year?: number;
+  sex?: 'male' | 'female' | 'other';
+  height_cm?: number;
+  calorie_target?: number;
+  goal?: 'lose' | 'maintain' | 'gain';
+  activity_level?: 'sedentary' | 'light' | 'moderate' | 'very' | 'extreme';
+}
+
+function mapActivityLevel(raw: string): LoseItProfileSnapshot['activity_level'] {
+  const v = raw.toLowerCase();
+  if (v.includes('sedentary')) return 'sedentary';
+  if (v.includes('extrem')) return 'extreme';
+  if (v.includes('very')) return 'very';
+  if (v.includes('light')) return 'light';
+  return 'moderate';
+}
+
+export function parseLoseItProfileCsv(text: string): LoseItProfileSnapshot {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const values: Record<string, string> = {};
+  for (const line of lines) {
+    const cells = splitCsvLine(line);
+    if (cells.length < 2) continue;
+    values[cells[0].trim()] = cells[1].trim();
+  }
+
+  const snap: LoseItProfileSnapshot = {};
+
+  const birthday = values['Birthday'];
+  if (birthday) {
+    const year = Number(toIsoDate(birthday).slice(0, 4));
+    if (Number.isFinite(year) && year > 1900) snap.birth_year = year;
+  }
+
+  const gender = (values['Gender'] ?? '').toLowerCase();
+  if (gender === 'male' || gender === 'female') snap.sex = gender;
+  else if (gender) snap.sex = 'other';
+
+  const height = num(values['Height']);
+  if (height > 0) snap.height_cm = height;
+
+  const eer = num(values['Current EER']);
+  const adjustment = num(values['Calorie Adjustment']);
+  if (eer > 0 && adjustment !== 0) snap.calorie_target = eer + adjustment;
+
+  const plan = (values['Plan'] ?? '').toLowerCase();
+  if (plan === 'lose' || plan === 'maintain' || plan === 'gain') snap.goal = plan;
+
+  const activity = values['Activity Level'];
+  if (activity) snap.activity_level = mapActivityLevel(activity);
+
+  return snap;
+}
