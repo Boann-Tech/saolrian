@@ -65,6 +65,20 @@ func TestImportDiaryRows_DedupsOnReimport(t *testing.T) {
 	}
 }
 
+func TestImportDiaryRows_SkipsNegativeQuantityAllowsZero(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+
+	rows := []diaryRow{
+		{Date: "2023-05-02", Name: "Bad Row", Quantity: -1, Unit: "g", Meal: "Breakfast", Kcal: 100},
+		{Date: "2023-05-02", Name: "Garmin Adjustment", Quantity: 0, Unit: "serving", Meal: "Breakfast", Kcal: 50},
+	}
+
+	got := importDiaryRows(app, user.Id, rows)
+	if got.Imported != 1 || got.Skipped != 1 {
+		t.Fatalf("got %+v, want 1 imported (zero-quantity row), 1 skipped (negative-quantity row)", got)
+	}
+}
+
 func TestImportWeightRows_DedupsOnReimport(t *testing.T) {
 	app, user := newTestAppWithUser(t)
 
@@ -92,6 +106,20 @@ func TestImportExerciseRows_DedupsOnReimport(t *testing.T) {
 	second := importExerciseRows(app, user.Id, rows)
 	if second.Skipped != 1 {
 		t.Fatalf("re-import: got %+v, want 1 skipped", second)
+	}
+}
+
+func TestImportExerciseRows_SkipsNegativeMinutesAllowsZero(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+
+	rows := []exerciseRow{
+		{Date: "2023-05-05", Name: "Bad Row", Minutes: -5, Kcal: 100},
+		{Date: "2023-05-05", Name: "Garmin Adjustment", Minutes: 0, Kcal: 75},
+	}
+
+	got := importExerciseRows(app, user.Id, rows)
+	if got.Imported != 1 || got.Skipped != 1 {
+		t.Fatalf("got %+v, want 1 imported (zero-minutes row), 1 skipped (negative-minutes row)", got)
 	}
 }
 

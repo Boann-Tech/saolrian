@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -147,7 +148,10 @@ func setJobStatus(app core.App, jobID, status string) {
 		return
 	}
 	job.Set("status", status)
-	_ = app.Save(job)
+	if err := app.Save(job); err != nil {
+		app.Logger().Error("failed to update import job status",
+			slog.String("jobId", jobID), slog.String("status", status), slog.String("error", err.Error()))
+	}
 }
 
 func finishJob(app core.App, jobID, uid string, counts map[string]categoryCount) {
@@ -157,7 +161,10 @@ func finishJob(app core.App, jobID, uid string, counts map[string]categoryCount)
 	}
 	job.Set("status", "done")
 	job.Set("counts", counts)
-	_ = app.Save(job)
+	if err := app.Save(job); err != nil {
+		app.Logger().Error("failed to finish import job",
+			slog.String("jobId", jobID), slog.String("userId", uid), slog.String("error", err.Error()))
+	}
 
 	imported, skipped := 0, 0
 	for _, c := range counts {
@@ -174,7 +181,10 @@ func failJob(app core.App, jobID, uid, message string) {
 	}
 	job.Set("status", "failed")
 	job.Set("error", message)
-	_ = app.Save(job)
+	if err := app.Save(job); err != nil {
+		app.Logger().Error("failed to mark import job as failed",
+			slog.String("jobId", jobID), slog.String("userId", uid), slog.String("error", err.Error()))
+	}
 
 	push.NotifyUser(app, uid, "Import failed", message)
 }
@@ -216,7 +226,7 @@ func importDiaryRows(app core.App, uid string, rows []diaryRow) categoryCount {
 	slotsByName := map[string]*core.Record{}
 
 	for _, row := range rows {
-		if row.Name == "" || row.Date == "" {
+		if row.Name == "" || row.Date == "" || row.Quantity < 0 {
 			c.Skipped++
 			continue
 		}
@@ -389,7 +399,7 @@ func importExerciseRows(app core.App, uid string, rows []exerciseRow) categoryCo
 		return c
 	}
 	for _, row := range rows {
-		if row.Name == "" || row.Date == "" {
+		if row.Name == "" || row.Date == "" || row.Minutes < 0 {
 			c.Skipped++
 			continue
 		}
