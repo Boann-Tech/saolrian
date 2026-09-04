@@ -1320,6 +1320,9 @@ git commit -m "feat: import LoseIt steps/water/body-fat/sleep and profile snapsh
 - Modify: `backend/internal/routes/summary.go:24` (register the three new routes)
 - Create: `backend/internal/push/push_test.go`
 - Modify: `backend/go.mod` / `backend/go.sum` (new dependency)
+- Create: `.env.example` (VAPID env var template — `.env` itself is already gitignored and stays untracked)
+- Modify: `.gitignore` (negate the existing blanket `.env.*` rule for `.env.example` specifically)
+- Modify: `docker-compose.yml` (add `env_file: [.env]` to the `backend` service — no new service needed, webpush runs in-process)
 
 **Interfaces:**
 - Consumes: `push_subscriptions` collection from Task 1; called by `finishJob`/`failJob` in Task 2's `import_loseit.go` (already written against this exact signature).
@@ -1551,10 +1554,65 @@ Modify `backend/internal/routes/summary.go:24` — after the existing `g.POST("/
 Run: `cd backend && go build ./... && go vet ./... && go test ./... -v`
 Expected: PASS. This also exercises Task 2-4's `push.NotifyUser` calls against the real (now no-op-when-unconfigured) implementation instead of the placeholder.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 9: Wire VAPID env vars into docker-compose**
+
+No new service is needed — `webpush-go` runs in-process inside the existing `backend` binary, it isn't a separate daemon. But `docker-compose.yml`'s `backend` service currently has no `environment:`/`env_file:` block at all (grep confirms zero env var wiring anywhere in the compose file), so the two VAPID vars have nowhere to reach the container from. Fix that:
+
+Note: the repo's `.gitignore` already has a blanket `.env` / `.env.*` ignore rule for secrets — that pattern would also swallow a tracked `.env.example` template, so this step adds a negation line for it.
+
+Modify `.gitignore` — add a line after the existing `.env` / `.env.*` pair:
+
+```
+!.env.example
+```
+
+Create `.env.example` at the repo root (tracked, no real secrets in it):
 
 ```bash
-git add backend/go.mod backend/go.sum backend/internal/push/push.go backend/internal/push/push_test.go backend/internal/routes/push.go backend/internal/routes/summary.go
+# Copy to .env and fill in before running docker compose up.
+# Generate a keypair once with:
+#   cd backend && cat <<'GO' > /tmp/genvapid.go
+#   package main
+#   import ("fmt"; webpush "github.com/SherClockHolmes/webpush-go")
+#   func main() { priv, pub, _ := webpush.GenerateVAPIDKeys(); fmt.Println("VAPID_PUBLIC_KEY="+pub); fmt.Println("VAPID_PRIVATE_KEY="+priv) }
+#   GO
+#   go run /tmp/genvapid.go
+#
+# Leave both blank to run without push notifications — the import still
+# works via in-app realtime updates and toasts while the tab is open.
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+```
+
+`backend/Dockerfile` needs no change — env vars pass through at container-run time, not build time.
+
+Modify `docker-compose.yml`'s `backend` service (add `env_file:` right after `restart: unless-stopped`):
+
+```yaml
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - pb_data:/app/pb_data
+    expose:
+      - "8090"
+```
+
+`.env` itself stays gitignored and is never created by this task — an operator runs `cp .env.example .env` once before `docker compose up`, same as any secrets-bearing compose setup. Don't commit a real or blank `.env`.
+
+- [ ] **Step 10: Verify docker compose config parses**
+
+Run: `cp .env.example .env && docker compose config --quiet && rm .env`
+Expected: exits 0 (validates the compose file parses and `env_file: .env` resolves — doesn't require Docker to actually build/run). The temporary `.env` is removed immediately after so it doesn't linger as an untracked file.
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add backend/go.mod backend/go.sum backend/internal/push/push.go backend/internal/push/push_test.go backend/internal/routes/push.go backend/internal/routes/summary.go .env.example .gitignore docker-compose.yml
 git commit -m "feat: add Web Push subscribe/unsubscribe endpoints and VAPID-based send"
 ```
 
