@@ -19,6 +19,17 @@ describe('parseLoseItCsv', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].date).toBe('2023-05-02');
   });
+
+  it('skips rows marked Deleted (1/true/yes, case-insensitive)', () => {
+    const csv =
+      'Date,Name,Meal,Quantity,Units,Calories,Deleted\n' +
+      '05/02/2023,Toast,Breakfast,1,Servings,200,0\n' +
+      '05/03/2023,Bagel,Breakfast,1,Servings,250,1\n' +
+      '05/04/2023,Eggs,Breakfast,2,Servings,150,true\n' +
+      '05/05/2023,Bacon,Breakfast,3,Servings,300,TRUE\n';
+    const rows = parseLoseItCsv(csv);
+    expect(rows.map((r) => r.name)).toEqual(['Toast']);
+  });
 });
 
 describe('parseDateValueCsv', () => {

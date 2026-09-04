@@ -73,6 +73,13 @@ function num(s: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Normalizes the several conventions LoseIt CSVs use for a boolean
+ * "Deleted" column (`true`, `1`, `yes`) into a single check. */
+function isDeletedFlag(raw: string | undefined): boolean {
+  const v = (raw ?? '').trim().toLowerCase();
+  return v === 'true' || v === '1' || v === 'yes';
+}
+
 /** Converts a LoseIt `MM/DD/YYYY` date to `YYYY-MM-DD`. Passes through an
  * already-ISO date unchanged. The backend parses every date with Go's
  * `time.Parse("2006-01-02", ...)`, so every LoseIt date must go through
@@ -94,11 +101,14 @@ export function parseLoseItCsv(text: string): LoseItRow[] {
     // No recognizable header — refuse to guess column order.
     return [];
   }
-  const colMap = mapHeader(splitCsvLine(lines[headerIdx]));
+  const headerCells = splitCsvLine(lines[headerIdx]);
+  const colMap = mapHeader(headerCells);
+  const deletedIdx = headerCells.map((c) => c.trim().toLowerCase()).indexOf('deleted');
 
   const rows: LoseItRow[] = [];
   for (let i = headerIdx + 1; i < lines.length; i++) {
     const cells = splitCsvLine(lines[i]);
+    if (deletedIdx !== -1 && isDeletedFlag(cells[deletedIdx])) continue;
     const pick = (field: string): string => {
       const idx = colMap[field];
       return idx === undefined ? '' : (cells[idx] ?? '').trim();
@@ -179,7 +189,7 @@ export function parseLoseItWeightCsv(text: string): LoseItWeightRow[] {
   const rows: LoseItWeightRow[] = [];
   for (let i = headerIdx + 1; i < lines.length; i++) {
     const cells = splitCsvLine(lines[i]);
-    if (deletedIdx !== -1 && (cells[deletedIdx] ?? '').trim().toLowerCase() === 'true') continue;
+    if (deletedIdx !== -1 && isDeletedFlag(cells[deletedIdx])) continue;
     const date = (cells[dateIdx] ?? '').trim();
     const kg = num(cells[weightIdx]);
     if (!date || kg <= 0) continue;
@@ -219,7 +229,7 @@ export function parseLoseItExerciseCsv(text: string): LoseItExerciseRow[] {
   const rows: LoseItExerciseRow[] = [];
   for (let i = headerIdx + 1; i < lines.length; i++) {
     const cells = splitCsvLine(lines[i]);
-    if (deletedIdx !== -1 && (cells[deletedIdx] ?? '').trim() === '1') continue;
+    if (deletedIdx !== -1 && isDeletedFlag(cells[deletedIdx])) continue;
     const date = (cells[dateIdx] ?? '').trim();
     const name = (cells[nameIdx] ?? '').trim();
     if (!date || !name) continue;
