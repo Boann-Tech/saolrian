@@ -1,0 +1,42 @@
+id,name,unit_name,nutrient_nbr,rank
+1008,Energy,KCAL,208,100
+1003,Protein,G,203,200
+5204,Fat,G,204,300
+5205,Carbohydrate,G,205,400
+5291,Fibre,G,291,500
+5269,Sugars,G,269,600
+5209,Starch,G,209,700
+5606,Saturated fat,G,606,800
+5645,Monounsaturated fat,G,645,900
+5646,Polyunsaturated fat,G,646,1000
+5605,Trans fat,G,605,1100
+5601,Cholesterol,MG,601,1200
+5221,Alcohol,G,221,1300
+5255,Water,G,255,1400
+5207,Ash,G,207,1500
+5307,Sodium,MG,307,1600
+5306,Potassium,MG,306,1700
+5301,Calcium,MG,301,1800
+5304,Magnesium,MG,304,1900
+5305,Phosphorus,MG,305,2000
+1089,Iron,MG,303,2100
+5309,Zinc,MG,309,2200
+5312,Copper,MG,312,2300
+5315,Manganese,MG,315,2400
+5317,Selenium,UG,317,2500
+5314,Iodine,UG,314,2600
+5320,Vitamin A (RAE),UG,320,2700
+5319,Retinol,UG,319,2800
+5321,Beta-carotene,UG,321,2900
+5328,Vitamin D,UG,328,3000
+5323,Vitamin E,MG,323,3100
+5430,Vitamin K,UG,430,3200
+1162,Vitamin C,MG,401,3300
+5404,Thiamin (B1),MG,404,3400
+5405,Riboflavin (B2),MG,405,3500
+5406,Niacin (B3),MG,406,3600
+5415,Vitamin B6,MG,415,3700
+5417,Folate,UG,417,3800
+5418,Vitamin B12,UG,418,3900
+5410,Pantothenic acid (B5),MG,410,4000
+1104,"Vitamin A, IU",IU,318,4100
