@@ -1,12 +1,20 @@
 /// <reference lib="webworker" />
-import { precacheAndRoute } from 'workbox-precaching';
-import { registerRoute } from 'workbox-routing';
+import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching';
+import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 
 declare let self: ServiceWorkerGlobalScope;
 
 precacheAndRoute(self.__WB_MANIFEST);
+
+// Preserves the SPA offline-navigation fallback that the previous
+// generateSW config provided via its `workbox.navigateFallback` option —
+// that option has no effect under injectManifest, so it's reimplemented
+// here: any navigation request not itself precached falls back to the
+// cached app shell, letting client-side routes (e.g. /profile) work
+// offline/on reload.
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')));
 
 // Preserves the network-first API caching that the previous generateSW
 // config provided via its `workbox.runtimeCaching` option — that option
