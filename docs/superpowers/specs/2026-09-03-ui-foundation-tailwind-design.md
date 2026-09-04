@@ -1,7 +1,7 @@
 # UI Foundation: Tailwind v4 token system + component layer + dark mode
 
 Date: 2026-09-03
-Status: Approved design, pending implementation plan
+Status: Implemented (2026-09-04)
 
 ## Goal
 
