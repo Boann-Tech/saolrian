@@ -21,6 +21,7 @@ export async function createDiaryEntry(
   endpoint: string,
   userId: string,
   payload: Record<string, unknown>,
+  source: string = 'manual',
 ): Promise<CreateResult> {
   if (isDuplicateQueued(endpoint, payload)) {
     return { ok: false, queued: false, error: 'Similar entry is already waiting in the offline queue' };
@@ -30,7 +31,7 @@ export async function createDiaryEntry(
     await pb.collection('diary_entries').create({
       ...payload,
       user: userId,
-      source: 'manual',
+      source,
     });
     return { ok: true, queued: false };
   } catch (err) {
