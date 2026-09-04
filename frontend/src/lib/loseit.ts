@@ -73,6 +73,18 @@ function num(s: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Converts a LoseIt `MM/DD/YYYY` date to `YYYY-MM-DD`. Passes through an
+ * already-ISO date unchanged. The backend parses every date with Go's
+ * `time.Parse("2006-01-02", ...)`, so every LoseIt date must go through
+ * this before being sent. */
+export function toIsoDate(raw: string): string {
+  const trimmed = raw.trim();
+  const mdy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (!mdy) return trimmed;
+  const [, mm, dd, yyyy] = mdy;
+  return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+}
+
 export function parseLoseItCsv(text: string): LoseItRow[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length === 0) return [];
@@ -95,7 +107,7 @@ export function parseLoseItCsv(text: string): LoseItRow[] {
     const date = pick('date');
     if (!name) continue;
     rows.push({
-      date,
+      date: toIsoDate(date),
       name,
       quantity: num(pick('quantity')) || 1,
       unit: pick('unit'),
