@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { getClient } from '../lib/pb';
-import { Field, useToast } from '../components/ui';
+import { Button, Card, Empty, Field, Spinner, TextInput, useToast } from '../components/ui';
+import { cn } from '../lib/cn';
 import { formatInt } from '../lib/format';
-import './edit-entry.css';
 
 /** Edit a diary entry — kcal + grams (+ macros kept proportional), meal
  *  slot picker. Save updates in place and returns to Today/History. */
@@ -65,30 +65,34 @@ export default function EditEntry() {
 
   if (loading) {
     return (
-      <div className="edit">
-        <p className="empty">Loading entry…</p>
+      <div className="flex items-center gap-2 px-6 py-5 text-sm text-text-muted">
+        <Spinner /> Loading entry…
       </div>
     );
   }
 
   return (
-    <div className="edit">
-      <div className="subhead">
-        <button className="backbtn" onClick={() => navigate(-1)} aria-label="Back">
+    <div className="pb-8">
+      <div className="flex items-center justify-between px-6 pb-3 pt-4">
+        <button
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
+          onClick={() => navigate(-1)}
+          aria-label="Back"
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h2>Edit entry</h2>
-        <span style={{ width: 36 }} />
+        <h2 className="text-xl font-bold tracking-[-.02em]">Edit entry</h2>
+        <span className="w-9" />
       </div>
 
-      <div className="sec" style={{ paddingTop: 16 }}>
-        <div className="card" style={{ padding: '16px 18px' }}>
-          <div className="brand">{name}</div>
+      <div className="px-6 pt-4">
+        <Card className="p-4">
+          <div className="mb-3.5 text-base font-bold text-text">{name}</div>
 
           <Field label="Calories (kcal)">
-            <input
+            <TextInput
               type="number"
               min={0}
               inputMode="numeric"
@@ -98,7 +102,7 @@ export default function EditEntry() {
           </Field>
 
           <Field label="Grams">
-            <input
+            <TextInput
               type="number"
               min={0}
               inputMode="decimal"
@@ -107,14 +111,19 @@ export default function EditEntry() {
             />
           </Field>
 
-          <div className="cap" style={{ fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--faint)', marginBottom: 8 }}>
+          <div className="mb-2 text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">
             Meal slot
           </div>
-          <div className="mealpills">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
             {slots.map((s) => (
               <button
                 key={s.id}
-                className={s.id === slotId ? 'mp on' : 'mp'}
+                className={cn(
+                  'flex-none rounded-full border px-4 py-2 text-sm font-medium text-text transition',
+                  s.id === slotId
+                    ? 'border-accent bg-accent font-semibold text-white'
+                    : 'border-border bg-raised hover:border-accent-line',
+                )}
                 onClick={() => setSlotId(s.id)}
               >
                 {s.name}
@@ -122,15 +131,13 @@ export default function EditEntry() {
             ))}
           </div>
 
-          <button className="btn" style={{ marginTop: 16 }} onClick={() => void save()} disabled={saving}>
+          <Button block loading={saving} className="mt-4" onClick={() => void save()}>
             {saving ? 'Saving…' : 'Save changes'}
-          </button>
-        </div>
+          </Button>
+        </Card>
       </div>
       {kcal ? (
-        <p className="empty" style={{ textAlign: 'center', marginTop: 8 }}>
-          {formatInt(parseInt(kcal, 10) || 0)} kcal in this entry
-        </p>
+        <Empty>{formatInt(parseInt(kcal, 10) || 0)} kcal in this entry</Empty>
       ) : null}
     </div>
   );

@@ -5,9 +5,8 @@ import { parseLoseItCsv, type LoseItRow } from '../lib/loseit';
 import { toCsv, buildExportFilename, downloadText, type ExportRow } from '../lib/export';
 import { getClient } from '../lib/pb';
 import type { DiaryEntry } from '../lib/types';
-import { useToast } from '../components/ui';
+import { Button, Card, useToast } from '../components/ui';
 import { formatInt } from '../lib/format';
-import './import.css';
 
 /** Import (Lose It! CSV) + diary CSV export — prototype hairline cards. */
 
@@ -101,85 +100,99 @@ export default function Import() {
   };
 
   return (
-    <div className="import">
-      <div className="subhead">
-        <button className="backbtn" onClick={() => navigate('/profile')} aria-label="Back to profile">
+    <div className="pb-2">
+      <div className="flex items-center justify-between px-6 pb-3 pt-4">
+        <button
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
+          onClick={() => navigate('/profile')}
+          aria-label="Back to profile"
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h2>Import &amp; export</h2>
-        <span style={{ width: 36 }} />
+        <h2 className="text-xl font-bold tracking-[-.02em]">Import &amp; export</h2>
+        <span className="w-9" />
       </div>
 
-      <div className="sec" style={{ paddingTop: 4 }}>
-        <div className="card" style={{ padding: '16px 18px' }}>
-          <div className="lbl2">Import from Lose It!</div>
-          <p className="import-hint">
+      <div className="px-6 pt-1">
+        <Card className="p-4">
+          <div className="text-xs font-semibold text-text-muted">Import from Lose It!</div>
+          <p className="mt-2 mb-3 text-xs leading-normal text-text-muted">
             Upload a Lose It! CSV export. Columns are detected from the header row, so reordered exports work too.
           </p>
-          <input type="file" accept=".csv,text/csv" onChange={onFile} className="file-input" />
-          {fileName && <p className="import-file">File: {fileName}</p>}
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={onFile}
+            className="text-sm text-text-muted file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-accent-ink"
+          />
+          {fileName && <p className="mt-2 text-xs text-text-faint">File: {fileName}</p>}
 
           {rows && (
-            <div className="import-preview">
-              <p>
+            <div className="mt-3.5 border-t border-border pt-3.5">
+              <p className="mb-2.5 text-sm text-text-muted">
                 <strong>{formatInt(rows.length)}</strong> entr{rows.length === 1 ? 'y' : 'ies'} ready to import.
               </p>
               {rows.length > 0 && (
-                <table className="preview-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Name</th>
-                      <th>Meal</th>
-                      <th>kcal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.slice(0, 5).map((r, i) => (
-                      <tr key={i}>
-                        <td>{r.date}</td>
-                        <td>{r.name}</td>
-                        <td>{r.meal}</td>
-                        <td>{r.kcal}</td>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs mb-3.5">
+                    <thead>
+                      <tr>
+                        <th className="border-b border-border px-2 py-1.5 text-left text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Date</th>
+                        <th className="border-b border-border px-2 py-1.5 text-left text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Name</th>
+                        <th className="border-b border-border px-2 py-1.5 text-left text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Meal</th>
+                        <th className="border-b border-border px-2 py-1.5 text-left text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">kcal</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {rows.slice(0, 5).map((r, i) => (
+                        <tr key={i}>
+                          <td className="border-b border-dotted border-border px-2 py-1.5 text-text">{r.date}</td>
+                          <td className="border-b border-dotted border-border px-2 py-1.5 text-text">{r.name}</td>
+                          <td className="border-b border-dotted border-border px-2 py-1.5 text-text">{r.meal}</td>
+                          <td className="border-b border-dotted border-border px-2 py-1.5 text-text">{r.kcal}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
-              {rows.length > 5 && <p className="preview-more">…and {formatInt(rows.length - 5)} more</p>}
-              <button className="btn" onClick={() => void doImport()} disabled={importing || rows.length === 0}>
+              {rows.length > 5 && <p className="mb-3 text-xs text-text-faint">…and {formatInt(rows.length - 5)} more</p>}
+              <Button loading={importing} disabled={rows.length === 0} onClick={() => void doImport()}>
                 {importing ? 'Importing…' : `Import ${formatInt(rows.length)} entries`}
-              </button>
+              </Button>
             </div>
           )}
 
           {result && (
-            <div className="import-result" role="status">
+            <div className="mt-3 rounded-md bg-good/12 px-3.5 py-2.5 text-sm font-semibold text-good-ink" role="status">
               Imported {formatInt(result.imported)}, skipped {formatInt(result.skipped)}.
             </div>
           )}
           {importErr && (
-            <div className="import-err" role="alert">
+            <div className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-sm text-danger" role="alert">
               {importErr}
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
-      <div className="sec" style={{ paddingBottom: 26 }}>
-        <div className="card" style={{ padding: '16px 18px' }}>
-          <div className="lbl2">Export diary</div>
-          <p className="import-hint">Download every diary entry as a CSV file, newest first.</p>
-          <button className="btn outline" onClick={() => void doExport()} disabled={exporting}>
+      <div className="px-6 pb-6.5 pt-5">
+        <Card className="p-4">
+          <div className="text-xs font-semibold text-text-muted">Export diary</div>
+          <p className="mt-2 mb-3 text-xs leading-normal text-text-muted">Download every diary entry as a CSV file, newest first.</p>
+          <Button variant="outline" loading={exporting} onClick={() => void doExport()}>
             {exporting ? 'Exporting…' : 'Export CSV'}
-          </button>
-        </div>
+          </Button>
+        </Card>
       </div>
 
-      <div className="sec" style={{ paddingBottom: 26 }}>
-        <Link to="/profile" className="btn ghost" style={{ width: '100%', textAlign: 'center' }}>
+      <div className="px-6 pt-5 pb-6.5">
+        <Link
+          to="/profile"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-transparent px-3.5 py-3 text-base font-semibold text-accent-ink transition hover:bg-accent-soft active:scale-[.98] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent/40"
+        >
           ← Back to profile
         </Link>
       </div>
