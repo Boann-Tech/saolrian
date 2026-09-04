@@ -29,6 +29,7 @@ export default function Import() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [parseErr, setParseErr] = useState('');
   const [job, setJob] = useState<ImportJobRecord | null>(null);
+  const [liveStatusUnavailable, setLiveStatusUnavailable] = useState(false);
   const [starting, setStarting] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -68,6 +69,7 @@ export default function Import() {
   const startImport = async () => {
     if (!categories || selected.size === 0) return;
     setStarting(true);
+    setLiveStatusUnavailable(false);
     try {
       const pb = getClient(endpoint);
       const payload: Record<string, unknown> = {};
@@ -83,22 +85,32 @@ export default function Import() {
 
       setJob({ id: res.job_id, status: 'queued', counts: {} });
 
-      await pb.collection('import_jobs').subscribe<ImportJobRecord>(res.job_id, (e) => {
-        const rec = e.record;
-        setJob(rec);
-        if (rec.status === 'done' || rec.status === 'failed') {
-          void pb.collection('import_jobs').unsubscribe(res.job_id);
-          if (rec.status === 'done') {
-            const totals = Object.values(rec.counts).reduce(
-              (acc, c) => ({ imported: acc.imported + c.imported, skipped: acc.skipped + c.skipped }),
-              { imported: 0, skipped: 0 },
-            );
-            toast(`Imported ${formatInt(totals.imported)}, skipped ${formatInt(totals.skipped)}.`);
-          } else {
-            toast(rec.error || 'Import failed', 'err');
+      // The import has genuinely started server-side at this point (we have
+      // a real job_id), so a failure to subscribe (websocket/auth hiccup)
+      // must not be reported as an import-start failure — that would be
+      // false — and must not leave the UI stuck showing "Importing…" with
+      // no way for it to ever resolve. Give it its own try/catch.
+      try {
+        await pb.collection('import_jobs').subscribe<ImportJobRecord>(res.job_id, (e) => {
+          const rec = e.record;
+          setJob(rec);
+          if (rec.status === 'done' || rec.status === 'failed') {
+            void pb.collection('import_jobs').unsubscribe(res.job_id);
+            if (rec.status === 'done') {
+              const totals = Object.values(rec.counts).reduce(
+                (acc, c) => ({ imported: acc.imported + c.imported, skipped: acc.skipped + c.skipped }),
+                { imported: 0, skipped: 0 },
+              );
+              toast(`Imported ${formatInt(totals.imported)}, skipped ${formatInt(totals.skipped)}.`);
+            } else {
+              toast(rec.error || 'Import failed', 'err');
+            }
           }
-        }
-      });
+        });
+      } catch {
+        setLiveStatusUnavailable(true);
+        toast('Import started — live status is unavailable right now, check back later.');
+      }
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Import failed to start', 'err');
     } finally {
@@ -217,11 +229,13 @@ export default function Import() {
               }
               role={job.status === 'failed' ? 'alert' : 'status'}
             >
-              {job.status === 'queued' || job.status === 'running'
-                ? "Importing… you can leave this page, you'll be notified when it's done."
-                : job.status === 'done'
-                  ? 'Import complete — see the toast for totals.'
-                  : `Import failed: ${job.error ?? 'unknown error'}`}
+              {liveStatusUnavailable
+                ? 'Import started, but live status could not be loaded — check back later.'
+                : job.status === 'queued' || job.status === 'running'
+                  ? "Importing… you can leave this page, you'll be notified when it's done."
+                  : job.status === 'done'
+                    ? 'Import complete — see the toast for totals.'
+                    : `Import failed: ${job.error ?? 'unknown error'}`}
             </div>
           )}
         </Card>

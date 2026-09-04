@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Import from '../Import';
@@ -10,6 +10,7 @@ const authRecord = { id: 'user-1' };
 
 type JobRecord = { id: string; status: string; counts: Record<string, { imported: number; skipped: number }>; error?: string };
 let subscribeCb: ((e: { record: JobRecord }) => void) | null = null;
+let subscribeShouldReject = false;
 
 const fakePb = {
   baseUrl: 'http://localhost:8090',
@@ -18,6 +19,7 @@ const fakePb = {
     if (name === 'import_jobs') {
       return {
         subscribe: async (_id: string, cb: (e: { record: JobRecord }) => void) => {
+          if (subscribeShouldReject) throw new Error('websocket unavailable');
           subscribeCb = cb;
           return async () => {};
         },
@@ -34,6 +36,15 @@ const fakePb = {
     throw new Error(`unexpected send ${path}`);
   },
 };
+
+beforeEach(() => {
+  subscribeCb = null;
+  subscribeShouldReject = false;
+});
+
+afterEach(() => {
+  cleanup();
+});
 
 vi.mock('../../lib/pb', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/pb')>();
@@ -80,5 +91,23 @@ describe('Import screen', () => {
     subscribeCb!({ record: { id: 'job-1', status: 'done', counts: { diary: { imported: 1, skipped: 0 } } } });
 
     expect(await screen.findByText(/Imported 1, skipped 0/)).toBeInTheDocument();
+  });
+
+  it('treats a failed subscribe() as an honest "started, status unavailable" state rather than a failed start', async () => {
+    subscribeShouldReject = true;
+    renderImport();
+    const user = userEvent.setup();
+
+    const input = screen.getByLabelText('Upload Lose It export zip');
+    const file = new File(['zip-bytes'], 'loseit-export.zip', { type: 'application/zip' });
+    await user.upload(input, file);
+
+    expect(await screen.findByText(/Food logs/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Import 1 selected/ }));
+
+    expect(await screen.findByText(/live status could not be loaded/i)).toBeInTheDocument();
+    expect(await screen.findByText(/live status is unavailable right now/i)).toBeInTheDocument();
+    expect(screen.queryByText(/failed to start/i)).not.toBeInTheDocument();
   });
 });
