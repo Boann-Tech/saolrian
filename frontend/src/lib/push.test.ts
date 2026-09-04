@@ -30,7 +30,16 @@ describe('ensurePushSubscription', () => {
     (saolrianSend as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true, publicKey: 'QUJD' }); // vapid-key lookup
 
     vi.stubGlobal('Notification', { requestPermission: vi.fn().mockResolvedValue('denied') });
-    vi.stubGlobal('navigator', { serviceWorker: {} });
+
+    const registration = {
+      pushManager: {
+        getSubscription: vi.fn(),
+        subscribe: vi.fn(),
+      },
+    };
+    vi.stubGlobal('navigator', {
+      serviceWorker: { ready: Promise.resolve(registration) },
+    });
     vi.stubGlobal('PushManager', function () {});
 
     const result = await ensurePushSubscription('http://localhost:8090');
@@ -38,6 +47,12 @@ describe('ensurePushSubscription', () => {
     expect(result).toBe(false);
     // Only the vapid-key lookup should have happened — no subscribe POST.
     expect(saolrianSend).toHaveBeenCalledTimes(1);
+    // Proves execution actually stopped at the permission guard rather
+    // than merely erroring out later (e.g. on an undefined
+    // navigator.serviceWorker.ready) and being swallowed by the
+    // try/catch — if the guard were ever removed, these would fire.
+    expect(registration.pushManager.getSubscription).not.toHaveBeenCalled();
+    expect(registration.pushManager.subscribe).not.toHaveBeenCalled();
   });
 
   it('subscribes and posts the subscription when permission is granted', async () => {
