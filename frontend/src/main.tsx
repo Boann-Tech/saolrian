@@ -11,6 +11,8 @@ import ProfileGoals from './screens/ProfileGoals';
 import Import from './screens/Import';
 import Welcome from './screens/Welcome';
 import EditEntry from './screens/EditEntry';
+import Recipes from './screens/Recipes';
+import RecipeEditor from './screens/RecipeEditor';
 import { AppShell } from './components/AppShell';
 import './styles/index.css';
 
@@ -61,6 +63,9 @@ function AppRoutes() {
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<ProfileGoals />} />
         <Route path="/profile/import" element={<Import />} />
+        <Route path="/recipes" element={<Recipes />} />
+        <Route path="/recipes/new" element={<RecipeEditor />} />
+        <Route path="/recipes/:id" element={<RecipeEditor />} />
         <Route path="/edit/:id" element={<EditEntry />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Routes>

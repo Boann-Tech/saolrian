@@ -492,6 +492,16 @@ export default function ProfileGoals() {
 
       <div className="px-6 pb-6 pt-5">
         <Card className="p-4">
+          <div className="text-xs font-semibold text-text-muted">Recipes</div>
+          <p className={cn(HINT, 'mb-3 mt-2')}>Build recipes from your foods and log servings straight to the diary.</p>
+          <Link
+            to="/recipes"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-raised px-3.5 py-3 text-base font-semibold text-text transition hover:border-accent-line hover:text-accent-ink active:scale-[.98]"
+          >
+            Recipes
+          </Link>
+        </Card>
+        <Card className="mt-3.5 p-4">
           <div className="text-xs font-semibold text-text-muted">Data</div>
           <p className={cn(HINT, 'mb-3 mt-2')}>Bring your history from other apps, or export your diary.</p>
           <Link

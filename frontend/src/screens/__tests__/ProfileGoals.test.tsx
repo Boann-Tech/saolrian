@@ -132,3 +132,11 @@ describe('ProfileGoals — unsaved edits survive background profile refreshes', 
     expect(formulaSelect).toHaveValue('katch');
   });
 });
+
+describe('ProfileGoals — Recipes link', () => {
+  it('links to /recipes', async () => {
+    renderProfile();
+    const link = await screen.findByRole('link', { name: /^recipes$/i });
+    expect(link).toHaveAttribute('href', '/recipes');
+  });
+});
