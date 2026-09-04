@@ -120,3 +120,116 @@ export function parseLoseItCsv(text: string): LoseItRow[] {
   }
   return rows;
 }
+
+// ---------------------------------------------------------------------
+// steps / water-intake / body-fat / sleep-hours (shared Date,Value shape)
+// ---------------------------------------------------------------------
+
+export interface DateValueRow {
+  date: string;
+  value: number;
+}
+
+function looksLikeDateValueHeader(cells: string[]): boolean {
+  const lower = cells.map((c) => c.trim().toLowerCase());
+  return lower[0] === 'date' && lower.includes('value');
+}
+
+export function parseDateValueCsv(text: string): DateValueRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const headerIdx = lines.findIndex((l) => looksLikeDateValueHeader(splitCsvLine(l)));
+  if (headerIdx === -1) return [];
+  const header = splitCsvLine(lines[headerIdx]).map((c) => c.trim().toLowerCase());
+  const dateIdx = header.indexOf('date');
+  const valueIdx = header.indexOf('value');
+
+  const rows: DateValueRow[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cells = splitCsvLine(lines[i]);
+    const date = (cells[dateIdx] ?? '').trim();
+    if (!date) continue;
+    rows.push({ date: toIsoDate(date), value: num(cells[valueIdx]) });
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------------
+// weights.csv
+// ---------------------------------------------------------------------
+
+export interface LoseItWeightRow {
+  date: string;
+  kg: number;
+}
+
+function looksLikeWeightHeader(cells: string[]): boolean {
+  const lower = cells.map((c) => c.trim().toLowerCase());
+  return lower[0] === 'date' && lower.includes('weight');
+}
+
+export function parseLoseItWeightCsv(text: string): LoseItWeightRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const headerIdx = lines.findIndex((l) => looksLikeWeightHeader(splitCsvLine(l)));
+  if (headerIdx === -1) return [];
+  const header = splitCsvLine(lines[headerIdx]).map((c) => c.trim().toLowerCase());
+  const dateIdx = header.indexOf('date');
+  const weightIdx = header.indexOf('weight');
+  const deletedIdx = header.indexOf('deleted');
+
+  const rows: LoseItWeightRow[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cells = splitCsvLine(lines[i]);
+    if (deletedIdx !== -1 && (cells[deletedIdx] ?? '').trim().toLowerCase() === 'true') continue;
+    const date = (cells[dateIdx] ?? '').trim();
+    const kg = num(cells[weightIdx]);
+    if (!date || kg <= 0) continue;
+    rows.push({ date: toIsoDate(date), kg });
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------------
+// exercise-logs.csv
+// ---------------------------------------------------------------------
+
+export interface LoseItExerciseRow {
+  date: string;
+  name: string;
+  minutes: number;
+  kcal: number;
+}
+
+function looksLikeExerciseHeader(cells: string[]): boolean {
+  const lower = cells.map((c) => c.trim().toLowerCase());
+  return lower.includes('date') && lower.includes('name') && lower.some((c) => c.includes('calor'));
+}
+
+export function parseLoseItExerciseCsv(text: string): LoseItExerciseRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const headerIdx = lines.findIndex((l) => looksLikeExerciseHeader(splitCsvLine(l)));
+  if (headerIdx === -1) return [];
+  const header = splitCsvLine(lines[headerIdx]).map((c) => c.trim().toLowerCase());
+  const dateIdx = header.indexOf('date');
+  const nameIdx = header.indexOf('name');
+  const qtyIdx = header.indexOf('quantity');
+  const unitsIdx = header.indexOf('units');
+  const kcalIdx = header.indexOf('calories');
+  const deletedIdx = header.indexOf('deleted');
+
+  const rows: LoseItExerciseRow[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cells = splitCsvLine(lines[i]);
+    if (deletedIdx !== -1 && (cells[deletedIdx] ?? '').trim() === '1') continue;
+    const date = (cells[dateIdx] ?? '').trim();
+    const name = (cells[nameIdx] ?? '').trim();
+    if (!date || !name) continue;
+    const isMinutes = unitsIdx !== -1 && (cells[unitsIdx] ?? '').trim().toLowerCase() === 'minutes';
+    rows.push({
+      date: toIsoDate(date),
+      name,
+      minutes: isMinutes ? num(cells[qtyIdx]) : 0,
+      kcal: num(cells[kcalIdx]),
+    });
+  }
+  return rows;
+}
