@@ -16,11 +16,28 @@ describe('ensurePushSubscription', () => {
   it('returns false without calling Notification when the server has no VAPID key configured', async () => {
     (saolrianSend as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: false, publicKey: '' });
     vi.stubGlobal('Notification', { requestPermission: vi.fn() });
+    vi.stubGlobal('navigator', { serviceWorker: {} });
+    vi.stubGlobal('PushManager', function () {});
 
     const result = await ensurePushSubscription('http://localhost:8090');
 
     expect(result).toBe(false);
+    expect(saolrianSend).toHaveBeenCalledWith(expect.anything(), 'GET', '/api/saolrian/push/vapid-key');
     expect((globalThis.Notification as unknown as { requestPermission: ReturnType<typeof vi.fn> }).requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('returns false without subscribing when the user denies notification permission', async () => {
+    (saolrianSend as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true, publicKey: 'QUJD' }); // vapid-key lookup
+
+    vi.stubGlobal('Notification', { requestPermission: vi.fn().mockResolvedValue('denied') });
+    vi.stubGlobal('navigator', { serviceWorker: {} });
+    vi.stubGlobal('PushManager', function () {});
+
+    const result = await ensurePushSubscription('http://localhost:8090');
+
+    expect(result).toBe(false);
+    // Only the vapid-key lookup should have happened — no subscribe POST.
+    expect(saolrianSend).toHaveBeenCalledTimes(1);
   });
 
   it('subscribes and posts the subscription when permission is granted', async () => {
