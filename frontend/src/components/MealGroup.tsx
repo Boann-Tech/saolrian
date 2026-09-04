@@ -86,12 +86,14 @@ export function MealGroup({
   onAddFood,
   onDelete,
   onEdit,
+  onDeleteSlot,
 }: {
   group: SummaryGroup;
   addLabel?: string;
   onAddFood?: () => void;
   onDelete?: (entryId: string) => void;
   onEdit?: (entryId: string) => void;
+  onDeleteSlot?: () => void;
 }) {
   const [open, setOpen] = useState(group.entries.length > 0);
   const [menuEntry, setMenuEntry] = useState<string | null>(null);
@@ -179,20 +181,33 @@ export function MealGroup({
 
   return (
     <div className="mb-3.5">
-      <button
-        className="flex w-full items-baseline justify-between px-0.5 pb-2 pt-0.5 text-left"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-      >
-        <span className="flex items-center gap-1.5 text-base font-bold tracking-[-.01em] text-text">
-          {group.slot_name} <span className="text-[9px] text-text-faint">{open ? '▾' : '▸'}</span>
-        </span>
-        <span className="text-sm font-semibold text-text-muted">
-          {group.entries.length === 0
-            ? '0 kcal · nothing logged'
-            : `${group.entries.length} item${group.entries.length === 1 ? '' : 's'} · ${formatInt(groupKcal)} kcal`}
-        </span>
-      </button>
+      <div className="flex items-center gap-1 pb-2 pt-0.5">
+        <button
+          className="flex flex-1 items-baseline justify-between px-0.5 text-left"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+        >
+          <span className="flex items-center gap-1.5 text-base font-bold tracking-[-.01em] text-text">
+            {group.slot_name} <span className="text-[9px] text-text-faint">{open ? '▾' : '▸'}</span>
+          </span>
+          <span className="text-sm font-semibold text-text-muted">
+            {group.entries.length === 0
+              ? '0 kcal · nothing logged'
+              : `${group.entries.length} item${group.entries.length === 1 ? '' : 's'} · ${formatInt(groupKcal)} kcal`}
+          </span>
+        </button>
+        {onDeleteSlot && (
+          <button
+            className="flex-none rounded-md p-1.5 text-text-faint hover:bg-[#fdf0f0] hover:text-danger [&_svg]:h-4 [&_svg]:w-4 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:[stroke-width:1.8] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]"
+            onClick={onDeleteSlot}
+            aria-label={`Delete ${group.slot_name}`}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <path d="M6 7h12M9 7V5h6v2m-8 0 1 13h8l1-13" />
+            </svg>
+          </button>
+        )}
+      </div>
       {open && body}
       {open &&
         (onAddFood ? (

@@ -6,7 +6,19 @@ import { todayISO, greeting, formatInt } from '../lib/format';
 import { getClient } from '../lib/pb';
 import { normalizeSummary } from '../lib/normalize';
 import { MealGroup } from '../components/MealGroup';
-import { Button, Card, CardTitle, Empty, Meter, ProgressBar, Spinner, StatTile, TextInput, useToast } from '../components/ui';
+import {
+  Button,
+  Card,
+  CardTitle,
+  Empty,
+  Meter,
+  Modal,
+  ProgressBar,
+  Spinner,
+  StatTile,
+  TextInput,
+  useToast,
+} from '../components/ui';
 import { cn } from '../lib/cn';
 
 /** Today dashboard — prototype structure: brandline hero with balance card,
@@ -24,6 +36,12 @@ export default function Today() {
   const [waterMl, setWaterMl] = useState<number>(0);
   const [steps, setSteps] = useState<number>(0);
   const [savingMetric, setSavingMetric] = useState(false);
+  const [editingWater, setEditingWater] = useState(false);
+  const [waterInput, setWaterInput] = useState('');
+  const [confirmDeleteSlot, setConfirmDeleteSlot] = useState<{ id: string; name: string; count: number } | null>(
+    null,
+  );
+  const [deletingSlot, setDeletingSlot] = useState(false);
 
   const load = useCallback(async () => {
     if (!endpoint) return;
@@ -116,6 +134,42 @@ export default function Today() {
       toast(ex instanceof Error ? ex.message : 'Could not update metric', 'err');
     } finally {
       setSavingMetric(false);
+    }
+  };
+
+  const commitWater = async () => {
+    const next = Math.max(0, Math.round(Number(waterInput)) || 0);
+    setEditingWater(false);
+    if (next !== waterMl) await upsertMetric({ water_ml: next });
+  };
+
+  const requestDeleteSlot = async (id: string, name: string) => {
+    const pb = getClient(endpoint);
+    try {
+      const res = await pb.collection('diary_entries').getList(1, 1, { filter: `meal_slot="${id}"` });
+      if (res.totalItems === 0) {
+        await doDeleteSlot(id, name);
+      } else {
+        setConfirmDeleteSlot({ id, name, count: res.totalItems });
+      }
+    } catch (ex) {
+      toast(ex instanceof Error ? ex.message : 'Could not check meal slot', 'err');
+    }
+  };
+
+  const doDeleteSlot = async (id: string, name: string) => {
+    const pb = getClient(endpoint);
+    setDeletingSlot(true);
+    try {
+      await pb.collection('meal_slots').delete(id);
+      await refreshSlots();
+      await load();
+      toast(`Deleted “${name}”`);
+    } catch (ex) {
+      toast(ex instanceof Error ? ex.message : 'Could not delete meal slot', 'err');
+    } finally {
+      setDeletingSlot(false);
+      setConfirmDeleteSlot(null);
     }
   };
 
@@ -246,6 +300,7 @@ export default function Today() {
                 onAddFood={() => navigate('/add')}
                 onDelete={(id) => void destroyEntry(id)}
                 onEdit={(id) => navigate(`/edit/${id}`)}
+                onDeleteSlot={() => void requestDeleteSlot(g.slot_id, g.slot_name)}
               />
             ))}
 
@@ -276,8 +331,34 @@ export default function Today() {
             <Card>
               <CardTitle>Hydration</CardTitle>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold">
-                  {formatInt(waterMl)} <small className="text-sm font-medium text-text-faint">/ {formatInt(2000)} ml</small>
+                <span className="flex items-baseline gap-1 text-xl font-bold">
+                  {editingWater ? (
+                    <input
+                      type="number"
+                      min={0}
+                      autoFocus
+                      className="w-20 rounded-md border-[1.5px] border-accent-line bg-raised px-1.5 py-0.5 text-xl font-bold text-text outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+                      value={waterInput}
+                      onChange={(e) => setWaterInput(e.target.value)}
+                      onBlur={() => void commitWater()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void commitWater();
+                        if (e.key === 'Escape') setEditingWater(false);
+                      }}
+                    />
+                  ) : (
+                    <button
+                      className="rounded-md underline decoration-dotted decoration-text-faint underline-offset-4 hover:decoration-accent"
+                      onClick={() => {
+                        setWaterInput(String(waterMl));
+                        setEditingWater(true);
+                      }}
+                      aria-label="Edit water amount"
+                    >
+                      {formatInt(waterMl)}
+                    </button>
+                  )}
+                  <small className="text-sm font-medium text-text-faint">/ {formatInt(2000)} ml</small>
                 </span>
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
                   <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
@@ -339,6 +420,30 @@ export default function Today() {
           </section>
         </>
       )}
+
+      <Modal
+        open={!!confirmDeleteSlot}
+        onClose={() => setConfirmDeleteSlot(null)}
+        title={`Delete “${confirmDeleteSlot?.name}”?`}
+      >
+        <p className="text-sm text-text-muted">
+          This removes the meal category and permanently deletes {confirmDeleteSlot?.count} logged item
+          {confirmDeleteSlot?.count === 1 ? '' : 's'} across all dates, not just today. This can’t be undone.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setConfirmDeleteSlot(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            loading={deletingSlot}
+            onClick={() => confirmDeleteSlot && void doDeleteSlot(confirmDeleteSlot.id, confirmDeleteSlot.name)}
+          >
+            Delete
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

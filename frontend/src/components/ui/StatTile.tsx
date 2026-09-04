@@ -8,7 +8,10 @@ export function ProgressBar({ pct, tone = 'accent' }: { pct: number; tone?: 'acc
     <div className="mt-2 h-[3px] overflow-hidden rounded-full bg-border">
       <div
         data-fill
-        className={cn('h-full rounded-full', tone === 'good' ? 'bg-good' : 'bg-accent')}
+        className={cn(
+          'h-full rounded-full transition-[width] duration-500 ease-out',
+          tone === 'good' ? 'bg-good' : 'bg-accent',
+        )}
         style={{ width: `${clamp(pct)}%` }}
       />
     </div>
