@@ -1,0 +1,43 @@
+source_code,canonical_key,factor,note
+208,energy_kcal,1,Energy (kcal)
+203,protein,1,Protein
+204,fat,1,Total lipid (fat)
+205,carbohydrate,1,Carbohydrate by difference
+291,fibre,1,Fiber total dietary
+269,sugars,1,Sugars total
+209,starch,1,Starch
+606,fat_saturated,1,Fatty acids total saturated
+645,fat_monounsaturated,1,Fatty acids total monounsaturated
+646,fat_polyunsaturated,1,Fatty acids total polyunsaturated
+605,fat_trans,1,Fatty acids total trans
+601,cholesterol,1,Cholesterol (mg)
+221,alcohol,1,Alcohol ethyl
+255,water,1,Water
+207,ash,1,Ash
+307,sodium,1,Sodium (mg)
+306,potassium,1,Potassium (mg)
+301,calcium,1,Calcium (mg)
+304,magnesium,1,Magnesium (mg)
+305,phosphorus,1,Phosphorus (mg)
+303,iron,1,Iron (mg)
+309,zinc,1,Zinc (mg)
+312,copper,1,Copper (mg)
+315,manganese,1,Manganese (mg)
+317,selenium,1,Selenium (ug)
+314,iodine,1,Iodine (ug); sparse in SR Legacy
+320,vitamin_a_rae,1,Vitamin A RAE (ug)
+319,retinol,1,Retinol (ug)
+321,carotene_beta,1,Carotene beta (ug)
+328,vitamin_d,1,Vitamin D D2+D3 (ug)
+323,vitamin_e,1,Vitamin E alpha-tocopherol (mg)
+430,vitamin_k,1,Vitamin K phylloquinone (ug)
+401,vitamin_c,1,Vitamin C total ascorbic acid (mg)
+404,thiamin,1,Thiamin (mg)
+405,riboflavin,1,Riboflavin (mg)
+406,niacin,1,Niacin (mg)
+415,vitamin_b6,1,Vitamin B-6 (mg)
+417,folate,1,Folate total (ug)
+418,vitamin_b12,1,Vitamin B-12 (ug)
+410,pantothenate,1,Pantothenic acid (mg)
+318,-,1,Vitamin A IU; superseded by 320 RAE
+435,-,1,Folate DFE; superseded by 417 total
