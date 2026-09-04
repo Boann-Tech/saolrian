@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { getClient, saolrianSend, UnreachableError } from '../lib/pb';
-import { saveRecipe, type IngredientDraft } from '../lib/recipes';
+import { saveRecipe, loadRecipeIngredients, deleteRecipe, type IngredientDraft } from '../lib/recipes';
 import { sumIngredients, perServing, foodMath } from '../lib/nutrition';
 import { normalizeSearch } from '../lib/normalize';
 import type { Food } from '../lib/types';
@@ -30,7 +30,8 @@ export default function RecipeEditor() {
   const [name, setName] = useState('');
   const [servings, setServings] = useState(1);
   const [ingredients, setIngredients] = useState<DraftIngredient[]>([]);
-  const [originalIds] = useState<string[]>([]);
+  const [originalIds, setOriginalIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -47,6 +48,42 @@ export default function RecipeEditor() {
   const [selectedFood, setSelectedFood] = useState<Food | null>(null);
   const [grams, setGrams] = useState(100);
   const debounce = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (isNew || !endpoint || !routeId) return;
+    let cancelled = false;
+    (async () => {
+      const pb = getClient(endpoint);
+      const [recipe, rows] = await Promise.all([
+        pb.collection('recipes').getOne(routeId),
+        loadRecipeIngredients(pb, routeId),
+      ]);
+      if (cancelled) return;
+      setName(recipe.name as string);
+      setServings(recipe.servings as number);
+      setIngredients(
+        rows.map((r) => ({
+          uid: nextUid(),
+          id: r.id,
+          food: r.food,
+          name_snapshot: r.name_snapshot,
+          brand_snapshot: r.brand_snapshot ?? null,
+          grams: r.grams,
+          kcal: r.kcal,
+          protein: r.protein,
+          carbs: r.carbs,
+          fat: r.fat,
+          sort_order: r.sort_order,
+        })),
+      );
+      setOriginalIds(rows.map((r) => r.id));
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, endpoint, routeId]);
 
   useEffect(() => {
     if (addStage !== 'search' || !endpoint) return;
@@ -173,6 +210,13 @@ export default function RecipeEditor() {
     }
   };
 
+  const remove = async () => {
+    if (!endpoint || isNew || !routeId) return;
+    await deleteRecipe(getClient(endpoint), routeId);
+    toast('Recipe deleted');
+    navigate('/recipes');
+  };
+
   return (
     <div className="pb-6">
       <div className="flex items-center justify-between px-6 pb-3 pt-4">
@@ -189,61 +233,72 @@ export default function RecipeEditor() {
         <span className="w-9" />
       </div>
 
-      <div className="flex flex-col gap-3.5 px-6">
-        <Field label="Name">
-          <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Chili" />
-        </Field>
-
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold">Servings</span>
-          <Stepper value={servings} onChange={setServings} step={1} min={1} inputMode="numeric" aria-label="Servings" />
+      {loading ? (
+        <div className="flex items-center gap-2 px-6 text-sm text-text-faint">
+          <Spinner /> Loading…
         </div>
+      ) : (
+        <div className="flex flex-col gap-3.5 px-6">
+          <Field label="Name">
+            <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Chili" />
+          </Field>
 
-        <Card>
-          <div className="mb-2 flex items-baseline justify-between">
-            <h3 className="text-md font-bold tracking-[-.01em]">Ingredients</h3>
-            <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
-              + Add ingredient
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold">Servings</span>
+            <Stepper value={servings} onChange={setServings} step={1} min={1} inputMode="numeric" aria-label="Servings" />
+          </div>
+
+          <Card>
+            <div className="mb-2 flex items-baseline justify-between">
+              <h3 className="text-md font-bold tracking-[-.01em]">Ingredients</h3>
+              <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+                + Add ingredient
+              </Button>
+            </div>
+            {ingredients.length === 0 ? (
+              <p className="py-2 text-sm text-text-faint">No ingredients yet.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {ingredients.map((ing) => (
+                  <li key={ing.uid} className="flex items-center justify-between py-2.5">
+                    <div>
+                      <div className="text-sm font-semibold">{ing.name_snapshot}</div>
+                      <div className="text-xs text-text-faint">{formatInt(ing.kcal)} kcal</div>
+                    </div>
+                    <button
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-danger"
+                      aria-label={`Remove ${ing.name_snapshot}`}
+                      onClick={() => removeIngredient(ing.uid)}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card>
+            <div className="flex items-baseline justify-between">
+              <span className="text-sm font-semibold">Total</span>
+              <span className="text-sm">{formatInt(totals.kcal)} kcal total</span>
+            </div>
+            <div className="mt-1 flex items-baseline justify-between">
+              <span className="text-sm font-semibold">Per serving</span>
+              <span className="text-sm">{formatInt(perServingTotals.kcal)} kcal/serving</span>
+            </div>
+          </Card>
+
+          <Button block loading={saving} disabled={!name.trim() || ingredients.length === 0} onClick={() => void save()}>
+            Save recipe
+          </Button>
+          {!isNew && (
+            <Button variant="danger" block onClick={() => void remove()}>
+              Delete recipe
             </Button>
-          </div>
-          {ingredients.length === 0 ? (
-            <p className="py-2 text-sm text-text-faint">No ingredients yet.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {ingredients.map((ing) => (
-                <li key={ing.uid} className="flex items-center justify-between py-2.5">
-                  <div>
-                    <div className="text-sm font-semibold">{ing.name_snapshot}</div>
-                    <div className="text-xs text-text-faint">{formatInt(ing.kcal)} kcal</div>
-                  </div>
-                  <button
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-danger"
-                    aria-label={`Remove ${ing.name_snapshot}`}
-                    onClick={() => removeIngredient(ing.uid)}
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
           )}
-        </Card>
-
-        <Card>
-          <div className="flex items-baseline justify-between">
-            <span className="text-sm font-semibold">Total</span>
-            <span className="text-sm">{formatInt(totals.kcal)} kcal total</span>
-          </div>
-          <div className="mt-1 flex items-baseline justify-between">
-            <span className="text-sm font-semibold">Per serving</span>
-            <span className="text-sm">{formatInt(perServingTotals.kcal)} kcal/serving</span>
-          </div>
-        </Card>
-
-        <Button block loading={saving} disabled={!name.trim() || ingredients.length === 0} onClick={() => void save()}>
-          Save recipe
-        </Button>
-      </div>
+        </div>
+      )}
 
       <Sheet open={addOpen} onClose={closeAddSheet} title="Add ingredient">
         {addStage === 'menu' && (

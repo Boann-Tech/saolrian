@@ -14,6 +14,11 @@ const fakePb = {
     if (name === 'profiles') return { getFullList: async () => [] };
     if (name === 'weights') return { getList: async () => ({ items: [] }) };
     if (name === 'meal_slots') return { getFullList: async () => [] };
+    if (name === 'recipes') {
+      return {
+        getOne: async (id: string) => ({ id, name: 'Chili', servings: 4, total_kcal: 220, total_protein: 14, total_carbs: 40, total_fat: 1 }),
+      };
+    }
     throw new Error(`unexpected collection ${name}`);
   },
 };
@@ -128,5 +133,27 @@ describe('RecipeEditor — search-sourced ingredient', () => {
 
     expect(screen.getByText('Black beans')).toBeInTheDocument();
     expect(saveRecipeMock).not.toHaveBeenCalled(); // not saved yet, just added to the draft
+  });
+});
+
+describe('RecipeEditor — edit flow', () => {
+  it('loads an existing recipe and its ingredients, and deletes it', async () => {
+    const recipesLib = await import('../../lib/recipes');
+    vi.mocked(recipesLib.loadRecipeIngredients).mockResolvedValueOnce([
+      { id: 'ing-1', recipe: 'recipe-1', food: null, name_snapshot: 'Beans', brand_snapshot: null, grams: 200, kcal: 220, protein: 14, carbs: 40, fat: 1, sort_order: 0 },
+    ]);
+    const deleteMock = vi.mocked(recipesLib.deleteRecipe);
+
+    const user = userEvent.setup();
+    renderEditor('/recipes/recipe-1');
+
+    const nameInput = await screen.findByLabelText('Name');
+    // Loading a recipe requires knowing its own fields; RecipeEditor fetches
+    // them via pb.collection('recipes').getOne, stubbed on fakePb below.
+    expect(nameInput).toHaveValue('Chili');
+    expect(await screen.findByText('Beans')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /delete recipe/i }));
+    expect(deleteMock).toHaveBeenCalledWith(fakePb, 'recipe-1');
   });
 });
