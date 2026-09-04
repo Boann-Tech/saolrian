@@ -40,12 +40,12 @@ export interface LoseItCategoryPreview {
 
 const CATEGORY_META: Record<keyof LoseItImportCategories, { file: string; label: string; defaultSelected: boolean }> = {
   diary: { file: 'food-logs.csv', label: 'Food logs', defaultSelected: true },
-  weight: { file: 'weights.csv', label: 'Weight', defaultSelected: true },
+  weight: { file: 'weights.csv', label: 'Weight (imported as kg)', defaultSelected: true },
   exercise: { file: 'exercise-logs.csv', label: 'Exercise', defaultSelected: true },
   foods: { file: 'custom-foods.csv', label: 'Custom foods', defaultSelected: true },
   recipes: { file: 'recipes.csv', label: 'Recipes', defaultSelected: true },
   steps: { file: 'steps.csv', label: 'Steps', defaultSelected: true },
-  water: { file: 'water-intake.csv', label: 'Water', defaultSelected: true },
+  water: { file: 'water-intake.csv', label: 'Water (imported as ml)', defaultSelected: true },
   body_fat: { file: 'body-fat.csv', label: 'Body fat', defaultSelected: true },
   sleep: { file: 'sleep-hours.csv', label: 'Sleep', defaultSelected: true },
   profile: { file: 'profile.csv', label: 'Profile & goals', defaultSelected: false },
