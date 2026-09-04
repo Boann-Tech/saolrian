@@ -11,6 +11,7 @@ const authRecord = { id: 'user-1' };
 type JobRecord = { id: string; status: string; counts: Record<string, { imported: number; skipped: number }>; error?: string };
 let subscribeCb: ((e: { record: JobRecord }) => void) | null = null;
 let subscribeShouldReject = false;
+let getOneResult: JobRecord = { id: 'job-1', status: 'queued', counts: {} };
 
 const fakePb = {
   baseUrl: 'http://localhost:8090',
@@ -24,6 +25,7 @@ const fakePb = {
           return async () => {};
         },
         unsubscribe: async () => {},
+        getOne: async (_id: string) => getOneResult,
       };
     }
     if (name === 'meal_slots') return { getFullList: async () => [] };
@@ -40,6 +42,7 @@ const fakePb = {
 beforeEach(() => {
   subscribeCb = null;
   subscribeShouldReject = false;
+  getOneResult = { id: 'job-1', status: 'queued', counts: {} };
 });
 
 afterEach(() => {
@@ -91,6 +94,27 @@ describe('Import screen', () => {
     subscribeCb!({ record: { id: 'job-1', status: 'done', counts: { diary: { imported: 1, skipped: 0 } } } });
 
     expect(await screen.findByText(/Imported 1, skipped 0/)).toBeInTheDocument();
+  });
+
+  it('reconciles via getOne when the job already finished before the subscription was established', async () => {
+    // Simulates the race: the job completes server-side before the realtime
+    // subscription starts listening, so subscribeCb is never invoked — only
+    // the one-shot getOne() reconciliation fetch sees the terminal status.
+    getOneResult = { id: 'job-1', status: 'done', counts: { diary: { imported: 1, skipped: 0 } } };
+
+    renderImport();
+    const user = userEvent.setup();
+
+    const input = screen.getByLabelText('Upload Lose It export zip');
+    const file = new File(['zip-bytes'], 'loseit-export.zip', { type: 'application/zip' });
+    await user.upload(input, file);
+
+    expect(await screen.findByText(/Food logs/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Import 1 selected/ }));
+
+    expect(await screen.findByText(/Imported 1, skipped 0/)).toBeInTheDocument();
+    expect(await screen.findByText(/Import complete/)).toBeInTheDocument();
   });
 
   it('treats a failed subscribe() as an honest "started, status unavailable" state rather than a failed start', async () => {

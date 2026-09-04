@@ -85,6 +85,31 @@ export default function Import() {
 
       setJob({ id: res.job_id, status: 'queued', counts: {} });
 
+      // Reports a terminal job status (done/failed) exactly once: updates the
+      // UI state and shows the completion toast. Shared between the ongoing
+      // realtime subscription and the one-shot reconciliation fetch below, so
+      // a job that finishes between "subscribe() resolves" and "the socket is
+      // actually listening" is still reported instead of leaving the UI stuck
+      // on "Importing…" forever. `reported` guards against both paths seeing
+      // the same terminal update and double-toasting.
+      let reported = false;
+      const handleTerminal = (rec: ImportJobRecord) => {
+        setJob(rec);
+        if (rec.status !== 'done' && rec.status !== 'failed') return;
+        if (reported) return;
+        reported = true;
+        void pb.collection('import_jobs').unsubscribe(res.job_id);
+        if (rec.status === 'done') {
+          const totals = Object.values(rec.counts).reduce(
+            (acc, c) => ({ imported: acc.imported + c.imported, skipped: acc.skipped + c.skipped }),
+            { imported: 0, skipped: 0 },
+          );
+          toast(`Imported ${formatInt(totals.imported)}, skipped ${formatInt(totals.skipped)}.`);
+        } else {
+          toast(rec.error || 'Import failed', 'err');
+        }
+      };
+
       // The import has genuinely started server-side at this point (we have
       // a real job_id), so a failure to subscribe (websocket/auth hiccup)
       // must not be reported as an import-start failure — that would be
@@ -92,24 +117,29 @@ export default function Import() {
       // no way for it to ever resolve. Give it its own try/catch.
       try {
         await pb.collection('import_jobs').subscribe<ImportJobRecord>(res.job_id, (e) => {
-          const rec = e.record;
-          setJob(rec);
-          if (rec.status === 'done' || rec.status === 'failed') {
-            void pb.collection('import_jobs').unsubscribe(res.job_id);
-            if (rec.status === 'done') {
-              const totals = Object.values(rec.counts).reduce(
-                (acc, c) => ({ imported: acc.imported + c.imported, skipped: acc.skipped + c.skipped }),
-                { imported: 0, skipped: 0 },
-              );
-              toast(`Imported ${formatInt(totals.imported)}, skipped ${formatInt(totals.skipped)}.`);
-            } else {
-              toast(rec.error || 'Import failed', 'err');
-            }
-          }
+          handleTerminal(e.record);
         });
-      } catch {
+      } catch (ex) {
+        console.error('Failed to subscribe to import job status:', ex);
         setLiveStatusUnavailable(true);
         toast('Import started — live status is unavailable right now, check back later.');
+        return;
+      }
+
+      // The subscription is live at this point, but the job may have already
+      // reached a terminal state server-side before it was fully established
+      // (e.g. a small, fast import) — in which case the realtime `update`
+      // event already fired with nobody listening. Reconcile with one fetch
+      // so that case is still reported instead of leaving the UI stuck. This
+      // is a separate try/catch from the subscribe() above: a working
+      // subscription must not be reported as "unavailable" just because this
+      // one-off reconciliation fetch happened to fail — the subscription
+      // will still catch the update if the job hasn't finished yet.
+      try {
+        const current = await pb.collection('import_jobs').getOne<ImportJobRecord>(res.job_id);
+        handleTerminal(current);
+      } catch (ex) {
+        console.error('Failed to fetch current import job status:', ex);
       }
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Import failed to start', 'err');
