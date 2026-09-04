@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import type { Food } from '../lib/types';
 import { getClient, UnreachableError } from '../lib/pb';
 import { createDiaryEntry } from '../lib/offline';
-import { foodMath } from '../lib/nutrition';
+import { foodMath, perServing } from '../lib/nutrition';
+import { listRecipes } from '../lib/recipes';
 import { normalizeSearch, normalizeBarcode } from '../lib/normalize';
+import type { Recipe } from '../lib/types';
 import { formatInt } from '../lib/format';
 import { Button, Card, Empty, Field, Sheet, Spinner, Stepper, TextInput, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
@@ -15,7 +17,7 @@ import ScanSheet from '../components/ScanSheet';
  * hairline result rows, detail card with nutri cells, gram stepper, live
  * kcal readout and pill meal-slot picker. */
 
-type Stage = 'search' | 'detail';
+type Stage = 'search' | 'detail' | 'recipes' | 'recipeDetail';
 
 /* barcode scan glyph, from the prototype */
 const scanGlyph = (
@@ -57,6 +59,10 @@ export default function AddFood() {
   const [qaF, setQaF] = useState('');
   const [qaAdding, setQaAdding] = useState(false);
   const [qaErr, setQaErr] = useState('');
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [servingsToLog, setServingsToLog] = useState(1);
+  const [loggingRecipe, setLoggingRecipe] = useState(false);
   const debounce = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -215,6 +221,60 @@ export default function AddFood() {
     navigate('/today');
   };
 
+  const openRecipes = async () => {
+    setStage('recipes');
+    if (!endpoint || !userId) return;
+    try {
+      const recs = await listRecipes(getClient(endpoint), userId);
+      setRecipes(recs);
+    } catch (ex) {
+      toast(ex instanceof Error ? ex.message : 'Could not load recipes', 'err');
+      setStage('search');
+    }
+  };
+
+  const openRecipeDetail = (recipe: Recipe) => {
+    setSelectedRecipe(recipe);
+    setServingsToLog(1);
+    setStage('recipeDetail');
+  };
+
+  const logRecipe = async () => {
+    if (!selectedRecipe || !slotId) return;
+    setLoggingRecipe(true);
+    const per = perServing(
+      { kcal: selectedRecipe.total_kcal, protein: selectedRecipe.total_protein, carbs: selectedRecipe.total_carbs, fat: selectedRecipe.total_fat },
+      selectedRecipe.servings,
+    );
+    const result = await createDiaryEntry(
+      endpoint,
+      userId ?? '',
+      {
+        meal_slot: slotId,
+        food: null,
+        name_snapshot: selectedRecipe.name,
+        external_id: selectedRecipe.id,
+        grams: null,
+        kcal: Math.round(per.kcal * servingsToLog),
+        protein: Math.round(per.protein * servingsToLog * 10) / 10,
+        carbs: Math.round(per.carbs * servingsToLog * 10) / 10,
+        fat: Math.round(per.fat * servingsToLog * 10) / 10,
+        logged_at: new Date().toISOString(),
+      },
+      'recipe',
+    );
+    setLoggingRecipe(false);
+    if (result.queued) {
+      toast('Saved offline — will sync when you reconnect');
+    } else if (!result.ok) {
+      toast(result.error ?? 'Could not add entry', 'err');
+      return;
+    } else {
+      toast(`Logged ${selectedRecipe.name}`);
+    }
+    navigate('/today');
+  };
+
   const math = selected
     ? foodMath(
         selected.kcal_per_100g,
@@ -315,6 +375,21 @@ export default function AddFood() {
               <svg viewBox="0 0 24 24" aria-hidden>
                 <path d="M9 6l6 6-6 6" />
               </svg>
+            </span>
+          </button>
+
+          <button
+            className="mt-2.5 flex w-full items-center gap-3 rounded-lg border border-border bg-raised px-4 py-3.5 text-left shadow-card transition hover:border-accent-line active:scale-[.99]"
+            onClick={() => void openRecipes()}
+          >
+            <span className={IC_CHIP}>
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M4 19h16M6 19V11M10 19V7M14 19v-8M18 19V9" />
+              </svg>
+            </span>
+            <span className="flex flex-col gap-0.5">
+              <span className="text-base font-bold text-text">From recipe</span>
+              <span className="text-xs text-text-faint">Log servings from a saved recipe</span>
             </span>
           </button>
 
@@ -432,6 +507,58 @@ export default function AddFood() {
 
             <Button className="mt-4" block onClick={() => void addEntry()} disabled={adding || !slotId}>
               {adding ? 'Adding…' : 'Add to diary'}
+            </Button>
+          </Card>
+        </div>
+      )}
+
+      {stage === 'recipes' && (
+        <div className="px-6 pt-4">
+          <Link to="/recipes" className="mb-3 inline-block text-sm font-semibold text-accent-ink">
+            Manage recipes
+          </Link>
+          {recipes.length === 0 ? (
+            <Empty>No recipes yet.</Empty>
+          ) : (
+            <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised shadow-card">
+              {recipes.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="flex w-full items-center justify-between p-3.5 text-left"
+                  onClick={() => openRecipeDetail(r)}
+                >
+                  <span className="text-base font-semibold">{r.name}</span>
+                  <span className="text-sm text-text-faint">{formatInt(r.total_kcal / r.servings)} kcal/serving</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {stage === 'recipeDetail' && selectedRecipe && (
+        <div className="px-6 pt-4">
+          <Card className="px-[18px] py-4">
+            <div className="text-lg font-bold tracking-[-.01em]">{selectedRecipe.name}</div>
+            <div className="mt-1 text-xs text-text-faint">
+              {formatInt(perServing(
+                { kcal: selectedRecipe.total_kcal, protein: selectedRecipe.total_protein, carbs: selectedRecipe.total_carbs, fat: selectedRecipe.total_fat },
+                selectedRecipe.servings,
+              ).kcal)}{' '}
+              kcal/serving
+            </div>
+
+            <div className="mt-3.5 flex items-center gap-3">
+              <span className="text-sm font-semibold">Servings to log</span>
+              <Stepper value={servingsToLog} onChange={setServingsToLog} step={0.5} min={0.5} inputMode="decimal" aria-label="Servings to log" />
+            </div>
+
+            <div className="mb-1.5 mt-3.5 text-xs font-semibold uppercase tracking-[.05em] text-text-faint">Add to meal</div>
+            {slotControls}
+
+            <Button className="mt-4" block loading={loggingRecipe} onClick={() => void logRecipe()} disabled={!slotId}>
+              Add to diary
             </Button>
           </Card>
         </div>
