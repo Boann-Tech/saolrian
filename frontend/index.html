@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f7a5f" />
     <title>Saolrian</title>
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem('saolrian-theme-mode');
+          if (m === 'light' || m === 'dark') {
+            document.documentElement.setAttribute('data-theme', m);
+          }
+          // if m is 'system' or unset, leave data-theme absent — the
+          // prefers-color-scheme media query in theme.css handles it,
+          // matching AppContext's own resolution logic.
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

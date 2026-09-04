@@ -87,7 +87,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         {pending > 0 && (
           <span
-            className="queue-pill absolute -top-[34px] right-2.5 rounded-full border border-[#fde68a] bg-[#fef3c7] px-2.5 py-0.5 text-xs font-semibold text-[#92400e]"
+            className="absolute -top-[34px] right-2.5 rounded-full border border-warn/30 bg-warn-soft px-2.5 py-0.5 text-xs font-semibold text-warn"
             title={`${pending} entr${pending === 1 ? 'y' : 'ies'} waiting to sync`}
           >
             ⇣{pending} offline
