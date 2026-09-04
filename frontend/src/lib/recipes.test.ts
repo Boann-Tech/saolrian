@@ -65,7 +65,7 @@ function makeFakePb() {
 describe('saveRecipe', () => {
   it('creates a recipe with denormalized totals and its ingredient rows', async () => {
     const { fake, recipes, ingredients } = makeFakePb();
-    const id = await saveRecipe(
+    const { id } = await saveRecipe(
       fake,
       'user-1',
       null,
@@ -90,7 +90,7 @@ describe('saveRecipe', () => {
 
   it('updates an existing recipe row instead of creating a new one', async () => {
     const { fake, recipes } = makeFakePb();
-    const id = await saveRecipe(fake, 'user-1', null, { name: 'Soup', servings: 2 }, [], []);
+    const { id } = await saveRecipe(fake, 'user-1', null, { name: 'Soup', servings: 2 }, [], []);
     await saveRecipe(fake, 'user-1', id, { name: 'Soup v2', servings: 3 }, [], []);
     expect(recipes.size).toBe(1);
     expect(recipes.get(id)).toMatchObject({ name: 'Soup v2', servings: 3 });
@@ -98,7 +98,7 @@ describe('saveRecipe', () => {
 
   it('deletes ingredient rows that were removed from the draft', async () => {
     const { fake, ingredients } = makeFakePb();
-    const id = await saveRecipe(
+    const { id } = await saveRecipe(
       fake,
       'user-1',
       null,
@@ -110,12 +110,53 @@ describe('saveRecipe', () => {
     await saveRecipe(fake, 'user-1', id, { name: 'Soup', servings: 2 }, [], [onlyIngredient.id as string]);
     expect(ingredients.size).toBe(0);
   });
+
+  it('returns the persisted ingredient ids in draft order, so re-saving with them attached does not duplicate rows', async () => {
+    // Regression test for the bug where saveRecipe reported no ingredient
+    // ids back to the caller: RecipeEditor would keep a fresh draft
+    // ingredient id-less in memory after a first save, and re-save it as a
+    // second, duplicate row. Here we simulate what the editor now does:
+    // take the ids saveRecipe hands back and feed them into the next call.
+    const { fake, ingredients } = makeFakePb();
+    const { id, ingredientIds } = await saveRecipe(
+      fake,
+      'user-1',
+      null,
+      { name: 'Chili', servings: 4 },
+      [{ food: null, name_snapshot: 'Beans', brand_snapshot: null, grams: 200, kcal: 220, protein: 14, carbs: 40, fat: 1, sort_order: 0 }],
+      [],
+    );
+    expect(ingredientIds).toHaveLength(1);
+    expect(ingredients.size).toBe(1);
+
+    // Simulate the editor writing the returned id back onto its draft
+    // (RecipeEditor.save's setIngredients) and saving again, e.g. after a
+    // typo fix — same ingredient, now carrying its persisted id.
+    const secondDraft = [
+      {
+        id: ingredientIds[0],
+        food: null,
+        name_snapshot: 'Beans (fixed typo)',
+        brand_snapshot: null,
+        grams: 200,
+        kcal: 220,
+        protein: 14,
+        carbs: 40,
+        fat: 1,
+        sort_order: 0,
+      },
+    ];
+    await saveRecipe(fake, 'user-1', id, { name: 'Chili', servings: 4 }, secondDraft, ingredientIds);
+
+    expect(ingredients.size).toBe(1);
+    expect([...ingredients.values()][0]).toMatchObject({ name_snapshot: 'Beans (fixed typo)' });
+  });
 });
 
 describe('loadRecipeIngredients', () => {
   it('returns ingredients for a recipe sorted by sort_order', async () => {
     const { fake } = makeFakePb();
-    const id = await saveRecipe(
+    const { id } = await saveRecipe(
       fake,
       'user-1',
       null,
@@ -144,7 +185,7 @@ describe('listRecipes', () => {
 describe('deleteRecipe', () => {
   it('deletes the recipe row (ingredient cleanup is server-side CascadeDelete)', async () => {
     const { fake, recipes } = makeFakePb();
-    const id = await saveRecipe(fake, 'user-1', null, { name: 'X', servings: 1 }, [], []);
+    const { id } = await saveRecipe(fake, 'user-1', null, { name: 'X', servings: 1 }, [], []);
     await deleteRecipe(fake, id);
     expect(recipes.has(id)).toBe(false);
   });

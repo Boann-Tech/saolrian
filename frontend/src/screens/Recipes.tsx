@@ -5,13 +5,14 @@ import { getClient } from '../lib/pb';
 import { listRecipes } from '../lib/recipes';
 import type { Recipe } from '../lib/types';
 import { formatInt } from '../lib/format';
-import { Button, Empty, Spinner } from '../components/ui';
+import { Button, Empty, Spinner, useToast } from '../components/ui';
 
 /** Recipes list — reached from Profile's "Recipes" link and AddFood's
  * "From recipe" stage. */
 export default function Recipes() {
   const { endpoint, userId } = useApp();
   const navigate = useNavigate();
+  const toast = useToast();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -22,6 +23,8 @@ export default function Recipes() {
       try {
         const recs = await listRecipes(getClient(endpoint), userId);
         if (!cancelled) setRecipes(recs);
+      } catch (ex) {
+        if (!cancelled) toast(ex instanceof Error ? ex.message : 'Could not load recipes', 'err');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -29,6 +32,7 @@ export default function Recipes() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint, userId]);
 
   return (

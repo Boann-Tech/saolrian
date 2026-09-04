@@ -64,8 +64,14 @@ describe('AddFood — From recipe', () => {
     await user.click(await screen.findByRole('button', { name: /from recipe/i }));
     await user.click(await screen.findByText('Chili'));
 
-    // per-serving: 800/4=200 kcal, 60/4=15p, 80/4=20c, 20/4=5f
-    expect(await screen.findByText(/200/)).toBeInTheDocument();
+    // per-serving macro card: 800/4=200 kcal, 60/4=15p, 80/4=20c, 20/4=5f.
+    // "200" appears twice (the macro card's kcal cell and the "for 1
+    // serving · 200 kcal per serving" caption), so assert on the
+    // unambiguous protein/carbs/fat cells and just count the kcal ones.
+    expect(await screen.findByText('15g')).toBeInTheDocument();
+    expect(screen.getByText('20g')).toBeInTheDocument();
+    expect(screen.getByText('5g')).toBeInTheDocument();
+    expect(screen.getAllByText('200').length).toBeGreaterThan(0);
 
     // servings-to-log stepper defaults to 1; one click (step 0.5) makes it 1.5
     await user.click(screen.getByRole('button', { name: 'increase' }));

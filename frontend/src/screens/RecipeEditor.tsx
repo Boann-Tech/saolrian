@@ -199,14 +199,22 @@ export default function RecipeEditor() {
     setSaving(true);
     try {
       const pb = getClient(endpoint);
-      const id = await saveRecipe(
+      const savedIngredients = ingredients.map(({ uid: _uid, ...rest }) => rest);
+      const { id, ingredientIds } = await saveRecipe(
         pb,
         userId,
         isNew ? null : (routeId as string),
         { name: name.trim(), servings },
-        ingredients.map(({ uid: _uid, ...rest }) => rest),
+        savedIngredients,
         originalIds,
       );
+      // Write the persisted ids back onto the in-memory draft *before*
+      // navigating: in edit mode navigate() targets the route we're already
+      // on, so the load effect won't re-run to pick these up on its own —
+      // without this, a second Save would re-create every id-less
+      // ingredient from this save as a duplicate row.
+      setIngredients((prev) => prev.map((ing, idx) => ({ ...ing, id: ingredientIds[idx] })));
+      setOriginalIds(ingredientIds);
       toast(`Saved "${name.trim()}"`);
       navigate(`/recipes/${id}`);
     } catch (ex) {

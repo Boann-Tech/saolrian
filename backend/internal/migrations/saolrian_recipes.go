@@ -67,7 +67,11 @@ func init() {
 			&core.TextField{Name: "name_snapshot", Required: true},
 			&core.TextField{Name: "brand_snapshot"},
 			&core.NumberField{Name: "grams"},
-			&core.NumberField{Name: "kcal", Required: true},
+			// NB: not Required — a legitimate ingredient (salt, water, a
+			// zero-calorie sweetener) can be 0 kcal, and PocketBase treats a
+			// required number field as "must be non-zero" (same reasoning as
+			// sort_order below).
+			&core.NumberField{Name: "kcal"},
 			&core.NumberField{Name: "protein"},
 			&core.NumberField{Name: "carbs"},
 			&core.NumberField{Name: "fat"},

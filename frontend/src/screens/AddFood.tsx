@@ -60,6 +60,7 @@ export default function AddFood() {
   const [qaAdding, setQaAdding] = useState(false);
   const [qaErr, setQaErr] = useState('');
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [servingsToLog, setServingsToLog] = useState(1);
   const [loggingRecipe, setLoggingRecipe] = useState(false);
@@ -224,12 +225,15 @@ export default function AddFood() {
   const openRecipes = async () => {
     setStage('recipes');
     if (!endpoint || !userId) return;
+    setLoadingRecipes(true);
     try {
       const recs = await listRecipes(getClient(endpoint), userId);
       setRecipes(recs);
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Could not load recipes', 'err');
       setStage('search');
+    } finally {
+      setLoadingRecipes(false);
     }
   };
 
@@ -239,13 +243,28 @@ export default function AddFood() {
     setStage('recipeDetail');
   };
 
+  // Per-serving macros for the selected recipe, and the actual totals about
+  // to be logged (per-serving x servingsToLog) — hoisted so the recipeDetail
+  // macro card and logRecipe share one source of truth instead of each
+  // recomputing (and rounding) independently.
+  const recipePerServing = selectedRecipe
+    ? perServing(
+        { kcal: selectedRecipe.total_kcal, protein: selectedRecipe.total_protein, carbs: selectedRecipe.total_carbs, fat: selectedRecipe.total_fat },
+        selectedRecipe.servings,
+      )
+    : null;
+  const recipeLogMath = recipePerServing
+    ? {
+        kcal: Math.round(recipePerServing.kcal * servingsToLog),
+        protein: Math.round(recipePerServing.protein * servingsToLog * 10) / 10,
+        carbs: Math.round(recipePerServing.carbs * servingsToLog * 10) / 10,
+        fat: Math.round(recipePerServing.fat * servingsToLog * 10) / 10,
+      }
+    : null;
+
   const logRecipe = async () => {
-    if (!selectedRecipe || !slotId) return;
+    if (!selectedRecipe || !slotId || !recipeLogMath) return;
     setLoggingRecipe(true);
-    const per = perServing(
-      { kcal: selectedRecipe.total_kcal, protein: selectedRecipe.total_protein, carbs: selectedRecipe.total_carbs, fat: selectedRecipe.total_fat },
-      selectedRecipe.servings,
-    );
     const result = await createDiaryEntry(
       endpoint,
       userId ?? '',
@@ -255,10 +274,10 @@ export default function AddFood() {
         name_snapshot: selectedRecipe.name,
         external_id: selectedRecipe.id,
         grams: null,
-        kcal: Math.round(per.kcal * servingsToLog),
-        protein: Math.round(per.protein * servingsToLog * 10) / 10,
-        carbs: Math.round(per.carbs * servingsToLog * 10) / 10,
-        fat: Math.round(per.fat * servingsToLog * 10) / 10,
+        kcal: recipeLogMath.kcal,
+        protein: recipeLogMath.protein,
+        carbs: recipeLogMath.carbs,
+        fat: recipeLogMath.fat,
         logged_at: new Date().toISOString(),
       },
       'recipe',
@@ -517,7 +536,11 @@ export default function AddFood() {
           <Link to="/recipes" className="mb-3 inline-block text-sm font-semibold text-accent-ink">
             Manage recipes
           </Link>
-          {recipes.length === 0 ? (
+          {loadingRecipes ? (
+            <div className="flex items-center gap-2 text-sm text-text-faint">
+              <Spinner /> Loading…
+            </div>
+          ) : recipes.length === 0 ? (
             <Empty>No recipes yet.</Empty>
           ) : (
             <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised shadow-card">
@@ -537,16 +560,34 @@ export default function AddFood() {
         </div>
       )}
 
-      {stage === 'recipeDetail' && selectedRecipe && (
+      {stage === 'recipeDetail' && selectedRecipe && recipeLogMath && recipePerServing && (
         <div className="px-6 pt-4">
           <Card className="px-[18px] py-4">
             <div className="text-lg font-bold tracking-[-.01em]">{selectedRecipe.name}</div>
-            <div className="mt-1 text-xs text-text-faint">
-              {formatInt(perServing(
-                { kcal: selectedRecipe.total_kcal, protein: selectedRecipe.total_protein, carbs: selectedRecipe.total_carbs, fat: selectedRecipe.total_fat },
-                selectedRecipe.servings,
-              ).kcal)}{' '}
-              kcal/serving
+
+            <div className="mt-3.5 flex gap-2.5">
+              <div className={cn(NCELL, 'border-accent-line bg-accent-soft')}>
+                <div className="whitespace-nowrap text-lg font-bold tracking-[-.01em] text-accent-ink">
+                  {formatInt(recipeLogMath.kcal)}
+                </div>
+                <div className={NLABEL}>kcal</div>
+              </div>
+              {(
+                [
+                  ['Protein', `${recipeLogMath.protein}g`],
+                  ['Carbs', `${recipeLogMath.carbs}g`],
+                  ['Fat', `${recipeLogMath.fat}g`],
+                ] as const
+              ).map(([label, val]) => (
+                <div key={label} className={cn(NCELL, 'border-border bg-surface')}>
+                  <div className="whitespace-nowrap text-lg font-bold tracking-[-.01em]">{val}</div>
+                  <div className={NLABEL}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-2 text-2xs text-text-faint">
+              for {servingsToLog} serving{servingsToLog === 1 ? '' : 's'} · {formatInt(recipePerServing.kcal)} kcal per serving
             </div>
 
             <div className="mt-3.5 flex items-center gap-3">

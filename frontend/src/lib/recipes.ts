@@ -45,7 +45,7 @@ export async function saveRecipe(
   fields: { name: string; servings: number },
   ingredients: IngredientDraft[],
   originalIds: string[],
-): Promise<string> {
+): Promise<{ id: string; ingredientIds: string[] }> {
   const totals = sumIngredients(ingredients);
   const recipePayload = {
     ...fields,
@@ -70,6 +70,9 @@ export async function saveRecipe(
     }
   }
 
+  // Collected in the same order as `ingredients` so callers can zip the
+  // result back onto their draft array positionally (see RecipeEditor.save).
+  const ingredientIds: string[] = [];
   for (const ing of ingredients) {
     const payload = {
       user: userId,
@@ -86,12 +89,14 @@ export async function saveRecipe(
     };
     if (ing.id) {
       await pb.collection('recipe_ingredients').update(ing.id, payload);
+      ingredientIds.push(ing.id);
     } else {
-      await pb.collection('recipe_ingredients').create(payload);
+      const rec = await pb.collection('recipe_ingredients').create(payload);
+      ingredientIds.push(rec.id as string);
     }
   }
 
-  return id;
+  return { id, ingredientIds };
 }
 
 export async function deleteRecipe(pb: PocketBase, recipeId: string): Promise<void> {

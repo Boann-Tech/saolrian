@@ -35,7 +35,7 @@ vi.mock('../../lib/pb', async (importOriginal) => {
   };
 });
 
-const saveRecipeMock = vi.fn().mockResolvedValue('recipe-1');
+const saveRecipeMock = vi.fn().mockResolvedValue({ id: 'recipe-1', ingredientIds: [] });
 vi.mock('../../lib/recipes', () => ({
   saveRecipe: (...args: unknown[]) => saveRecipeMock(...args),
   loadRecipeIngredients: vi.fn().mockResolvedValue([]),
