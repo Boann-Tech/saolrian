@@ -46,6 +46,33 @@ func newTestAppWithUser(t *testing.T) (*tests.TestApp, *core.Record) {
 	return app, user
 }
 
+// newTestUser creates an additional user (with profile) in an already-set-up
+// test app, for tests exercising per-user isolation.
+func newTestUser(t *testing.T, app *tests.TestApp, email string) *core.Record {
+	t.Helper()
+	usersCol, err := app.FindCollectionByNameOrId("users")
+	if err != nil {
+		t.Fatalf("users collection missing: %v", err)
+	}
+	user := core.NewRecord(usersCol)
+	user.SetEmail(email)
+	user.SetPassword("test-password-123")
+	if err := app.Save(user); err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	profilesCol, err := app.FindCollectionByNameOrId("profiles")
+	if err != nil {
+		t.Fatalf("profiles collection missing: %v", err)
+	}
+	profile := core.NewRecord(profilesCol)
+	profile.Set("user", user.Id)
+	if err := app.Save(profile); err != nil {
+		t.Fatalf("failed to create test profile: %v", err)
+	}
+	return user
+}
+
 func waitForJobStatus(t *testing.T, app core.App, jobID string, want string) *core.Record {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -174,6 +201,53 @@ func TestImportFoodCatalogRows_GramsAndServings(t *testing.T) {
 	again := importFoodCatalogRows(app, user.Id, rows)
 	if again.Skipped != 2 {
 		t.Fatalf("re-import: got %+v, want 2 skipped", again)
+	}
+}
+
+// TestImportFoodCatalogRows_DedupIsPerUser guards against a regression where
+// the dedup check (and its backing unique index) was scoped only by
+// source+source_id, globally across all users. On a multi-user instance two
+// different users' LoseIt exports could share a UniqueId (e.g. a shared or
+// cloned LoseIt account), and the second user's import would silently skip
+// a row it had never actually imported.
+func TestImportFoodCatalogRows_DedupIsPerUser(t *testing.T) {
+	app, user1 := newTestAppWithUser(t)
+	user2 := newTestUser(t, app, "import-test-2@example.com")
+
+	rows := []foodRow{
+		{Name: "Black Bean Sauce", UniqueID: "shared-uid", Brand: "WAI MAI", Quantity: 500, Measure: "Grams", Kcal: 300, ProteinG: 10, CarbsG: 40, FatG: 5},
+	}
+
+	result1 := importFoodCatalogRows(app, user1.Id, rows)
+	if result1.Imported != 1 || result1.Skipped != 0 {
+		t.Fatalf("user1 import: got %+v, want 1 imported, 0 skipped", result1)
+	}
+
+	result2 := importFoodCatalogRows(app, user2.Id, rows)
+	if result2.Imported != 1 || result2.Skipped != 0 {
+		t.Fatalf("user2 import: got %+v, want 1 imported, 0 skipped (dedup must be per-user)", result2)
+	}
+
+	food1, err := app.FindFirstRecordByFilter("foods", "user = {:uid} && source_id = {:sid}",
+		map[string]any{"uid": user1.Id, "sid": "shared-uid"})
+	if err != nil {
+		t.Fatalf("user1's food not found: %v", err)
+	}
+	food2, err := app.FindFirstRecordByFilter("foods", "user = {:uid} && source_id = {:sid}",
+		map[string]any{"uid": user2.Id, "sid": "shared-uid"})
+	if err != nil {
+		t.Fatalf("user2's food not found: %v", err)
+	}
+	if food1.Id == food2.Id {
+		t.Fatalf("expected two distinct food records, got the same one: %s", food1.Id)
+	}
+
+	// each user re-importing their own row is still deduped
+	if again := importFoodCatalogRows(app, user1.Id, rows); again.Skipped != 1 {
+		t.Fatalf("user1 re-import: got %+v, want 1 skipped", again)
+	}
+	if again := importFoodCatalogRows(app, user2.Id, rows); again.Skipped != 1 {
+		t.Fatalf("user2 re-import: got %+v, want 1 skipped", again)
 	}
 }
 

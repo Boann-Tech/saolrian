@@ -519,8 +519,8 @@ func importFoodCatalogRows(app core.App, uid string, rows []foodRow) categoryCou
 			continue
 		}
 
-		if recordExistsByField(app, "foods", "source = {:source} && source_id = {:sid}",
-			map[string]any{"source": "loseit", "sid": row.UniqueID}) {
+		if recordExistsByField(app, "foods", "user = {:uid} && source = {:source} && source_id = {:sid}",
+			map[string]any{"uid": uid, "source": "loseit", "sid": row.UniqueID}) {
 			c.Skipped++
 			continue
 		}

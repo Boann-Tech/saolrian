@@ -112,7 +112,7 @@ func init() {
 		if err != nil {
 			return err
 		}
-		foods.AddIndex("idx_foods_source_sourceId_loseit", true, "source, source_id",
+		foods.AddIndex("idx_foods_source_sourceId_loseit", true, "user, source, source_id",
 			"source = 'loseit' AND source_id != ''")
 		return app.Save(foods)
 	}, func(app core.App) error {
