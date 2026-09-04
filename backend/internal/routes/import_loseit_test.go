@@ -123,6 +123,47 @@ func TestImportExerciseRows_SkipsNegativeMinutesAllowsZero(t *testing.T) {
 	}
 }
 
+func TestImportFoodCatalogRows_GramsAndServings(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+
+	rows := []foodRow{
+		// gram-measured (typical custom-foods.csv row)
+		{Name: "Black Bean Sauce", UniqueID: "abc123", Brand: "WAI MAI", Quantity: 500, Measure: "Grams", Kcal: 300, ProteinG: 10, CarbsG: 40, FatG: 5},
+		// serving-measured (typical recipes.csv row: totals for N servings)
+		{Name: "Chicken Satay", UniqueID: "def456", Quantity: 6, Measure: "Serving", Kcal: 900, ProteinG: 240, CarbsG: 60, FatG: 120},
+	}
+
+	result := importFoodCatalogRows(app, user.Id, rows)
+	if result.Imported != 2 || result.Skipped != 0 {
+		t.Fatalf("got %+v, want 2 imported, 0 skipped", result)
+	}
+
+	gram, err := app.FindFirstRecordByFilter("foods", "source_id = {:sid}", map[string]any{"sid": "abc123"})
+	if err != nil {
+		t.Fatalf("gram-measured food not found: %v", err)
+	}
+	if got, want := gram.GetFloat("kcal_per_100g"), 60.0; got != want {
+		t.Errorf("kcal_per_100g = %v, want %v", got, want)
+	}
+
+	serving, err := app.FindFirstRecordByFilter("foods", "source_id = {:sid}", map[string]any{"sid": "def456"})
+	if err != nil {
+		t.Fatalf("serving-measured food not found: %v", err)
+	}
+	if got, want := serving.GetFloat("kcal_per_100g"), 150.0; got != want {
+		t.Errorf("kcal_per_100g = %v, want %v (900/6 kcal per serving)", got, want)
+	}
+	if got, want := serving.GetFloat("default_serving_g"), 100.0; got != want {
+		t.Errorf("default_serving_g = %v, want %v", got, want)
+	}
+
+	// re-import is a no-op (same UniqueId)
+	again := importFoodCatalogRows(app, user.Id, rows)
+	if again.Skipped != 2 {
+		t.Fatalf("re-import: got %+v, want 2 skipped", again)
+	}
+}
+
 func TestLoseItImportHandler_CreatesJobAndProcessesAsync(t *testing.T) {
 	app, user := newTestAppWithUser(t)
 

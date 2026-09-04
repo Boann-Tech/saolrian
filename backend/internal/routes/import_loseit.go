@@ -53,6 +53,8 @@ type loseItRequest struct {
 		Diary    []diaryRow    `json:"diary"`
 		Weight   []weightRow   `json:"weight"`
 		Exercise []exerciseRow `json:"exercise"`
+		Foods    []foodRow     `json:"foods"`
+		Recipes  []foodRow     `json:"recipes"`
 	} `json:"categories"`
 }
 
@@ -102,6 +104,12 @@ func requestedCategories(req loseItRequest) []string {
 	if len(req.Categories.Exercise) > 0 {
 		names = append(names, "exercise")
 	}
+	if len(req.Categories.Foods) > 0 {
+		names = append(names, "foods")
+	}
+	if len(req.Categories.Recipes) > 0 {
+		names = append(names, "recipes")
+	}
 	return names
 }
 
@@ -137,6 +145,12 @@ func runImportJob(app core.App, jobID, uid string, req loseItRequest) {
 	}
 	if len(req.Categories.Exercise) > 0 {
 		counts["exercise"] = importExerciseRows(app, uid, req.Categories.Exercise)
+	}
+	if len(req.Categories.Foods) > 0 {
+		counts["foods"] = importFoodCatalogRows(app, uid, req.Categories.Foods)
+	}
+	if len(req.Categories.Recipes) > 0 {
+		counts["recipes"] = importFoodCatalogRows(app, uid, req.Categories.Recipes)
 	}
 
 	finishJob(app, jobID, uid, counts)
@@ -423,6 +437,90 @@ func importExerciseRows(app core.App, uid string, rows []exerciseRow) categoryCo
 		rec.Set("logged_at", loggedAt.UTC().Format("2006-01-02 15:04:05.000Z"))
 		rec.Set("source", "import")
 		rec.Set("external_id", eid)
+		if err := app.Save(rec); err != nil {
+			c.Skipped++
+			continue
+		}
+		c.Imported++
+	}
+	return c
+}
+
+// ---------------------------------------------------------------------
+// foods / recipes
+// ---------------------------------------------------------------------
+
+// foodRow is one row from either custom-foods.csv (gram-measured, has a
+// Brand) or recipes.csv (serving-measured, no Brand) — both land in the
+// foods catalog.
+type foodRow struct {
+	Name     string  `json:"name"`
+	UniqueID string  `json:"unique_id"`
+	Brand    string  `json:"brand"`
+	Quantity float64 `json:"quantity"`
+	Measure  string  `json:"measure"`
+	Kcal     float64 `json:"kcal"`
+	ProteinG float64 `json:"protein_g"`
+	CarbsG   float64 `json:"carbs_g"`
+	FatG     float64 `json:"fat_g"`
+}
+
+// importFoodCatalogRows normalizes gram-measured rows to kcal-per-100g
+// directly, and serving-measured rows (all recipes, and any non-gram
+// custom food) to "1 serving = 100g" — matching this app's existing
+// default-serving convention (backend/internal/routes/food.go:283-284) so
+// logging "1 serving" of an imported recipe reproduces its per-serving
+// macros exactly.
+func importFoodCatalogRows(app core.App, uid string, rows []foodRow) categoryCount {
+	var c categoryCount
+	col, err := app.FindCollectionByNameOrId("foods")
+	if err != nil {
+		c.Skipped += len(rows)
+		return c
+	}
+	for _, row := range rows {
+		if row.Name == "" || row.UniqueID == "" || row.Quantity <= 0 {
+			c.Skipped++
+			continue
+		}
+
+		if recordExistsByField(app, "foods", "source = {:source} && source_id = {:sid}",
+			map[string]any{"source": "loseit", "sid": row.UniqueID}) {
+			c.Skipped++
+			continue
+		}
+
+		var kcalPer100g, proteinPer100g, carbsPer100g, fatPer100g, defaultServingG float64
+		if strings.EqualFold(strings.TrimSpace(row.Measure), "grams") {
+			scale := 100.0 / row.Quantity
+			kcalPer100g = row.Kcal * scale
+			proteinPer100g = row.ProteinG * scale
+			carbsPer100g = row.CarbsG * scale
+			fatPer100g = row.FatG * scale
+		} else {
+			kcalPer100g = row.Kcal / row.Quantity
+			proteinPer100g = row.ProteinG / row.Quantity
+			carbsPer100g = row.CarbsG / row.Quantity
+			fatPer100g = row.FatG / row.Quantity
+			defaultServingG = 100
+		}
+
+		rec := core.NewRecord(col)
+		rec.Set("user", uid)
+		rec.Set("name", row.Name)
+		if row.Brand != "" {
+			rec.Set("brand", row.Brand)
+		}
+		rec.Set("kcal_per_100g", kcalPer100g)
+		rec.Set("protein_per_100g", proteinPer100g)
+		rec.Set("carbs_per_100g", carbsPer100g)
+		rec.Set("fat_per_100g", fatPer100g)
+		if defaultServingG > 0 {
+			rec.Set("default_serving_g", defaultServingG)
+		}
+		rec.Set("source", "loseit")
+		rec.Set("source_id", row.UniqueID)
+
 		if err := app.Save(rec); err != nil {
 			c.Skipped++
 			continue
