@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
-import { getClient, saolrianSend } from '../lib/pb';
+import { getClient, saolrianSend, UnreachableError } from '../lib/pb';
 import { saveRecipe, type IngredientDraft } from '../lib/recipes';
 import { sumIngredients, perServing, foodMath } from '../lib/nutrition';
 import { normalizeSearch } from '../lib/normalize';
@@ -10,9 +10,8 @@ import { formatInt } from '../lib/format';
 import { Button, Card, Empty, Field, Sheet, Spinner, Stepper, TextInput, useToast } from '../components/ui';
 
 /** Create/edit a recipe: name, servings, an ingredient list, and live
- * total/per-serving totals. Ingredient sourcing (search vs. quick add) and
- * edit-mode loading are layered on in later commits — this file is the
- * create-only, quick-add-only scaffold. */
+ * total/per-serving totals. Ingredient sourcing (search or quick add) is
+ * present; edit-mode loading is layered on in later commits. */
 
 type DraftIngredient = IngredientDraft & { uid: string };
 
@@ -44,6 +43,7 @@ export default function RecipeEditor() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Food[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchErr, setSearchErr] = useState('');
   const [selectedFood, setSelectedFood] = useState<Food | null>(null);
   const [grams, setGrams] = useState(100);
   const debounce = useRef<number | undefined>(undefined);
@@ -54,6 +54,7 @@ export default function RecipeEditor() {
     const q = query.trim();
     if (q.length < 2) {
       setResults([]);
+      setSearchErr('');
       return;
     }
     setSearching(true);
@@ -66,6 +67,15 @@ export default function RecipeEditor() {
           `/api/saolrian/food/search?q=${encodeURIComponent(q)}`,
         );
         setResults(normalizeSearch(raw));
+        setSearchErr('');
+      } catch (ex) {
+        setSearchErr(
+          ex instanceof UnreachableError
+            ? 'Server unreachable — check your connection.'
+            : ex instanceof Error
+              ? ex.message
+              : 'Search failed',
+        );
       } finally {
         setSearching(false);
       }
@@ -86,6 +96,7 @@ export default function RecipeEditor() {
     setQaF('');
     setQuery('');
     setResults([]);
+    setSearchErr('');
     setSelectedFood(null);
     setGrams(100);
   };
@@ -259,11 +270,16 @@ export default function RecipeEditor() {
                   <Spinner /> Searching…
                 </div>
               )}
-              {!searching && query.trim().length >= 2 && results.length === 0 && <Empty>No foods match "{query.trim()}".</Empty>}
+              {searchErr && (
+                <div className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+                  {searchErr}
+                </div>
+              )}
+              {!searching && query.trim().length >= 2 && results.length === 0 && !searchErr && <Empty>No foods match "{query.trim()}".</Empty>}
               {results.length > 0 && (
                 <ul className="divide-y divide-border">
                   {results.map((f, i) => (
-                    <li key={`${f.name}-${i}`}>
+                    <li key={`${f.name}-${f.brand ?? ''}-${i}`}>
                       <button
                         type="button"
                         className="flex w-full items-center justify-between py-2.5 text-left"
