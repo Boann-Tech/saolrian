@@ -9,9 +9,9 @@ import type { Food } from '../lib/types';
 import { formatInt } from '../lib/format';
 import { Button, Card, Empty, Field, Sheet, Spinner, Stepper, TextInput, useToast } from '../components/ui';
 
-/** Create/edit a recipe: name, servings, an ingredient list, and live
- * total/per-serving totals. Ingredient sourcing (search or quick add) is
- * present; edit-mode loading is layered on in later commits. */
+/** Create/edit a recipe: name, servings, and an ingredient list with live
+ * totals. Create mode allows quick-add or food-search sourcing. Edit mode
+ * loads existing recipes and their ingredients; a Delete button removes them. */
 
 type DraftIngredient = IngredientDraft & { uid: string };
 
@@ -33,6 +33,7 @@ export default function RecipeEditor() {
   const [originalIds, setOriginalIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addStage, setAddStage] = useState<'menu' | 'quick' | 'search' | 'searchDetail'>('menu');
@@ -53,31 +54,36 @@ export default function RecipeEditor() {
     if (isNew || !endpoint || !routeId) return;
     let cancelled = false;
     (async () => {
-      const pb = getClient(endpoint);
-      const [recipe, rows] = await Promise.all([
-        pb.collection('recipes').getOne(routeId),
-        loadRecipeIngredients(pb, routeId),
-      ]);
-      if (cancelled) return;
-      setName(recipe.name as string);
-      setServings(recipe.servings as number);
-      setIngredients(
-        rows.map((r) => ({
-          uid: nextUid(),
-          id: r.id,
-          food: r.food,
-          name_snapshot: r.name_snapshot,
-          brand_snapshot: r.brand_snapshot ?? null,
-          grams: r.grams,
-          kcal: r.kcal,
-          protein: r.protein,
-          carbs: r.carbs,
-          fat: r.fat,
-          sort_order: r.sort_order,
-        })),
-      );
-      setOriginalIds(rows.map((r) => r.id));
-      setLoading(false);
+      try {
+        const pb = getClient(endpoint);
+        const [recipe, rows] = await Promise.all([
+          pb.collection('recipes').getOne(routeId),
+          loadRecipeIngredients(pb, routeId),
+        ]);
+        if (cancelled) return;
+        setName(recipe.name as string);
+        setServings(recipe.servings as number);
+        setIngredients(
+          rows.map((r) => ({
+            uid: nextUid(),
+            id: r.id,
+            food: r.food,
+            name_snapshot: r.name_snapshot,
+            brand_snapshot: r.brand_snapshot ?? null,
+            grams: r.grams,
+            kcal: r.kcal,
+            protein: r.protein,
+            carbs: r.carbs,
+            fat: r.fat,
+            sort_order: r.sort_order,
+          })),
+        );
+        setOriginalIds(rows.map((r) => r.id));
+      } catch (ex) {
+        if (!cancelled) toast(ex instanceof Error ? ex.message : 'Could not load recipe', 'err');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -212,9 +218,16 @@ export default function RecipeEditor() {
 
   const remove = async () => {
     if (!endpoint || isNew || !routeId) return;
-    await deleteRecipe(getClient(endpoint), routeId);
-    toast('Recipe deleted');
-    navigate('/recipes');
+    setDeleting(true);
+    try {
+      await deleteRecipe(getClient(endpoint), routeId);
+      toast('Recipe deleted');
+      navigate('/recipes');
+    } catch (ex) {
+      toast(ex instanceof Error ? ex.message : 'Could not delete recipe', 'err');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -293,7 +306,7 @@ export default function RecipeEditor() {
             Save recipe
           </Button>
           {!isNew && (
-            <Button variant="danger" block onClick={() => void remove()}>
+            <Button variant="danger" block loading={deleting} onClick={() => void remove()}>
               Delete recipe
             </Button>
           )}
