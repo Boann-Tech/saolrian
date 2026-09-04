@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import type { ActivityLevel, Goal, Profile, Sex, TdeeFormula } from '../lib/types';
 import { getClient } from '../lib/pb';
 import {
   ACTIVITY_FACTORS,
+  ACTIVITY_LEVEL_HINT,
   DEFAULT_MACROS,
   FORMULA_LABEL,
   computeBmr,
@@ -74,7 +75,16 @@ export default function ProfileGoals() {
   });
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // Re-seed the form only when the *record* changes (initial load, sign-in as
+  // someone else) — not on every reference change, since background partial
+  // saves elsewhere on this screen (goal/macro toggles, theme) call
+  // refreshProfile() and would otherwise clobber whatever the user is
+  // mid-typing (e.g. weight, formula) with a blind resync.
+  const syncedProfileId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
+    const id = profile?.id ?? null;
+    if (syncedProfileId.current === id) return;
+    syncedProfileId.current = id;
     setForm(fromProfile(profile));
     if (profile?.goal) setGoal(profile.goal);
   }, [profile]);
@@ -132,6 +142,7 @@ export default function ProfileGoals() {
         });
       }
       await refreshProfile();
+      if (weight != null) setForm((f) => ({ ...f, weight_kg: '' }));
       toast('Profile saved');
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Could not save profile', 'err');
@@ -278,7 +289,10 @@ export default function ProfileGoals() {
                 <option value="other">Other</option>
               </Select>
             </Field>
-            <Field label="Activity level">
+            <Field
+              label="Activity level"
+              hint={form.activity_level ? ACTIVITY_LEVEL_HINT[form.activity_level] : 'Pick the option closest to your typical week'}
+            >
               <Select
                 value={form.activity_level}
                 onChange={(e) => setForm({ ...form, activity_level: e.target.value as ActivityLevel })}

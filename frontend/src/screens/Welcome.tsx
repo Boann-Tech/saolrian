@@ -5,6 +5,7 @@ import type { ActivityLevel, Goal, Sex, TdeeFormula } from '../lib/types';
 import { getClient } from '../lib/pb';
 import {
   ACTIVITY_FACTORS,
+  ACTIVITY_LEVEL_HINT,
   FORMULA_LABEL,
   computeCalorieTarget,
   computeTdee,
@@ -171,7 +172,7 @@ export default function Welcome() {
                 { value: 'gain', label: 'Gain' },
               ]}
             />
-            <Field label="Activity level">
+            <Field label="Activity level" hint={ACTIVITY_LEVEL_HINT[activity]}>
               <Select value={activity} onChange={(e) => setActivity(e.target.value as ActivityLevel)}>
                 <option value="sedentary">Sedentary</option>
                 <option value="light">Light</option>

@@ -17,6 +17,17 @@ export const ACTIVITY_FACTORS: Record<ActivityLevel, number> = {
   extreme: 1.9,
 };
 
+/** Plain-English anchors so people can pick a level without guessing —
+ * framed as a rough weekly pattern (steps/workouts + intensity) rather than
+ * the activity-factor jargon shown alongside it. */
+export const ACTIVITY_LEVEL_HINT: Record<ActivityLevel, string> = {
+  sedentary: 'Desk-based day, little deliberate exercise — under ~5,000 steps/day, no regular workouts',
+  light: 'A short walk most days plus 1–3 easy workouts/week — roughly 5,000–7,500 steps/day',
+  moderate: 'On your feet often or ~3–5 workouts/week — roughly 7,500–10,000 steps/day',
+  very: 'Daily training or a physically active job — 10,000+ steps/day, 6–7 hard sessions/week',
+  extreme: 'Very hard daily training or manual labour — e.g. twice-daily sessions or an athlete’s schedule',
+};
+
 export const GOAL_ADJUSTMENT: Record<Goal, number> = {
   lose: -500,
   maintain: 0,

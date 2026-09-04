@@ -27,6 +27,11 @@
 
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
 
+  /* Rendered height of .tabbar's own content+padding box, excluding the
+     safe-area inset (which .tabbar adds on top via its own padding). Used
+     to reserve matching space at the bottom of scrollable screen content
+     so it doesn't scroll underneath the fixed bar. */
+  --tabbar-h: 68px;
   --z-tabbar: 15;
   --z-sheet-scrim: 28;
   --z-sheet: 30;

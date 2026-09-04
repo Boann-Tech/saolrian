@@ -74,7 +74,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-[640px] flex-col bg-bg">
       {/* fade+slide wrapper keyed on route — prototype view transitions */}
-      <main className="view-wrap flex-1 [&>*]:min-h-full" key={location.pathname}>
+      <main
+        className={cn(
+          'view-wrap flex-1 [&>*]:min-h-full',
+          // Reserve space matching the fixed tabbar so screen content
+          // (e.g. a final Save button) can't scroll underneath it.
+          !noTabs && '[&>*]:!pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))]',
+        )}
+        key={location.pathname}
+      >
         {children}
       </main>
       <nav

@@ -23,6 +23,7 @@ export default function Today() {
   const [addingSlot, setAddingSlot] = useState(false);
   const [waterMl, setWaterMl] = useState<number>(0);
   const [steps, setSteps] = useState<number>(0);
+  const [savingMetric, setSavingMetric] = useState(false);
 
   const load = useCallback(async () => {
     if (!endpoint) return;
@@ -89,25 +90,33 @@ export default function Today() {
   };
 
   const upsertMetric = async (patchObj: { water_ml?: number; steps?: number }) => {
+    if (savingMetric) return;
+    setSavingMetric(true);
     const pb = getClient(endpoint);
-    const uid = pb.authStore.record?.id;
-    if (!uid) return;
-    const list = await pb.collection('daily_metrics').getFullList({
-      filter: `user="${uid}" && date~"${todayISO()}"`,
-    });
-    const next = {
-      user: uid,
-      date: new Date().toISOString(),
-      source: 'manual',
-      ...(list[0] ? {} : { water_ml: waterMl, steps }),
-      ...patchObj,
-    };
-    if (list[0]) {
-      await pb.collection('daily_metrics').update(list[0].id, patchObj);
-    } else {
-      await pb.collection('daily_metrics').create(next);
+    try {
+      const uid = pb.authStore.record?.id;
+      if (!uid) return;
+      const list = await pb.collection('daily_metrics').getFullList({
+        filter: `user="${uid}" && date~"${todayISO()}"`,
+      });
+      const next = {
+        user: uid,
+        date: todayISO(),
+        source: 'manual',
+        ...(list[0] ? {} : { water_ml: waterMl, steps }),
+        ...patchObj,
+      };
+      if (list[0]) {
+        await pb.collection('daily_metrics').update(list[0].id, patchObj);
+      } else {
+        await pb.collection('daily_metrics').create(next);
+      }
+      await loadMetrics(pb);
+    } catch (ex) {
+      toast(ex instanceof Error ? ex.message : 'Could not update metric', 'err');
+    } finally {
+      setSavingMetric(false);
     }
-    await loadMetrics(pb);
   };
 
   const destroyEntry = async (entryId: string) => {
@@ -277,10 +286,20 @@ export default function Today() {
               </div>
               <ProgressBar pct={(waterMl / 2000) * 100} tone="good" />
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => void upsertMetric({ water_ml: waterMl + 250 })}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={savingMetric}
+                  onClick={() => void upsertMetric({ water_ml: waterMl + 250 })}
+                >
                   +250 ml
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => void upsertMetric({ water_ml: waterMl + 500 })}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={savingMetric}
+                  onClick={() => void upsertMetric({ water_ml: waterMl + 500 })}
+                >
                   +500 ml
                 </Button>
               </div>
@@ -299,10 +318,20 @@ export default function Today() {
               </div>
               <ProgressBar pct={(steps / 10000) * 100} tone="good" />
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => void upsertMetric({ steps: steps + 1000 })}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={savingMetric}
+                  onClick={() => void upsertMetric({ steps: steps + 1000 })}
+                >
                   +1,000
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => void upsertMetric({ steps: steps + 5000 })}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={savingMetric}
+                  onClick={() => void upsertMetric({ steps: steps + 5000 })}
+                >
                   +5,000
                 </Button>
               </div>
