@@ -5,6 +5,8 @@ import {
   computeCalorieTarget,
   macroSplit,
   foodMath,
+  sumIngredients,
+  perServing,
   ACTIVITY_FACTORS,
 } from './nutrition';
 import { parseLoseItCsv } from './loseit';
@@ -140,5 +142,29 @@ describe('diary export', () => {
 
   it('builds a dated filename', () => {
     expect(buildExportFilename('2026-09-03')).toBe('saolrian-diary-2026-09-03.csv');
+  });
+});
+
+describe('recipe math', () => {
+  it('sums ingredient macros', () => {
+    expect(
+      sumIngredients([
+        { kcal: 150, protein: 5, carbs: 27, fat: 3 },
+        { kcal: 330, protein: 62, carbs: 0, fat: 7 },
+      ]),
+    ).toEqual({ kcal: 480, protein: 67, carbs: 27, fat: 10 });
+  });
+
+  it('returns zero totals for no ingredients', () => {
+    expect(sumIngredients([])).toEqual({ kcal: 0, protein: 0, carbs: 0, fat: 0 });
+  });
+
+  it('divides totals across servings with foodMath-style rounding', () => {
+    expect(perServing({ kcal: 480, protein: 67, carbs: 27, fat: 10 }, 4)).toEqual({
+      kcal: 120,
+      protein: 16.8,
+      carbs: 6.8,
+      fat: 2.5,
+    });
   });
 });

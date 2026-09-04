@@ -90,3 +90,27 @@ export interface WeightRecord {
   measured_at: string;
   source?: string;
 }
+
+export interface Recipe {
+  id: string;
+  name: string;
+  servings: number;
+  total_kcal: number;
+  total_protein: number;
+  total_carbs: number;
+  total_fat: number;
+}
+
+export interface RecipeIngredient {
+  id: string;
+  recipe: string;
+  food: string | null;
+  name_snapshot: string;
+  brand_snapshot?: string | null;
+  grams: number;
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  sort_order: number;
+}

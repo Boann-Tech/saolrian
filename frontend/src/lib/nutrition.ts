@@ -96,4 +96,32 @@ export function foodMath(kcalPer100g: number, protein: number, carbs: number, fa
   };
 }
 
+export interface Macros {
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export function sumIngredients(items: Macros[]): Macros {
+  return items.reduce<Macros>(
+    (acc, i) => ({
+      kcal: acc.kcal + i.kcal,
+      protein: acc.protein + i.protein,
+      carbs: acc.carbs + i.carbs,
+      fat: acc.fat + i.fat,
+    }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+}
+
+export function perServing(totals: Macros, servings: number): Macros {
+  return {
+    kcal: Math.round(totals.kcal / servings),
+    protein: Math.round((totals.protein / servings) * 10) / 10,
+    carbs: Math.round((totals.carbs / servings) * 10) / 10,
+    fat: Math.round((totals.fat / servings) * 10) / 10,
+  };
+}
+
 export const DEFAULT_MACROS = { protein_pct: 30, carbs_pct: 45, fat_pct: 25 };
