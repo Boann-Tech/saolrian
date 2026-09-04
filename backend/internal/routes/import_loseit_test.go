@@ -30,6 +30,19 @@ func newTestAppWithUser(t *testing.T) (*tests.TestApp, *core.Record) {
 	if err := app.Save(user); err != nil {
 		t.Fatalf("failed to create test user: %v", err)
 	}
+
+	// Production always has a profile row for every user, created by the
+	// users after-create hook (internal/bootstrap), which isn't wired up
+	// in this test app — so seed a minimal one here to match that invariant.
+	profilesCol, err := app.FindCollectionByNameOrId("profiles")
+	if err != nil {
+		t.Fatalf("profiles collection missing: %v", err)
+	}
+	profile := core.NewRecord(profilesCol)
+	profile.Set("user", user.Id)
+	if err := app.Save(profile); err != nil {
+		t.Fatalf("failed to create test profile: %v", err)
+	}
 	return app, user
 }
 
@@ -161,6 +174,53 @@ func TestImportFoodCatalogRows_GramsAndServings(t *testing.T) {
 	again := importFoodCatalogRows(app, user.Id, rows)
 	if again.Skipped != 2 {
 		t.Fatalf("re-import: got %+v, want 2 skipped", again)
+	}
+}
+
+func TestImportDailyMetricRows_UpsertsByDate(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+
+	rows := []dailyValueRow{{Date: "2026-04-04", Value: 8416}}
+	result := importDailyMetricRows(app, user.Id, "steps", rows)
+	if result.Imported != 1 {
+		t.Fatalf("got %+v, want 1 imported", result)
+	}
+
+	// importing body_fat for the same date updates the same row rather
+	// than creating a second one
+	importDailyMetricRows(app, user.Id, "body_fat_pct", []dailyValueRow{{Date: "2026-04-04", Value: 22.5}})
+
+	rec, err := app.FindFirstRecordByFilter("daily_metrics", "user = {:uid} && date = {:d}",
+		map[string]any{"uid": user.Id, "d": "2026-04-04 00:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("expected a daily_metrics row: %v", err)
+	}
+	if got := rec.GetFloat("steps"); got != 8416 {
+		t.Errorf("steps = %v, want 8416", got)
+	}
+	if got := rec.GetFloat("body_fat_pct"); got != 22.5 {
+		t.Errorf("body_fat_pct = %v, want 22.5", got)
+	}
+}
+
+func TestImportProfileSnapshot_AppliesOnlyProvidedFields(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+
+	snap := &profileSnapshot{HeightCM: 178, Sex: "male", Goal: "maintain", ActivityLevel: "moderate"}
+	result := importProfileSnapshot(app, user.Id, snap)
+	if result.Imported != 1 {
+		t.Fatalf("got %+v, want 1 imported", result)
+	}
+
+	profile, err := app.FindFirstRecordByFilter("profiles", "user = {:uid}", map[string]any{"uid": user.Id})
+	if err != nil {
+		t.Fatalf("profile not found: %v", err)
+	}
+	if got := profile.GetFloat("height_cm"); got != 178 {
+		t.Errorf("height_cm = %v, want 178", got)
+	}
+	if got := profile.GetString("sex"); got != "male" {
+		t.Errorf("sex = %v, want male", got)
 	}
 }
 

@@ -50,11 +50,16 @@ type exerciseRow struct {
 
 type loseItRequest struct {
 	Categories struct {
-		Diary    []diaryRow    `json:"diary"`
-		Weight   []weightRow   `json:"weight"`
-		Exercise []exerciseRow `json:"exercise"`
-		Foods    []foodRow     `json:"foods"`
-		Recipes  []foodRow     `json:"recipes"`
+		Diary    []diaryRow       `json:"diary"`
+		Weight   []weightRow      `json:"weight"`
+		Exercise []exerciseRow    `json:"exercise"`
+		Foods    []foodRow        `json:"foods"`
+		Recipes  []foodRow        `json:"recipes"`
+		Steps    []dailyValueRow  `json:"steps"`
+		Water    []dailyValueRow  `json:"water"`
+		BodyFat  []dailyValueRow  `json:"body_fat"`
+		Sleep    []dailyValueRow  `json:"sleep"`
+		Profile  *profileSnapshot `json:"profile"`
 	} `json:"categories"`
 }
 
@@ -110,6 +115,21 @@ func requestedCategories(req loseItRequest) []string {
 	if len(req.Categories.Recipes) > 0 {
 		names = append(names, "recipes")
 	}
+	if len(req.Categories.Steps) > 0 {
+		names = append(names, "steps")
+	}
+	if len(req.Categories.Water) > 0 {
+		names = append(names, "water")
+	}
+	if len(req.Categories.BodyFat) > 0 {
+		names = append(names, "body_fat")
+	}
+	if len(req.Categories.Sleep) > 0 {
+		names = append(names, "sleep")
+	}
+	if req.Categories.Profile != nil {
+		names = append(names, "profile")
+	}
 	return names
 }
 
@@ -151,6 +171,21 @@ func runImportJob(app core.App, jobID, uid string, req loseItRequest) {
 	}
 	if len(req.Categories.Recipes) > 0 {
 		counts["recipes"] = importFoodCatalogRows(app, uid, req.Categories.Recipes)
+	}
+	if len(req.Categories.Steps) > 0 {
+		counts["steps"] = importDailyMetricRows(app, uid, "steps", req.Categories.Steps)
+	}
+	if len(req.Categories.Water) > 0 {
+		counts["water"] = importDailyMetricRows(app, uid, "water_ml", req.Categories.Water)
+	}
+	if len(req.Categories.BodyFat) > 0 {
+		counts["body_fat"] = importDailyMetricRows(app, uid, "body_fat_pct", req.Categories.BodyFat)
+	}
+	if len(req.Categories.Sleep) > 0 {
+		counts["sleep"] = importDailyMetricRows(app, uid, "sleep_hours", req.Categories.Sleep)
+	}
+	if req.Categories.Profile != nil {
+		counts["profile"] = importProfileSnapshot(app, uid, req.Categories.Profile)
 	}
 
 	finishJob(app, jobID, uid, counts)
@@ -528,4 +563,106 @@ func importFoodCatalogRows(app core.App, uid string, rows []foodRow) categoryCou
 		c.Imported++
 	}
 	return c
+}
+
+// ---------------------------------------------------------------------
+// daily metrics (steps / water / body fat / sleep)
+// ---------------------------------------------------------------------
+
+// dailyValueRow is one row from any of steps.csv, water-intake.csv,
+// body-fat.csv or sleep-hours.csv — all share a Date+Value shape and land
+// as a single field on the same per-user-per-day daily_metrics row.
+type dailyValueRow struct {
+	Date  string  `json:"date"`
+	Value float64 `json:"value"`
+}
+
+// importDailyMetricRows upserts by (user, date): re-importing simply
+// overwrites that day's value for the given field, which is the natural
+// idempotent behavior for a per-day metric (last import wins).
+func importDailyMetricRows(app core.App, uid, field string, rows []dailyValueRow) categoryCount {
+	var c categoryCount
+	col, err := app.FindCollectionByNameOrId("daily_metrics")
+	if err != nil {
+		c.Skipped += len(rows)
+		return c
+	}
+	for _, row := range rows {
+		if row.Date == "" {
+			c.Skipped++
+			continue
+		}
+		d, err := time.Parse("2006-01-02", row.Date)
+		if err != nil {
+			c.Skipped++
+			continue
+		}
+		dateStr := d.UTC().Format("2006-01-02 15:04:05.000Z")
+
+		rec, err := app.FindFirstRecordByFilter(
+			"daily_metrics", "user = {:uid} && date = {:d}",
+			map[string]any{"uid": uid, "d": dateStr},
+		)
+		if err != nil || rec == nil {
+			rec = core.NewRecord(col)
+			rec.Set("user", uid)
+			rec.Set("date", dateStr)
+		}
+		rec.Set(field, row.Value)
+		if rec.GetString("source") == "" {
+			rec.Set("source", "loseit")
+		}
+		if err := app.Save(rec); err != nil {
+			c.Skipped++
+			continue
+		}
+		c.Imported++
+	}
+	return c
+}
+
+// ---------------------------------------------------------------------
+// profile snapshot
+// ---------------------------------------------------------------------
+
+// profileSnapshot is profile.csv's key/value pairs, already normalized by
+// the frontend parser to this app's enum values (sex/goal/activity_level)
+// — the backend just applies whichever fields are non-empty/non-zero,
+// since it's a one-time overwrite of current settings, not a log.
+type profileSnapshot struct {
+	BirthYear     float64 `json:"birth_year"`
+	Sex           string  `json:"sex"`
+	HeightCM      float64 `json:"height_cm"`
+	CalorieTarget float64 `json:"calorie_target"`
+	Goal          string  `json:"goal"`
+	ActivityLevel string  `json:"activity_level"`
+}
+
+func importProfileSnapshot(app core.App, uid string, snap *profileSnapshot) categoryCount {
+	profile, err := app.FindFirstRecordByFilter("profiles", "user = {:uid}", map[string]any{"uid": uid})
+	if err != nil {
+		return categoryCount{Skipped: 1}
+	}
+	if snap.BirthYear > 0 {
+		profile.Set("birth_year", snap.BirthYear)
+	}
+	if snap.Sex != "" {
+		profile.Set("sex", snap.Sex)
+	}
+	if snap.HeightCM > 0 {
+		profile.Set("height_cm", snap.HeightCM)
+	}
+	if snap.CalorieTarget > 0 {
+		profile.Set("calorie_target", snap.CalorieTarget)
+	}
+	if snap.Goal != "" {
+		profile.Set("goal", snap.Goal)
+	}
+	if snap.ActivityLevel != "" {
+		profile.Set("activity_level", snap.ActivityLevel)
+	}
+	if err := app.Save(profile); err != nil {
+		return categoryCount{Skipped: 1}
+	}
+	return categoryCount{Imported: 1}
 }
