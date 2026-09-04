@@ -156,6 +156,13 @@ func usdaCheckMapping(m *Mapping, nutrients map[string]usdaNutrient) error {
 		if !present {
 			return fmt.Errorf("%w: nutrient_nbr %s", ErrMappingNotInSource, code)
 		}
+		factor, _ := m.FactorFor(code)
+		if factor != 1 {
+			// The mapping deliberately converts units; the factor itself
+			// is the human-audited assertion, so the source's unit_name
+			// need not match the canonical unit.
+			continue
+		}
 		if want := usdaUnitFor(unit); want != "" && n.unit != want {
 			return fmt.Errorf("usda nutrient_nbr %s: source unit %q but canonical unit is %q; check the factor in mapping/usda.csv",
 				code, n.unit, unit)
@@ -164,8 +171,7 @@ func usdaCheckMapping(m *Mapping, nutrients map[string]usdaNutrient) error {
 	return nil
 }
 
-// usdaUnitFor is the FDC spelling of a canonical unit, or "" when the
-// mapping deliberately converts between units (factor != 1).
+// usdaUnitFor is the FDC spelling of a canonical unit.
 func usdaUnitFor(u food.Unit) string {
 	switch u {
 	case food.UnitKcal:

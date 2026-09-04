@@ -113,3 +113,13 @@ func (m *Mapping) UnitFor(code string) (food.Unit, bool) {
 	}
 	return n.Unit, true
 }
+
+// FactorFor returns the conversion factor a mapped code applies. ok is
+// false for ignored and unmapped codes.
+func (m *Mapping) FactorFor(code string) (float64, bool) {
+	e, ok := m.byCode[code]
+	if !ok {
+		return 0, false
+	}
+	return e.factor, true
+}

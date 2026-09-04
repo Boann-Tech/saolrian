@@ -224,3 +224,54 @@ func TestLoadUSDARejectsUnitMismatch(t *testing.T) {
 		t.Fatalf("error = %v, want message to mention the unit problem", err)
 	}
 }
+
+// TestLoadUSDAAllowsDeliberateUnitConversion proves the flip side of
+// TestLoadUSDARejectsUnitMismatch: when a mapping's factor is not 1, it is
+// deliberately converting units (Task 4's documented case: "999,calcium,
+// 0.001,source reports ug; canonical is mg"), so the unit guard must stand
+// down instead of rejecting the mismatch, and the converted value must
+// come through correctly.
+func TestLoadUSDAAllowsDeliberateUnitConversion(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	// Add a nutrient row for a synthetic code that reports calcium in
+	// micrograms (canonical unit is mg), and a food_nutrient row supplying
+	// an amount for it on the banana (1105314). The rest of the full
+	// fixture is untouched.
+	nutrientPath := filepath.Join(dir, "nutrient.csv")
+	rows := readCSVRows(t, nutrientPath)
+	rows = append(rows, []string{"9099", "Calcium, Ca (test)", "UG", "999", "9999"})
+	writeCSVRows(t, nutrientPath, rows)
+
+	foodNutrientPath := filepath.Join(dir, "food_nutrient.csv")
+	fnRows := readCSVRows(t, foodNutrientPath)
+	fnRows = append(fnRows, []string{"8", "1105314", "9099", "5000.0"}) // 5000 ug
+	writeCSVRows(t, foodNutrientPath, fnRows)
+
+	// A minimal, in-memory mapping (not the checked-in mapping/usda.csv,
+	// which stays factor-1 throughout) documenting exactly Task 4's
+	// converting case.
+	m, err := LoadMapping(strings.NewReader(
+		"source_code,canonical_key,factor,note\n" +
+			"999,calcium,0.001,source reports ug; canonical is mg\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+
+	foods, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
+	if err != nil {
+		t.Fatalf("LoadUSDA: %v, want success (factor != 1 must stand down the unit guard)", err)
+	}
+	for _, f := range foods {
+		if f.SourceID != "1105314" {
+			continue
+		}
+		p := food.Decode(f.Nutrients)
+		if !float32Eq(p["calcium"], 5) { // 5000 ug * 0.001 = 5 mg
+			t.Errorf("calcium = %v, want 5 (converted from 5000 ug via factor 0.001)", p["calcium"])
+		}
+		return
+	}
+	t.Fatal("banana not found in output")
+}
