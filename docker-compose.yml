@@ -5,7 +5,8 @@ services:
       dockerfile: backend/Dockerfile
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
       - pb_data:/app/pb_data
     expose:

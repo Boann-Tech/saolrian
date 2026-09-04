@@ -63,6 +63,7 @@ func NotifyUser(app core.App, uid, title, body string) {
 		resp, err := webpush.SendNotification(msg, sub, &webpush.Options{
 			VAPIDPublicKey:  PublicKey(),
 			VAPIDPrivateKey: os.Getenv("VAPID_PRIVATE_KEY"),
+			Subscriber:      os.Getenv("VAPID_SUBJECT"),
 			TTL:             60,
 		})
 		if err != nil {
@@ -74,6 +75,9 @@ func NotifyUser(app core.App, uid, title, body string) {
 
 		if resp.StatusCode == 404 || resp.StatusCode == 410 {
 			_ = app.Delete(s)
+		} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			app.Logger().Error("push notification rejected",
+				slog.String("userId", uid), slog.Int("status", resp.StatusCode))
 		}
 	}
 }
