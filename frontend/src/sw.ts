@@ -29,11 +29,19 @@ registerRoute(
 );
 
 self.addEventListener('push', (event: PushEvent) => {
-  if (!event.data) return;
-  const data = event.data.json() as { title: string; body: string };
+  // Browsers expect every push event to result in a shown notification when
+  // the subscription was created with userVisibleOnly: true, so we always
+  // call showNotification — falling back to a generic message when the
+  // payload is missing or isn't the JSON we expect.
+  let data: { title?: string; body?: string } = {};
+  try {
+    if (event.data) data = event.data.json() as { title: string; body: string };
+  } catch {
+    // Non-JSON payload — fall through to the generic fallback below.
+  }
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
+    self.registration.showNotification(data.title ?? 'Saolrian', {
+      body: data.body ?? 'You have a new notification.',
       icon: '/icons/icon-192.png',
     }),
   );
