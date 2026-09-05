@@ -73,3 +73,37 @@ func TestUnitFor(t *testing.T) {
 		t.Errorf("UnitFor(303) = %q, %v; want mg, true", u, ok)
 	}
 }
+
+// TestLoadMappingRejectsDuplicateCanonicalKey guards the mirror image of
+// the duplicate source_code check. Two codes mapping to one canonical key
+// do not merge: on the data path the second row silently overwrites the
+// first, and CNF and CIQUAL both publish computed-plus-measured variants of
+// the same nutrient, so the mistake is one row away.
+func TestLoadMappingRejectsDuplicateCanonicalKey(t *testing.T) {
+	_, err := LoadMapping(strings.NewReader(
+		"source_code,canonical_key,factor,note\n" +
+			"268,energy_kcal,0.239,energy in kJ\n" +
+			"208,energy_kcal,1,energy in kcal\n"))
+	if err == nil {
+		t.Fatal("expected an error for a duplicate canonical_key")
+	}
+	if !strings.Contains(err.Error(), "energy_kcal") {
+		t.Errorf("error = %v, want it to name the duplicated key", err)
+	}
+}
+
+// TestLoadMappingAllowsRepeatedIgnoreMarker proves the duplicate-key check
+// does not accidentally forbid a second "-" row: "ignored" is not a
+// canonical key and many codes are legitimately dropped.
+func TestLoadMappingAllowsRepeatedIgnoreMarker(t *testing.T) {
+	m, err := LoadMapping(strings.NewReader(
+		"source_code,canonical_key,factor,note\n" +
+			"318,-,1,vitamin A IU\n" +
+			"435,-,1,folate DFE\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	if !m.Known("318") || !m.Known("435") {
+		t.Error("both ignored codes should be known")
+	}
+}

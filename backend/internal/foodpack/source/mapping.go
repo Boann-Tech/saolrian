@@ -44,6 +44,13 @@ func LoadMapping(r io.Reader) (*Mapping, error) {
 
 	m := &Mapping{byCode: map[string]mapped{}, ignored: map[string]bool{}}
 
+	// Which line first claimed each canonical key. Two source codes mapping
+	// to one canonical key is not a merge: the second silently overwrites
+	// the first on the data path, and which one wins depends on row order.
+	// CNF and CIQUAL both publish computed-plus-measured variants of the
+	// same nutrient, so this is a mistake waiting to be made.
+	keyLine := map[string]int{}
+
 	for i, row := range rows[1:] { // skip header
 		line := i + 2
 		if len(row) < 3 {
@@ -66,6 +73,11 @@ func LoadMapping(r io.Reader) (*Mapping, error) {
 		if _, ok := food.Lookup(key); !ok {
 			return nil, fmt.Errorf("line %d: unknown canonical key %q", line, key)
 		}
+		if prev, dup := keyLine[key]; dup {
+			return nil, fmt.Errorf("line %d: canonical key %q is already mapped on line %d; pick one source_code and mark the other \"-\"",
+				line, key, prev)
+		}
+		keyLine[key] = line
 		factor, err := strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
 		if err != nil {
 			return nil, fmt.Errorf("line %d: bad factor: %w", line, err)
