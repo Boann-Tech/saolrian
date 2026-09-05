@@ -477,3 +477,59 @@ describe('WeekdayCard', () => {
     expect(section.querySelectorAll('[data-bar]').length).toBe(7);
   });
 });
+
+describe('MetricCard', () => {
+  it('shows the mean, the 7-day average, and the target for water', async () => {
+    profileRecord.trend_cards = ['water'];
+    // makePayload gives every day water_ml: 1500 against a 2000 ml target,
+    // so both the plain mean and the trailing 7-day average are 1,500.
+    fetchTrendsMock.mockResolvedValue(makePayload(90));
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Water' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Water' }).closest('section')!;
+    expect(within(section).getByText(/1,500 ml on the 90 days you recorded any water/)).toBeTruthy();
+    expect(within(section).getByText(/2,000 ml target/)).toBeTruthy();
+    expect(within(section).getByText(/last 7 days: 1,500 ml/i)).toBeTruthy();
+  });
+
+  // Pinning current behaviour per the reviewed ruling: a genuinely-recorded
+  // 0 and a day the metric was never recorded serialize identically (both
+  // zero-fill the same way), so this card cannot tell them apart and treats
+  // 0 as "not recorded" — excluded from the average and drawing no bar. A
+  // real fix needs a backend per-metric recorded flag, tracked as a known
+  // follow-on rather than fixed here.
+  it('excludes a day recorded at 0 from the average, indistinguishable from unrecorded', async () => {
+    profileRecord.trend_cards = ['water'];
+    const p = makePayload(90);
+    p.days[0].water_ml = 0;
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Water' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Water' }).closest('section')!;
+    // 89, not 90 — the zeroed day drops out of both the count and the mean.
+    expect(within(section).getByText(/1,500 ml on the 89 days you recorded any water/)).toBeTruthy();
+    expect(section.querySelectorAll('[data-bar]').length).toBe(89);
+  });
+});
+
+describe('MealsCard', () => {
+  // The requirement names two distinct degrade triggers: no meal slots at
+  // all, and slots that exist but have nothing logged against them. Only the
+  // first is covered by makePayload's default slots: [] elsewhere in this
+  // file — this test pins the second, which mealRows signals by returning [].
+  it('degrades with the same message when slots exist but nothing is logged', async () => {
+    profileRecord.trend_cards = ['meals'];
+    const p = makePayload(90);
+    p.slots = [{ id: 's1', name: 'Breakfast', sort_order: 0, pct_allocation: 50 }];
+    for (const d of p.days) d.logged = false;
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Meal distribution' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Meal distribution' }).closest('section')!;
+    expect(within(section).getByText(/no meals/i)).toBeTruthy();
+    expect(within(section).queryByRole('img')).toBeNull();
+  });
+});

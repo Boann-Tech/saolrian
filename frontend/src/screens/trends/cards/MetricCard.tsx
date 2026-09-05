@@ -16,6 +16,7 @@ export function MetricCard({ data, metric }: { data: TrendsPayload; metric: 'wat
   });
   const target = metric === 'water' ? data.targets.water_ml : data.targets.steps;
   const unit = metric === 'water' ? 'ml' : 'steps';
+  const noun = metric === 'water' ? 'water' : 'steps';
 
   const present = values.filter((v): v is number => v != null);
   const mean = present.length > 0 ? present.reduce((s, v) => s + v, 0) / present.length : 0;
@@ -30,7 +31,7 @@ export function MetricCard({ data, metric }: { data: TrendsPayload; metric: 'wat
         labels={sparseLabels(data.days.map((d) => d.date))}
       />
       <p className="mt-2 text-sm text-text-muted">
-        Averaging {formatInt(mean)} {unit} on the {present.length} days you recorded any
+        Averaging {formatInt(mean)} {unit} on the {present.length} days you recorded any {noun}
         {target > 0 && (
           <>
             , against a {formatInt(target)} {unit} target
