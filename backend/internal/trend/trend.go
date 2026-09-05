@@ -6,7 +6,10 @@
 // the endpoint stay a thin adapter over it.
 package trend
 
-import "math"
+import (
+	"math"
+	"time"
+)
 
 // EMAAlpha is the smoothing factor for the displayed weight trend line.
 // 0.10 is the long-standing Hacker's Diet value: slow enough to ignore a
@@ -133,4 +136,235 @@ func EMA(days []string, samples []Sample, alpha float64) []EMAPoint {
 	}
 
 	return out
+}
+
+// Gate thresholds. An estimate built on thin data is worse than no estimate,
+// because it looks just as confident.
+const (
+	// WindowDays is the estimation window. Long enough for a real signal to
+	// clear water-weight noise, short enough to track a changing body.
+	// Independent of whatever range the charts happen to be displaying.
+	WindowDays = 28
+
+	// MinLoggedKcal is the floor for a day to count toward mean intake. A day
+	// where someone logged a single apple is not a logged day, and admitting
+	// it drags the mean down and the estimated TDEE with it.
+	MinLoggedKcal = 500
+
+	// MinQualifyingFrac is the share of window days that must qualify.
+	MinQualifyingFrac = 0.80
+
+	// MinWeighIns is the number of weigh-ins needed for a credible slope.
+	MinWeighIns = 8
+
+	// MinSpanDays is the minimum first-to-last weigh-in span. Eight weigh-ins
+	// clustered into four days produce a confident-looking slope fitted to
+	// water-weight noise and then extrapolated across a month.
+	MinSpanDays = 21
+
+	// KcalPerKG is the conventional Wishnofsky figure, matching the goal-rate
+	// arithmetic already in tdee.Budget.
+	KcalPerKG = 7700.0
+)
+
+// Reason explains why an estimate was withheld, as a stable constant the UI
+// turns into specific copy rather than a generic shrug.
+type Reason string
+
+const (
+	ReasonNone          Reason = ""
+	ReasonNoData        Reason = "no_data"
+	ReasonSparseLogging Reason = "sparse_logging"
+	ReasonFewWeighIns   Reason = "few_weigh_ins"
+	ReasonShortSpan     Reason = "short_span"
+)
+
+// Day is one calendar day's intake. Kcal is the day's total; a day with no
+// entries is Kcal 0 and simply fails the qualifying floor.
+type Day struct {
+	Date string
+	Kcal float64
+}
+
+// Estimate is the observed-TDEE result. When Sufficient is false, Reason says
+// why and ObservedTDEE/Margin are zero — but the counts are still populated so
+// the UI can say how far off the user is.
+type Estimate struct {
+	Sufficient     bool
+	Reason         Reason
+	WindowDays     int
+	ObservedTDEE   float64
+	Margin         float64
+	SlopePerWeek   float64
+	MeanIntake     float64
+	QualifyingDays int
+	WeighIns       int
+	SpanDays       int
+}
+
+// tCritical returns the two-tailed 95% critical value for the given degrees of
+// freedom. A flat 1.96 would understate the interval at the sample sizes this
+// actually runs on (8-28 weigh-ins), and the entire point of the interval is
+// to be honest about how little a month of noisy weigh-ins can tell you.
+func tCritical(df int) float64 {
+	table := [...]float64{
+		12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228,
+		2.201, 2.179, 2.160, 2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086,
+		2.080, 2.074, 2.069, 2.064, 2.060, 2.056, 2.052, 2.048, 2.045, 2.042,
+	}
+	if df < 1 {
+		return table[0]
+	}
+	if df > len(table) {
+		return 1.96
+	}
+	return table[df-1]
+}
+
+// Compute derives observed TDEE from energy balance over the window.
+//
+// The caller passes exactly the window's days, in ascending date order, and
+// every weigh-in falling inside it.
+//
+//	mean_intake = mean kcal over qualifying days
+//	observed    = mean_intake - slope_kg_per_day * KcalPerKG
+//
+// Sign check: gaining 0.1 kg/day is a 770 kcal/day surplus, so intake exceeds
+// expenditure by 770 and observed = mean_intake - 770. Correct.
+//
+// Two limitations are deliberately documented rather than modelled:
+//
+// The result is TDEE at the window's *average* weight. Someone losing weight
+// has a falling TDEE and a 28-day window returns its midpoint; at realistic
+// rates that is tens of kcal, well inside the reported margin, and modelling
+// it would mean fitting a moving target for no visible gain.
+//
+// Chronic under-logging biases the estimate low, and that is fine — in fact it
+// is why the technique works. People under-report by 10-20%. The estimate
+// absorbs that bias, which means it is expressed in the user's own logging
+// units, and a budget derived from it is then applied to that same
+// under-reporting. The two errors cancel where it matters. Do not "fix" this.
+//
+// Exercise is likewise NOT added in from exercise_entries: an estimate built
+// from energy balance already includes every calorie the user burned, however
+// they burned it. Adding logged exercise on top double-counts it.
+//
+// WindowDays on the returned Estimate reports the number of days actually
+// handed in (len(days)), not the WindowDays constant — a caller passing a
+// shorter range (e.g. a 7-day chart) gets an estimate that honestly says so,
+// rather than one that claims a 28-day window it never had.
+func Compute(days []Day, samples []Sample) Estimate {
+	est := Estimate{WindowDays: len(days), Reason: ReasonNone}
+
+	if len(days) == 0 {
+		est.Reason = ReasonNoData
+		return est
+	}
+
+	// Mean intake over qualifying days only. Days below the floor are
+	// excluded from both numerator and denominator — never counted as zero.
+	var sum float64
+	qualifying := make([]float64, 0, len(days))
+	for _, d := range days {
+		if d.Kcal >= MinLoggedKcal {
+			sum += d.Kcal
+			qualifying = append(qualifying, d.Kcal)
+		}
+	}
+	est.QualifyingDays = len(qualifying)
+	est.WeighIns = len(samples)
+
+	if len(samples) > 0 {
+		est.SpanDays = daySpan(samples)
+	}
+
+	if float64(est.QualifyingDays) < MinQualifyingFrac*float64(len(days)) {
+		est.Reason = ReasonSparseLogging
+		return est
+	}
+	if est.WeighIns < MinWeighIns {
+		est.Reason = ReasonFewWeighIns
+		return est
+	}
+	if est.SpanDays < MinSpanDays {
+		est.Reason = ReasonShortSpan
+		return est
+	}
+
+	// Weigh-ins onto the window's day axis, indexed from the first day.
+	index := make(map[string]int, len(days))
+	for i, d := range days {
+		index[d.Date] = i
+	}
+	pts := make([]Point, 0, len(samples))
+	for _, s := range samples {
+		if i, ok := index[s.Date]; ok {
+			pts = append(pts, Point{Day: float64(i), KG: s.KG})
+		}
+	}
+
+	fit, ok := OLS(pts)
+	if !ok {
+		est.Reason = ReasonFewWeighIns
+		return est
+	}
+
+	mean := sum / float64(est.QualifyingDays)
+	est.MeanIntake = mean
+	est.SlopePerWeek = fit.Slope * 7
+	est.ObservedTDEE = mean - fit.Slope*KcalPerKG
+
+	// Both terms carry uncertainty and both belong in the interval: the
+	// sampling error of the mean intake, and the regression's slope error
+	// scaled into kcal.
+	//
+	// The two standard errors carry different degrees of freedom, so combining
+	// them under the slope's df is an approximation. Welch-Satterthwaite
+	// machinery would be more correct, for a number displayed rounded to the
+	// nearest 10 kcal.
+	seMean := stdDev(qualifying, mean) / math.Sqrt(float64(est.QualifyingDays))
+	seSlopeKcal := fit.StdErr * KcalPerKG
+	est.Margin = tCritical(fit.N-2) * math.Sqrt(seMean*seMean+seSlopeKcal*seSlopeKcal)
+
+	est.Sufficient = true
+	return est
+}
+
+// stdDev is the sample standard deviation about a known mean.
+func stdDev(xs []float64, mean float64) float64 {
+	if len(xs) < 2 {
+		return 0
+	}
+	var ss float64
+	for _, x := range xs {
+		d := x - mean
+		ss += d * d
+	}
+	return math.Sqrt(ss / float64(len(xs)-1))
+}
+
+// daySpan returns the number of days between the earliest and latest sample.
+// Dates are YYYY-MM-DD and lexicographic order is chronological order, so this
+// needs no time parsing.
+func daySpan(samples []Sample) int {
+	lo, hi := samples[0].Date, samples[0].Date
+	for _, s := range samples[1:] {
+		if s.Date < lo {
+			lo = s.Date
+		}
+		if s.Date > hi {
+			hi = s.Date
+		}
+	}
+	return daysBetween(lo, hi)
+}
+
+// daysBetween returns hi - lo in whole days for two YYYY-MM-DD dates.
+func daysBetween(lo, hi string) int {
+	l, err1 := time.Parse("2006-01-02", lo)
+	h, err2 := time.Parse("2006-01-02", hi)
+	if err1 != nil || err2 != nil {
+		return 0
+	}
+	return int(h.Sub(l).Hours() / 24)
 }
