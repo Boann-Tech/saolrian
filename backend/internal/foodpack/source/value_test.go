@@ -42,7 +42,9 @@ func TestValueSyntaxParse(t *testing.T) {
 		{"less-than becomes the bound", cofidLike, "<0.1", 0.1, true},
 		{"less-than with a space", cofidLike, "< 0.1", 0.1, true},
 		{"decimal comma", ciqualLike, "12,3", 12.3, true},
-		{"grouped thousands", ciqualLike, "1 234,5", 1234.5, true},
+		{"grouped thousands, nbsp", ciqualLike, "1\u00a0234,5", 1234.5, true},
+		{"grouped thousands, narrow nbsp", ciqualLike, "1\u202f234,5", 1234.5, true},
+		{"nbsp padding is trimmed", cofidLike, "\u00a012.3\u00a0", 12.3, true},
 		{"french traces", ciqualLike, "traces", 0, true},
 		{"less-than with decimal comma", ciqualLike, "< 0,1", 0.1, true},
 	}

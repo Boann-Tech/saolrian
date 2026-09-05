@@ -27,9 +27,16 @@ type ValueSyntax struct {
 	DecimalComma bool
 }
 
-// spaceChars are every space a spreadsheet export has been seen to emit:
-// ordinary, non-breaking, and narrow no-break (French thousands grouping).
-const spaceChars = " \t   "
+// spaceChars are every space a spreadsheet or CSV export has been seen to
+// emit: ordinary, tab, non-breaking, narrow no-break (French thousands
+// grouping) and figure space.
+//
+// Written as escape sequences rather than literal bytes on purpose. Typed
+// literally they are indistinguishable from a plain space on screen, and
+// anything that reformats or copies this file can flatten them without a
+// trace -- which silently turns the whole constant into five ordinary
+// spaces and disables the thousands-stripping it exists for.
+const spaceChars = "\u0020\u0009\u00a0\u202f\u2007"
 
 func trimSpaces(s string) string { return strings.Trim(s, spaceChars) }
 
