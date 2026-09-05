@@ -13,6 +13,8 @@ type JobRecord = { id: string; status: string; counts: Record<string, { imported
 let subscribeCb: ((e: { record: JobRecord }) => void) | null = null;
 let subscribeShouldReject = false;
 let getOneResult: JobRecord = { id: 'job-1', status: 'queued', counts: {} };
+let mountJobs: JobRecord[] = [];
+const unsubscribeMock = vi.fn(async (_id: string) => {});
 
 const fakePb = {
   baseUrl: 'http://localhost:8090',
@@ -25,8 +27,9 @@ const fakePb = {
           subscribeCb = cb;
           return async () => {};
         },
-        unsubscribe: async () => {},
+        unsubscribe: unsubscribeMock,
         getOne: async (_id: string) => getOneResult,
+        getList: async (_page: number, _perPage: number, _opts: unknown) => ({ items: mountJobs }),
       };
     }
     if (name === 'meal_slots') return { getFullList: async () => [] };
@@ -41,9 +44,13 @@ const fakePb = {
 };
 
 beforeEach(() => {
+  localStorage.clear();
+  localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   subscribeCb = null;
   subscribeShouldReject = false;
   getOneResult = { id: 'job-1', status: 'queued', counts: {} };
+  mountJobs = [];
+  unsubscribeMock.mockClear();
 });
 
 afterEach(() => {
@@ -138,6 +145,45 @@ describe('Import screen', () => {
     expect(await screen.findByText(/live status could not be loaded/i)).toBeInTheDocument();
     expect(await screen.findByText(/live status is unavailable right now/i)).toBeInTheDocument();
     expect(screen.queryByText(/failed to start/i)).not.toBeInTheDocument();
+  });
+
+  it('rehydrates a still-running job on mount so a reopened/reloaded screen shows its status', async () => {
+    mountJobs = [{ id: 'job-old', status: 'running', counts: {} }];
+
+    renderImport();
+
+    expect(await screen.findByText(/Importing…/)).toBeInTheDocument();
+  });
+
+  it('does not rehydrate a job that already reached a terminal status', async () => {
+    mountJobs = [{ id: 'job-old', status: 'done', counts: { diary: { imported: 1, skipped: 0 } } }];
+
+    renderImport();
+
+    // Give the mount effect a tick to run, then confirm nothing was resurrected.
+    await Promise.resolve();
+    expect(screen.queryByText(/Importing…/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Import complete/)).not.toBeInTheDocument();
+  });
+
+  it('unsubscribes from the realtime channel when the screen unmounts mid-import', async () => {
+    const { unmount } = renderImport();
+    const user = userEvent.setup();
+
+    const input = screen.getByLabelText('Upload Lose It export zip');
+    const file = new File(['zip-bytes'], 'loseit-export.zip', { type: 'application/zip' });
+    await user.upload(input, file);
+
+    expect(await screen.findByText(/Food logs/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Import 1 selected/ }));
+
+    await waitFor(() => expect(subscribeCb).not.toBeNull());
+    expect(await screen.findByText(/Importing…/)).toBeInTheDocument();
+
+    unmount();
+
+    expect(unsubscribeMock).toHaveBeenCalledWith('job-1');
   });
 
   it('shows the per-category import breakdown in the status box once the job is done', async () => {
