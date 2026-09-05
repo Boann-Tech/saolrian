@@ -84,6 +84,27 @@ export interface Summary {
   totals: { kcal: number; protein: number; carbs: number; fat: number };
 }
 
+/** One logged workout — created by the Lose It! import (source "import"). */
+export interface ExerciseEntry {
+  id: string;
+  name: string;
+  minutes: number | null;
+  kcal: number;
+  logged_at: string;
+  source?: string;
+}
+
+/** Per-user, per-day metrics row. Water/steps are edited on Today; sleep and
+ * body fat are currently write-only from the Lose It! import. */
+export interface DailyMetric {
+  id: string;
+  date: string;
+  water_ml: number | null;
+  steps: number | null;
+  sleep_hours: number | null;
+  body_fat_pct: number | null;
+}
+
 export interface WeightRecord {
   id: string;
   kg: number;

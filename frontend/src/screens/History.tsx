@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
-import type { Summary } from '../lib/types';
-import { dateFromOffset, formatInt, prettyDate, todayISO, weekdayLabel } from '../lib/format';
+import type { DailyMetric, ExerciseEntry, Summary } from '../lib/types';
+import { dateFromOffset, formatInt, formatNumber, prettyDate, todayISO, weekdayLabel } from '../lib/format';
 import { getClient } from '../lib/pb';
 import { normalizeSummary } from '../lib/normalize';
 import { MealGroup } from '../components/MealGroup';
@@ -17,10 +17,15 @@ interface DaySummary extends Summary {
   date: string;
 }
 
+/** How many past workouts the "Recent exercise" list shows. */
+const EXERCISE_LIMIT = 10;
+
 export default function History() {
   const { endpoint } = useApp();
   const navigate = useNavigate();
   const [days, setDays] = useState<DaySummary[]>([]);
+  const [metrics, setMetrics] = useState<Record<string, DailyMetric>>({});
+  const [exercise, setExercise] = useState<ExerciseEntry[]>([]);
   const [selected, setSelected] = useState<string>(todayISO());
   const [loading, setLoading] = useState(true);
   const toast = useToast();
@@ -59,6 +64,34 @@ export default function History() {
       }),
     );
     setDays(results);
+
+    // Sleep / body fat live on daily_metrics and exercise on its own
+    // collection — both read straight from PocketBase, no custom route.
+    const uid = pb.authStore.record?.id;
+    if (uid) {
+      try {
+        const rows = await pb.collection('daily_metrics').getFullList({
+          filter: `user="${uid}" && date>="${dates[0]}" && date<="${dates[dates.length - 1]} 23:59:59"`,
+        });
+        setMetrics(
+          Object.fromEntries(
+            rows.map((r) => [String(r['date'] ?? '').slice(0, 10), r as unknown as DailyMetric]),
+          ),
+        );
+      } catch {
+        setMetrics({});
+      }
+      try {
+        const res = await pb.collection('exercise_entries').getList(1, EXERCISE_LIMIT, {
+          filter: `user="${uid}"`,
+          sort: '-logged_at',
+        });
+        setExercise(res.items as unknown as ExerciseEntry[]);
+      } catch {
+        setExercise([]);
+      }
+    }
+
     setLoading(false);
   }, [endpoint]);
 
@@ -68,6 +101,8 @@ export default function History() {
 
   const sel = days.find((d) => d.date === selected);
   const remaining = sel && sel.budget != null ? sel.budget - sel.totals.kcal : null;
+  const selMetric = sel ? metrics[sel.date] : undefined;
+  const oneDp = (n: number) => formatNumber(n, { maximumFractionDigits: 1 });
 
   return (
     <div>
@@ -153,6 +188,34 @@ export default function History() {
                       </div>
                     </div>
                   </div>
+                  <div className="mt-3.5 flex border-t border-border pt-3.5 [&>div+div]:border-l [&>div+div]:border-border [&>div+div]:pl-3.5">
+                    <div className="flex-1">
+                      <div className="text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Sleep</div>
+                      <div className="mt-0.5 text-xl font-bold tracking-[-.01em]">
+                        {selMetric?.sleep_hours == null ? (
+                          '—'
+                        ) : (
+                          <>
+                            {oneDp(selMetric.sleep_hours)}{' '}
+                            <small className="text-sm font-medium text-text-faint">h</small>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Body fat</div>
+                      <div className="mt-0.5 text-xl font-bold tracking-[-.01em]">
+                        {selMetric?.body_fat_pct == null ? (
+                          '—'
+                        ) : (
+                          <>
+                            {oneDp(selMetric.body_fat_pct)}{' '}
+                            <small className="text-sm font-medium text-text-faint">%</small>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </Card>
               </div>
 
@@ -175,7 +238,7 @@ export default function History() {
               </div>
 
               {/* Meals in shared MealGroup groups */}
-              <div className="px-6 pb-6 pt-5">
+              <div className="px-6 pt-5">
                 <div className="mb-3 flex items-baseline justify-between">
                   <h2 className="text-md font-bold tracking-[-.01em]">
                     Meals — <span className="font-semibold text-text-faint">{prettyDate(sel.date)}</span>
@@ -197,6 +260,39 @@ export default function History() {
               </div>
             </>
           )}
+
+          {/* Exercise — not day-scoped: imported workouts often predate this
+              week, so show the most recent ones whenever they happened. */}
+          <div className="px-6 pb-6 pt-5">
+            <div className="mb-3 flex items-baseline justify-between">
+              <h2 className="text-md font-bold tracking-[-.01em]">Recent exercise</h2>
+            </div>
+            {exercise.length === 0 ? (
+              <Empty align="left">No exercise logged yet.</Empty>
+            ) : (
+              <Card padding="none">
+                <ul>
+                  {exercise.map((e) => (
+                    <li
+                      key={e.id}
+                      className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold">{e.name}</div>
+                        <div className="mt-0.5 text-2xs text-text-faint">
+                          {prettyDate(String(e.logged_at).slice(0, 10))}
+                          {e.minutes ? ` · ${formatInt(e.minutes)} min` : ''}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-sm font-bold tracking-[-.01em]">
+                        {formatInt(e.kcal)} <small className="text-2xs font-medium text-text-faint">kcal</small>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </div>
         </>
       )}
     </div>
