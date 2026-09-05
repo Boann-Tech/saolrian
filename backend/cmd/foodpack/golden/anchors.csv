@@ -1,0 +1,20 @@
+anchor,source,name_regex,note
+banana,usda_sr,"(?i)^bananas, raw$",SR Legacy NDB 09040
+banana,cnf,"(?i)^banana, raw$",CNF FoodID 2
+banana,ciqual,"(?i)^banana, pulp, raw$",CIQUAL alim_code 13000
+banana,cofid,"(?i)^bananas,.*raw",CoFID names the flesh-only preparation
+banana,afcd,"(?i)^banana, cavendish, peeled, raw$",AFCD names the cultivar
+milk_whole,usda_foundation,"(?i)^milk, whole, 3\.25% milkfat",Foundation Foods
+milk_whole,cnf,"(?i)^milk, fluid, whole, 3\.25%",CNF
+milk_whole,ciqual,"(?i)^milk, whole, UHT",CIQUAL
+milk_whole,cofid,"(?i)^milk, whole, pasteurised",CoFID
+milk_whole,afcd,"(?i)^milk, cow, fluid, whole",AFCD
+spinach_raw,usda_sr,"(?i)^spinach, raw$",SR Legacy NDB 11457
+spinach_raw,cnf,"(?i)^spinach, raw$",CNF
+spinach_raw,ciqual,"(?i)^spinach, raw$",CIQUAL
+spinach_raw,cofid,"(?i)^spinach, raw$",CoFID
+spinach_raw,afcd,"(?i)^spinach, raw$",AFCD
+chicken_breast_raw,usda_sr,"(?i)^chicken, broilers or fryers, breast, meat only, raw$",SR Legacy
+chicken_breast_raw,cnf,"(?i)^chicken, broiler, breast, meat only, raw$",CNF
+chicken_breast_raw,cofid,"(?i)^chicken, breast, meat only, raw$",CoFID
+chicken_breast_raw,afcd,"(?i)^chicken, breast, lean flesh, raw$",AFCD
