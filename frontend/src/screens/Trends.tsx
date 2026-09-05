@@ -4,6 +4,8 @@ import { getClient } from '../lib/pb';
 import { fetchTrends, resolveCards, ALL_CARDS, type CardId } from '../lib/trends';
 import type { TrendsPayload } from '../lib/types';
 import { Button, Card, CardTitle, Segmented, Sheet, Spinner, useToast } from '../components/ui';
+import { WeightCard } from './trends/cards/WeightCard';
+import { TdeeCard } from './trends/cards/TdeeCard';
 
 type Range = '30' | '90' | '365';
 
@@ -132,7 +134,12 @@ export default function Trends() {
 
 /** Card bodies land here in Tasks 10 and 11. */
 function CardBody({ id, data, onChanged }: { id: CardId; data: TrendsPayload; onChanged: () => void }) {
-  void data;
-  void onChanged;
-  return <p className="text-sm text-text-faint">Coming in the next task: {id}</p>;
+  switch (id) {
+    case 'weight':
+      return <WeightCard data={data} />;
+    case 'tdee':
+      return <TdeeCard data={data} onAccepted={onChanged} />;
+    default:
+      return <p className="text-sm text-text-faint">Coming in the next task: {id}</p>;
+  }
 }

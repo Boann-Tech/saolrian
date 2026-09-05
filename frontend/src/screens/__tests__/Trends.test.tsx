@@ -177,3 +177,97 @@ describe('Trends', () => {
     expect(profileRecord.trend_cards).not.toContain('weight');
   });
 });
+
+function sufficientPayload(): TrendsPayload {
+  const p = makePayload(90);
+  p.estimate = {
+    sufficient: true, reason: '', window_days: 28, observed_tdee: 2512,
+    margin: 180, slope_kg_per_week: -0.42, mean_intake: 2050,
+    qualifying_days: 26, weigh_ins: 14, span_days: 27, suggested_target: 1962,
+  };
+  p.ema = p.days.map((d, i) => ({ date: d.date, kg: 80 - i * 0.01, interpolated: false }));
+  p.weights = p.days.map((d, i) => ({ date: d.date, kg: 80 - i * 0.01 }));
+  return p;
+}
+
+describe('Observed TDEE card', () => {
+  it('shows the estimate with its margin and the formula it beats', async () => {
+    fetchTrendsMock.mockResolvedValue(sufficientPayload());
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByText(/2,512/)).toBeTruthy());
+    expect(screen.getByText(/± ?180/)).toBeTruthy();
+    expect(screen.getByText(/2,200/)).toBeTruthy(); // formula_tdee
+  });
+
+  it('explains why rather than showing a number when data is thin', async () => {
+    const p = makePayload(90);
+    p.estimate.reason = 'few_weigh_ins';
+    p.estimate.weigh_ins = 3;
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByText(/weigh-ins/i)).toBeTruthy());
+    expect(screen.queryByText(/apply/i)).toBeNull();
+  });
+
+  it('writes the suggested target and its provenance when accepted', async () => {
+    fetchTrendsMock.mockResolvedValue(sufficientPayload());
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /apply/i })).toBeTruthy());
+    await userEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    await waitFor(() => expect(profileRecord['calorie_target']).toBe(1962));
+    expect(profileRecord['calorie_target_source']).toBe('observed');
+    expect(profileRecord['calorie_target_set_at']).toBeTruthy();
+  });
+
+  it('says how old an accepted target is once it has drifted', async () => {
+    const p = sufficientPayload();
+    p.target_source = 'observed';
+    // 24 days ago — past the 14-day recheck threshold.
+    const set = new Date(Date.now() - 24 * 86400_000).toISOString();
+    p.target_set_at = set.replace('T', ' ').replace('Z', 'Z');
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByText(/24 days ago/i)).toBeTruthy());
+  });
+
+  it('does not nag about a target set only days ago', async () => {
+    const p = sufficientPayload();
+    p.target_source = 'observed';
+    p.target_set_at = new Date(Date.now() - 2 * 86400_000).toISOString().replace('T', ' ');
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByText('Observed TDEE')).toBeTruthy());
+    expect(screen.queryByText(/days ago/i)).toBeNull();
+  });
+
+  it('reverts to the formula, clearing the target and its provenance', async () => {
+    const p = sufficientPayload();
+    p.target_source = 'observed';
+    p.target_set_at = new Date().toISOString().replace('T', ' ');
+    fetchTrendsMock.mockResolvedValue(p);
+    profileRecord['calorie_target'] = 1962;
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /use the formula/i })).toBeTruthy());
+    await userEvent.click(screen.getByRole('button', { name: /use the formula/i }));
+
+    await waitFor(() => expect(profileRecord['calorie_target']).toBe(null));
+    expect(profileRecord['calorie_target_source']).toBe('');
+    expect(profileRecord['calorie_target_set_at']).toBe(null);
+  });
+
+  it('offers no revert when the target did not come from an estimate', async () => {
+    const p = sufficientPayload(); // target_source: ''
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByText('Observed TDEE')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /use the formula/i })).toBeNull();
+  });
+});
