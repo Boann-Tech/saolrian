@@ -1,0 +1,45 @@
+source_code,canonical_key,factor,note
+"energy with dietary fibre, equated (kj)",energy_kcal,0.239006,AFCD publishes kJ only; 1/4.184
+protein (g),protein,1,Protein
+"fat, total (g)",fat,1,Total fat
+"available carbohydrate, without sugar alcohols (g)",carbohydrate,1,Available carbohydrate
+total dietary fibre (g),fibre,1,Total dietary fibre
+total sugars (g),sugars,1,Total sugars
+starch (g),starch,1,Starch
+"total saturated fatty acids, equated (mg)",fat_saturated,0.001,AFCD reports fatty acids in mg; canonical is g
+"total monounsaturated fatty acids, equated (mg)",fat_monounsaturated,0.001,mg to g
+"total polyunsaturated fatty acids, equated (mg)",fat_polyunsaturated,0.001,mg to g
+"total trans fatty acids, imputed (mg)",fat_trans,0.001,mg to g
+cholesterol (mg),cholesterol,1,Cholesterol
+alcohol (g),alcohol,1,Alcohol
+moisture (water) (g),water,1,Moisture
+ash (g),ash,1,Ash
+sodium (na) (mg),sodium,1,Sodium
+potassium (k) (mg),potassium,1,Potassium
+calcium (ca) (mg),calcium,1,Calcium
+magnesium (mg) (mg),magnesium,1,Magnesium
+phosphorus (p) (mg),phosphorus,1,Phosphorus
+iron (fe) (mg),iron,1,Iron
+zinc (zn) (mg),zinc,1,Zinc
+copper (cu) (mg),copper,1,Copper
+manganese (mn) (mg),manganese,1,Manganese
+selenium (se) (µg),selenium,1,Selenium
+iodine (i) (µg),iodine,1,Iodine
+"vitamin a retinol equivalents (µg)",vitamin_a_rae,1,Vitamin A RE
+retinol (µg),retinol,1,Retinol
+beta-carotene (µg),carotene_beta,1,Beta-carotene
+vitamin d3 equivalents (µg),vitamin_d,1,Vitamin D
+vitamin e (mg),vitamin_e,1,Vitamin E
+vitamin c (mg),vitamin_c,1,Vitamin C
+thiamin (b1) (mg),thiamin,1,Thiamin
+riboflavin (b2) (mg),riboflavin,1,Riboflavin
+niacin (b3) (mg),niacin,1,Niacin
+pyridoxine (b6) (mg),vitamin_b6,1,Vitamin B6
+"total folates (µg)",folate,1,Total folates
+cobalamin (b12) (µg),vitamin_b12,1,Vitamin B12
+pantothenic acid (b5) (mg),pantothenate,1,Pantothenic acid
+biotin (b7) (µg),biotin,1,Biotin
+"energy, without dietary fibre, equated (kj)",-,1,a second energy convention; superseded by the with-fibre figure
+caffeine (mg),-,1,outside the canonical vocabulary
+"niacin derived equivalents (mg)",-,1,superseded by preformed niacin
+"dietary folate equivalents (µg)",-,1,superseded by total folates
