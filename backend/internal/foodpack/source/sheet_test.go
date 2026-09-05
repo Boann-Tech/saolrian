@@ -2,6 +2,7 @@ package source
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -161,5 +162,46 @@ func TestFindWorkbook(t *testing.T) {
 	// An explicit path wins, which is how a caller resolves that.
 	if got, err := findWorkbook(dir, filepath.Join(dir, "other.xlsx")); err != nil || filepath.Base(got) != "other.xlsx" {
 		t.Errorf("explicit path: got %q, err %v", got, err)
+	}
+}
+
+// TestHeaderMappingCheckRejectsUnitDisagreement is the plain case: a
+// mapping row with a factor of 1 is claiming the source and canonical
+// units already agree, so a header that states a different unit is a
+// mapping bug, not a conversion, and must be rejected.
+func TestHeaderMappingCheckRejectsUnitDisagreement(t *testing.T) {
+	m, err := LoadMapping(strings.NewReader(
+		"source_code,canonical_key,factor,note\n" +
+			"sodium (g),sodium,1,wrong unit on purpose\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	headers := map[string]bool{"sodium (g)": true}
+	if err := headerMappingCheck("test", m, headers, "mapping/test.csv"); err == nil {
+		t.Fatal("want an error: header states g, canonical unit is mg, and the factor is 1")
+	}
+}
+
+// TestHeaderMappingCheckAcceptsDeliberateUnitConversion is the load-bearing
+// counterpart to the rejection above, and the one the unit guard has no way
+// to check for itself: when a mapping row's factor is not 1, the row is
+// asserting its own unit conversion, so a header stating a unit that
+// disagrees with the canonical one must be ACCEPTED, not flagged as a
+// mismatch. This is the AFCD energy row for real: the header says kJ, the
+// canonical unit is kcal, and 0.239006 (1/4.184) converts one into the
+// other, so the guard has to stand down here rather than reject it.
+//
+// Read this test's name twice before touching it -- it is proving the
+// guard stays quiet, not that it fires.
+func TestHeaderMappingCheckAcceptsDeliberateUnitConversion(t *testing.T) {
+	m, err := LoadMapping(strings.NewReader(
+		"source_code,canonical_key,factor,note\n" +
+			"\"energy with dietary fibre, equated (kj)\",energy_kcal,0.239006,kJ to kcal\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	headers := map[string]bool{"energy with dietary fibre, equated (kj)": true}
+	if err := headerMappingCheck("afcd", m, headers, "mapping/afcd.csv"); err != nil {
+		t.Fatalf("headerMappingCheck = %v, want nil: a factor that is not 1 is a deliberate conversion and must not trip the unit guard", err)
 	}
 }
