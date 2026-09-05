@@ -1,0 +1,4 @@
+FoodID,FoodCode,FoodGroupID,FoodSourceID,FoodDescription,FoodDescriptionF
+2,2,9,3,"Banana, raw","Banane, crue"
+14,14,1,3,"Milk, fluid, whole, 3.25% M.F.","Lait, fluide, entier, 3,25 % M.G."
+99,99,9,3,"Ghost food, no data","Aliment fantôme"

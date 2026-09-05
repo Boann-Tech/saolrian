@@ -1,0 +1,47 @@
+source_code,canonical_key,factor,note
+208,energy_kcal,1,ENERGY (KILOCALORIES)
+203,protein,1,PROTEIN
+204,fat,1,"FAT, TOTAL (LIPIDS)"
+205,carbohydrate,1,"CARBOHYDRATE, TOTAL (BY DIFFERENCE)"
+291,fibre,1,"FIBRE, TOTAL DIETARY"
+269,sugars,1,"SUGARS, TOTAL"
+209,starch,1,STARCH
+606,fat_saturated,1,"FATTY ACIDS, SATURATED, TOTAL"
+645,fat_monounsaturated,1,"FATTY ACIDS, MONOUNSATURATED, TOTAL"
+646,fat_polyunsaturated,1,"FATTY ACIDS, POLYUNSATURATED, TOTAL"
+605,fat_trans,1,"FATTY ACIDS, TRANS, TOTAL"
+601,cholesterol,1,CHOLESTEROL (mg)
+221,alcohol,1,ALCOHOL
+255,water,1,MOISTURE
+207,ash,1,ASH
+307,sodium,1,SODIUM (mg)
+306,potassium,1,POTASSIUM (mg)
+301,calcium,1,CALCIUM (mg)
+304,magnesium,1,MAGNESIUM (mg)
+305,phosphorus,1,PHOSPHORUS (mg)
+303,iron,1,IRON (mg)
+309,zinc,1,ZINC (mg)
+312,copper,1,COPPER (mg)
+315,manganese,1,MANGANESE (mg)
+317,selenium,1,SELENIUM (ug)
+320,vitamin_a_rae,1,"VITAMIN A, RAE (ug)"
+319,retinol,1,RETINOL (ug)
+321,carotene_beta,1,"BETA CAROTENE (ug)"
+328,vitamin_d,1,VITAMIN D (ug)
+323,vitamin_e,1,"VITAMIN E (ALPHA-TOCOPHEROL) (mg)"
+430,vitamin_k,1,VITAMIN K (ug)
+401,vitamin_c,1,VITAMIN C (mg)
+404,thiamin,1,THIAMIN (mg)
+405,riboflavin,1,RIBOFLAVIN (mg)
+406,niacin,1,"NIACIN (PREFORMED) (mg)"
+415,vitamin_b6,1,VITAMIN B-6 (mg)
+417,folate,1,"FOLATE, TOTAL (ug)"
+418,vitamin_b12,1,VITAMIN B-12 (ug)
+410,pantothenate,1,PANTOTHENIC ACID (mg)
+268,-,1,ENERGY (KILOJOULES); superseded by 208 kcal
+318,-,1,VITAMIN A (IU); superseded by 320 RAE
+324,-,1,VITAMIN D (IU); superseded by 328 ug
+409,-,1,NIACIN EQUIVALENT; superseded by 406 preformed
+435,-,1,"FOLATE, DFE; superseded by 417 total"
+431,-,1,FOLIC ACID; a component of 417
+432,-,1,"FOLATE, FOOD; a component of 417"

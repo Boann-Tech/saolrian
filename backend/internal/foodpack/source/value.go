@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/boanntech/saolrian/backend/internal/food"
 )
 
 // ErrUnknownToken means a cell held something that is neither a number nor
@@ -88,4 +90,32 @@ func (s ValueSyntax) Parse(raw string) (float64, bool, error) {
 		return 0, false, fmt.Errorf("%w: %q", ErrUnknownToken, raw)
 	}
 	return v, true, nil
+}
+
+// unitMatches accepts a dataset's spellings of a canonical unit. µg appears
+// as the micro sign, the Greek mu, "ug" or "mcg" depending on the source,
+// its release and its encoding.
+//
+// Lives alongside ValueSyntax rather than in one adapter's file: CIQUAL and
+// the two spreadsheet adapters need the same table.
+func unitMatches(canonical food.Unit, sourceUnit string) bool {
+	var accept []string
+	switch canonical {
+	case food.UnitKcal:
+		accept = []string{"kcal"}
+	case food.UnitG:
+		accept = []string{"g"}
+	case food.UnitMg:
+		accept = []string{"mg"}
+	case food.UnitUg:
+		accept = []string{"µg", "μg", "ug", "mcg"}
+	default:
+		return true // an unknown canonical unit is not this check's business
+	}
+	for _, a := range accept {
+		if sourceUnit == a {
+			return true
+		}
+	}
+	return false
 }

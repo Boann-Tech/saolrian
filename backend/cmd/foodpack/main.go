@@ -52,6 +52,7 @@ var loaders = map[string]sourceLoader{
 	// own directory and the data_type column inside decides the subtype.
 	"usda_foundation": loadUSDADir,
 	"usda_sr":         loadUSDADir,
+	"cnf":             loadCNFDir,
 }
 
 func loadUSDADir(dir string, sink source.UnmappedSink) ([]format.RefFood, []format.SourceInfo, error) {
@@ -65,6 +66,14 @@ func loadUSDADir(dir string, sink source.UnmappedSink) ([]format.RefFood, []form
 		Mapping:   m,
 		Unmapped:  sink,
 	})
+}
+
+func loadCNFDir(dir string, sink source.UnmappedSink) ([]format.RefFood, []format.SourceInfo, error) {
+	m, err := source.LoadNamedMapping("cnf")
+	if err != nil {
+		return nil, nil, err
+	}
+	return source.LoadCNF(source.CNFOptions{Dir: dir, Mapping: m, Unmapped: sink})
 }
 
 func buildCmd(args []string) error {
