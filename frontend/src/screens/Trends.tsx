@@ -6,6 +6,9 @@ import type { TrendsPayload } from '../lib/types';
 import { Button, Card, CardTitle, Segmented, Sheet, Spinner, useToast } from '../components/ui';
 import { WeightCard } from './trends/cards/WeightCard';
 import { TdeeCard } from './trends/cards/TdeeCard';
+import { IntakeCard } from './trends/cards/IntakeCard';
+import { BalanceCard } from './trends/cards/BalanceCard';
+import { ConsistencyCard } from './trends/cards/ConsistencyCard';
 
 type Range = '30' | '90' | '365';
 
@@ -132,13 +135,19 @@ export default function Trends() {
   );
 }
 
-/** Card bodies land here in Tasks 10 and 11. */
+/** Remaining card bodies (macros, weekday, meals, water, steps) land in a later task. */
 function CardBody({ id, data, onChanged }: { id: CardId; data: TrendsPayload; onChanged: () => void }) {
   switch (id) {
     case 'weight':
       return <WeightCard data={data} />;
     case 'tdee':
       return <TdeeCard data={data} onAccepted={onChanged} />;
+    case 'intake':
+      return <IntakeCard data={data} />;
+    case 'balance':
+      return <BalanceCard data={data} />;
+    case 'consistency':
+      return <ConsistencyCard data={data} />;
     default:
       return <p className="text-sm text-text-faint">Coming in the next task: {id}</p>;
   }

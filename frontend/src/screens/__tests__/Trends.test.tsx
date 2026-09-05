@@ -195,9 +195,14 @@ describe('Observed TDEE card', () => {
     fetchTrendsMock.mockResolvedValue(sufficientPayload());
     renderTrends();
 
-    await waitFor(() => expect(screen.getByText(/2,512/)).toBeTruthy());
-    expect(screen.getByText(/± ?180/)).toBeTruthy();
-    expect(screen.getByText(/2,200/)).toBeTruthy(); // formula_tdee
+    // Scoped to this card's own section: the Energy balance card also cites
+    // the observed TDEE value (2,512) when naming its reference, so an
+    // unscoped query is ambiguous once both cards are present.
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Observed TDEE' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Observed TDEE' }).closest('section')!;
+    expect(within(section).getByText(/2,512/)).toBeTruthy();
+    expect(within(section).getByText(/± ?180/)).toBeTruthy();
+    expect(within(section).getByText(/2,200/)).toBeTruthy(); // formula_tdee
   });
 
   it('explains why rather than showing a number when data is thin', async () => {
@@ -339,5 +344,82 @@ describe('Weight card', () => {
     const section = screen.getByRole('heading', { level: 3, name: 'Weight trend' }).closest('section')!;
     expect(within(section).getByText(/no weigh-ins in this range/i)).toBeTruthy();
     expect(within(section).queryByRole('img')).toBeNull();
+  });
+});
+
+describe('Intake card', () => {
+  it('draws no bar at all for a day with nothing logged', async () => {
+    const p = makePayload(90);
+    p.days[0].logged = false;
+    p.days[0].kcal = 0;
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Intake vs budget' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Intake vs budget' }).closest('section')!;
+    // 89 logged, not 90 — the unlogged day must not be counted as a zero day.
+    expect(within(section).getByText(/89 logged days/)).toBeTruthy();
+    // A zero-height bar would assert the user ate nothing on that day, which
+    // is not what happened — no bar at all must be drawn for it.
+    expect(section.querySelectorAll('[data-bar]').length).toBe(89);
+  });
+});
+
+describe('Energy balance card', () => {
+  it('reconciles predicted against actual weight change', async () => {
+    fetchTrendsMock.mockResolvedValue(sufficientPayload());
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Energy balance' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Energy balance' }).closest('section')!;
+    expect(within(section).getByText(/predicted/i)).toBeTruthy();
+    expect(within(section).getByText(/actual/i)).toBeTruthy();
+    expect(within(section).getByText(/observed/i)).toBeTruthy();
+  });
+
+  it('says which TDEE it is measuring against', async () => {
+    const p = makePayload(90); // insufficient estimate
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Energy balance' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Energy balance' }).closest('section')!;
+    expect(within(section).getByText(/formula/i)).toBeTruthy();
+  });
+
+  it('degrades gracefully when there is no TDEE to measure against', async () => {
+    const p = makePayload(90);
+    p.estimate.reason = 'no_data';
+    p.formula_tdee = null;
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Energy balance' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Energy balance' }).closest('section')!;
+    expect(within(section).getByText(/needs a tdee/i)).toBeTruthy();
+    expect(within(section).queryByRole('img')).toBeNull();
+  });
+});
+
+describe('Consistency card', () => {
+  it('reports how many days were logged', async () => {
+    fetchTrendsMock.mockResolvedValue(makePayload(90));
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Logging consistency' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Logging consistency' }).closest('section')!;
+    expect(within(section).getByText(/90 of 90/)).toBeTruthy();
+  });
+
+  it('excludes unlogged days from the logged count and explains why', async () => {
+    const p = makePayload(90);
+    p.days[0].logged = false;
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Logging consistency' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Logging consistency' }).closest('section')!;
+    expect(within(section).getByText(/89 of 90/)).toBeTruthy();
+    expect(within(section).getByText(/excluded/i)).toBeTruthy();
   });
 });
