@@ -242,7 +242,7 @@ describe('Observed TDEE card', () => {
     fetchTrendsMock.mockResolvedValue(p);
     renderTrends();
 
-    await waitFor(() => expect(screen.getByText('Observed TDEE')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Observed TDEE' })).toBeTruthy());
     expect(screen.queryByText(/days ago/i)).toBeNull();
   });
 
@@ -267,7 +267,77 @@ describe('Observed TDEE card', () => {
     fetchTrendsMock.mockResolvedValue(p);
     renderTrends();
 
-    await waitFor(() => expect(screen.getByText('Observed TDEE')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Observed TDEE' })).toBeTruthy());
     expect(screen.queryByRole('button', { name: /use the formula/i })).toBeNull();
+  });
+
+  it('still offers a way back to the formula when logging has lapsed since an estimate was accepted', async () => {
+    // Insufficient estimate (few weigh-ins) but the current target still came
+    // from a previously-accepted estimate — someone who accepted a suggestion
+    // and then let their logging slide must not be stranded on the formula
+    // with no way to say so.
+    const p = makePayload(90);
+    p.target_source = 'observed';
+    p.target_set_at = new Date().toISOString().replace('T', ' ');
+    fetchTrendsMock.mockResolvedValue(p);
+    profileRecord['calorie_target'] = 1962;
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /use the formula/i })).toBeTruthy());
+    // No Apply button in the insufficient state, even with a revert available.
+    expect(screen.queryByRole('button', { name: /^apply/i })).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: /use the formula/i }));
+
+    await waitFor(() => expect(profileRecord['calorie_target']).toBe(null));
+    expect(profileRecord['calorie_target_source']).toBe('');
+    expect(profileRecord['calorie_target_set_at']).toBe(null);
+  });
+
+  it('starts nagging exactly at the 14-day staleness threshold', async () => {
+    const p = sufficientPayload();
+    p.target_source = 'observed';
+    p.target_set_at = new Date(Date.now() - 14 * 86400_000).toISOString().replace('T', ' ');
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByText(/14 days ago/i)).toBeTruthy());
+  });
+
+  it('does not yet nag one day short of the staleness threshold', async () => {
+    const p = sufficientPayload();
+    p.target_source = 'observed';
+    p.target_set_at = new Date(Date.now() - 13 * 86400_000).toISOString().replace('T', ' ');
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Observed TDEE' })).toBeTruthy());
+    expect(screen.queryByText(/days ago/i)).toBeNull();
+  });
+
+  it.each([
+    ['no_data', /nothing logged yet/i],
+    ['sparse_logging', /logged days in the last/i],
+    ['short_span', /spread them over at least/i],
+    ['some_unrecognised_reason', /not enough data yet/i],
+  ])('shows the specific message for reason %s', async (reason, expected) => {
+    const p = makePayload(90);
+    p.estimate.reason = reason;
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByText(expected)).toBeTruthy());
+  });
+});
+
+describe('Weight card', () => {
+  it('points at Profile instead of drawing an empty chart when there are no weigh-ins', async () => {
+    fetchTrendsMock.mockResolvedValue(makePayload(90)); // weights: []
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Weight trend' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Weight trend' }).closest('section')!;
+    expect(within(section).getByText(/no weigh-ins in this range/i)).toBeTruthy();
+    expect(within(section).queryByRole('img')).toBeNull();
   });
 });
