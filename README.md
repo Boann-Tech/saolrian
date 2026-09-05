@@ -23,6 +23,8 @@ Same app either way. Your data either way.
 - 🗓️ **Customizable meal slots** — Breakfast, second breakfast, pre-workout — name your meals whatever you want, add as many as you like
 - 🎯 **TDEE & goals** — Mifflin-St Jeor / Katch-McArdle, five activity levels, lose/maintain/gain with macro targets
 - 📊 **History & trends** — week view, adherence dots, weight tracking
+- 📈 **Trends** — weight trend with a fitted rate, intake vs budget, cumulative energy balance, logging heatmap, macros, weekday pattern, meal split, water and steps; pick which cards you want
+- 🧮 **Observed TDEE** — your real calorie burn worked out from your own intake and weight history, offered as a suggestion you accept rather than applied behind your back
 - 📥 **Lose It! import** — bring your history with you
 - 🎨 **Theming** — 8 accent palettes + custom color, per user and per instance
 - 📴 **Offline-first PWA** — log meals on a plane, sync when you land
@@ -83,6 +85,7 @@ docs/       landing page, logos, screenshots
 
 Custom API surface (v0, stable-ish):
 - `GET  /api/saolrian/summary?date=YYYY-MM-DD` — day totals + meal groups + budget
+- `GET  /api/saolrian/trends?days=` — day series, weight trend and observed TDEE
 - `GET  /api/saolrian/food/search?q=` — local foods + Open Food Facts proxy
 - `GET  /api/saolrian/food/barcode/:code` — OFF product lookup
 - `POST /api/saolrian/import/loseit` — history import
