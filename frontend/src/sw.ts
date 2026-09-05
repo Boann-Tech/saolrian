@@ -1,10 +1,21 @@
 /// <reference lib="webworker" />
+import { clientsClaim } from 'workbox-core';
 import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching';
 import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 
 declare let self: ServiceWorkerGlobalScope;
+
+// vite.config.ts sets registerType: 'autoUpdate', which under the default
+// generateSW strategy gets skipWaiting()/clientsClaim() injected into the
+// generated service worker automatically. This custom (injectManifest) one
+// doesn't get that for free — without these two calls, a newly-installed
+// worker sits in "waiting" state until every open tab of the app is fully
+// closed, so users keep getting the old cached JS bundle across deploys
+// indefinitely (no error, just a silently stale app).
+self.skipWaiting();
+clientsClaim();
 
 precacheAndRoute(self.__WB_MANIFEST);
 
