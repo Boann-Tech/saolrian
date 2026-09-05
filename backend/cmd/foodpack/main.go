@@ -177,21 +177,30 @@ func resolveSourceDirs(work string, overrides map[string]string) ([]sourceDir, e
 			continue // manifest row for an adapter this build does not have yet
 		}
 		dir := overrides[e.Source]
+		var sha string
 		if dir == "" && work != "" {
 			candidate := filepath.Join(work, e.ExtractTo)
 			if st, err := os.Stat(candidate); err == nil && st.IsDir() {
 				dir = candidate
-				if err := checkFetchRecord(candidate, e); err != nil {
+				// checkFetchRecord already reads the breadcrumb to validate
+				// it against the manifest; reuse that read for sha instead
+				// of reading the file a second time.
+				sha, err = checkFetchRecord(candidate, e)
+				if err != nil {
 					return nil, err
 				}
+			}
+		} else if dir != "" {
+			rec, ok, err := source.ReadFetchRecord(dir)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				sha = rec.SHA256
 			}
 		}
 		if dir == "" {
 			continue
-		}
-		sha := ""
-		if rec, ok, err := source.ReadFetchRecord(dir); err == nil && ok {
-			sha = rec.SHA256
 		}
 		out = append(out, sourceDir{source: e.Source, dir: dir, sha256: sha})
 	}
@@ -201,23 +210,24 @@ func resolveSourceDirs(work string, overrides map[string]string) ([]sourceDir, e
 	return out, nil
 }
 
-// checkFetchRecord catches a manifest re-pinned without a re-fetch: the
-// directory then holds the old dataset while the manifest claims the new
-// one, and nothing else would notice.
-func checkFetchRecord(dir string, e source.ManifestEntry) error {
+// checkFetchRecord reads the breadcrumb fetch left in dir and returns its
+// recorded hash. It also catches a manifest re-pinned without a re-fetch:
+// the directory then holds the old dataset while the manifest claims the
+// new one, and nothing else would notice.
+func checkFetchRecord(dir string, e source.ManifestEntry) (string, error) {
 	rec, ok, err := source.ReadFetchRecord(dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !ok {
 		fmt.Fprintf(os.Stderr, "warning: %s was not populated by `foodpack fetch`; its provenance is unrecorded\n", dir)
-		return nil
+		return "", nil
 	}
 	if e.SHA256 != source.Unpinned && rec.SHA256 != e.SHA256 {
-		return fmt.Errorf("%s holds the archive %s but the manifest now pins %s; re-run `foodpack fetch --source %s`",
+		return "", fmt.Errorf("%s holds the archive %s but the manifest now pins %s; re-run `foodpack fetch --source %s`",
 			dir, rec.SHA256, e.SHA256, e.Source)
 	}
-	return nil
+	return rec.SHA256, nil
 }
 
 // writePackAtomically writes pack to a temp file in the same directory as
