@@ -203,3 +203,94 @@ func TestLoadCoFIDRejectsUnknownToken(t *testing.T) {
 		t.Fatalf("err = %v, want ErrUnknownToken", err)
 	}
 }
+
+// A blank name cell on the sheet where a food code first appears must not
+// drop that sheet's nutrients: the food code is what identifies the row,
+// not the name, and nothing guarantees CoFID carries the name on every
+// sheet in every release.
+func TestLoadCoFIDKeepsNutrientsWhenFirstSheetHasNoName(t *testing.T) {
+	path := writeWorkbook(t, map[string][][]string{
+		"1.3 Proximates": {
+			{"Food Code", "Food Name", "Energy (kcal)", "Protein (g)"},
+			{"20-100", "", "95", "1.2"},
+			{"30-100", "", "50", "2.0"},
+		},
+		"1.4 Inorganics": {
+			{"Food Code", "Food Name", "Sodium (mg)"},
+			{"20-100", "Test Food One", "42"},
+			{"30-100", "", "10"},
+		},
+	})
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
+		"energy (kcal),energy_kcal,1,Energy\n" +
+		"protein (g),protein,1,Protein\n" +
+		"sodium (mg),sodium,1,Sodium\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	foods, _, err := LoadCoFID(CoFIDOptions{
+		File:      path,
+		Sheets:    []string{"1.3 Proximates", "1.4 Inorganics"},
+		HeaderRow: 1,
+		Mapping:   m,
+	})
+	if err != nil {
+		t.Fatalf("LoadCoFID: %v", err)
+	}
+	if len(foods) != 1 {
+		t.Fatalf("got %d foods, want 1 (30-100 never acquires a name and must be dropped)", len(foods))
+	}
+	f := foods[0]
+	if f.SourceID != "20-100" || f.Name != "Test Food One" {
+		t.Fatalf("food = %+v, want 20-100 / Test Food One", f)
+	}
+	prof := food.Decode(f.Nutrients)
+	// energy_kcal and protein come from the FIRST sheet, where the name
+	// cell was blank. If a blank name there ever skips the whole row
+	// again, these two go missing while sodium (from the sheet that does
+	// carry the name) still comes through -- so this checks all three,
+	// not just that the food shipped.
+	if v, ok := prof["energy_kcal"]; !ok || !float32Eq(v, 95) {
+		t.Errorf("energy_kcal = %v, ok=%v; want 95 from the nameless first sheet", v, ok)
+	}
+	if v, ok := prof["protein"]; !ok || !float32Eq(v, 1.2) {
+		t.Errorf("protein = %v, ok=%v; want 1.2 from the nameless first sheet", v, ok)
+	}
+	if v, ok := prof["sodium"]; !ok || !float32Eq(v, 42) {
+		t.Errorf("sodium = %v, ok=%v; want 42 from the sheet that supplies the name", v, ok)
+	}
+}
+
+// A food code that never acquires a name on any configured sheet is
+// dropped, not shipped nameless -- even though it has nutrient data on
+// more than one sheet.
+func TestLoadCoFIDDropsFoodWithNoNameOnAnySheet(t *testing.T) {
+	path := writeWorkbook(t, map[string][][]string{
+		"1.3 Proximates": {
+			{"Food Code", "Food Name", "Energy (kcal)"},
+			{"30-100", "", "50"},
+		},
+		"1.4 Inorganics": {
+			{"Food Code", "Food Name", "Sodium (mg)"},
+			{"30-100", "", "10"},
+		},
+	})
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
+		"energy (kcal),energy_kcal,1,Energy\n" +
+		"sodium (mg),sodium,1,Sodium\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	foods, _, err := LoadCoFID(CoFIDOptions{
+		File:      path,
+		Sheets:    []string{"1.3 Proximates", "1.4 Inorganics"},
+		HeaderRow: 1,
+		Mapping:   m,
+	})
+	if err != nil {
+		t.Fatalf("LoadCoFID: %v", err)
+	}
+	if len(foods) != 0 {
+		t.Fatalf("got %d foods, want 0: a food with no name on any sheet must be dropped", len(foods))
+	}
+}

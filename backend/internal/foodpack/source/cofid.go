@@ -123,14 +123,19 @@ func LoadCoFID(o CoFIDOptions) ([]format.RefFood, []format.SourceInfo, error) {
 			if code == "" {
 				continue
 			}
+			// A blank name cell on this row must not skip the nutrient
+			// loop below: a food code is confirmed by any sheet, and the
+			// name may legitimately arrive from a different one. Dropping
+			// this row's nutrients because *this* sheet happens not to
+			// carry the name would be silent data loss -- exactly what
+			// "absent is not zero" rules out. A code that never acquires
+			// a name on any sheet is still dropped, just later: it is
+			// never added to order, so Builder.Add never sees it.
 			if _, seen := names[code]; !seen {
-				name, _ := t.Cell(row, o.NameColumn)
-				name = strings.TrimSpace(name)
-				if name == "" {
-					continue // no name on the first sheet that mentions it
+				if name, _ := t.Cell(row, o.NameColumn); strings.TrimSpace(name) != "" {
+					names[code] = strings.TrimSpace(name)
+					order = append(order, code)
 				}
-				names[code] = name
-				order = append(order, code)
 			}
 			for _, h := range t.Header {
 				if h == "" || h == o.CodeColumn || h == o.NameColumn {
