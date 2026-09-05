@@ -26,3 +26,12 @@ coverage/
 
 # TypeScript incremental build info (regenerated on every build)
 frontend/tsconfig.tsbuildinfo
+
+# git worktrees created for isolated feature work
+.claude/worktrees/
+
+# subagent-driven-development scratch (ledger, briefs, review packages)
+.superpowers/
+
+# foodpack raw dataset downloads (hundreds of MB, never committed)
+backend/work/
