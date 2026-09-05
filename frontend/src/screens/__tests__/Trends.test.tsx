@@ -423,3 +423,57 @@ describe('Consistency card', () => {
     expect(within(section).getByText(/excluded/i)).toBeTruthy();
   });
 });
+
+describe('optional cards', () => {
+  it('renders each one when enabled', async () => {
+    profileRecord.trend_cards = ['macros', 'weekday', 'meals', 'water', 'steps'];
+    fetchTrendsMock.mockResolvedValue(makePayload(90));
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Macros' })).toBeTruthy());
+    for (const title of ['Macros', 'Weekday pattern', 'Meal distribution', 'Water', 'Steps']) {
+      expect(screen.getByRole('heading', { level: 3, name: title })).toBeTruthy();
+    }
+  });
+
+  it('switches the macro shown when the selector changes', async () => {
+    profileRecord.trend_cards = ['macros'];
+    fetchTrendsMock.mockResolvedValue(makePayload(90));
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Carbs' })).toBeTruthy());
+    await userEvent.click(screen.getByRole('tab', { name: 'Carbs' }));
+    expect(screen.getByRole('img', { name: /carbs/i })).toBeTruthy();
+  });
+
+  it('tells the user where meal data comes from when there are no slots', async () => {
+    profileRecord.trend_cards = ['meals'];
+    fetchTrendsMock.mockResolvedValue(makePayload(90)); // slots: []
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Meal distribution' })).toBeTruthy());
+    expect(screen.getByText(/no meals/i)).toBeTruthy();
+  });
+});
+
+describe('WeekdayCard', () => {
+  // weekdayAverages returns null only for a weekday that was never logged at
+  // all; a weekday whose true average is exactly 0 kcal (every occurrence
+  // logged at 0) is real data and must still draw a bar, not be dropped as if
+  // it were absent.
+  it('charts a weekday whose true average is zero rather than dropping it', async () => {
+    profileRecord.trend_cards = ['weekday'];
+    const p = makePayload(90);
+    for (const d of p.days) {
+      const dow = new Date(`${d.date}T00:00:00Z`).getUTCDay();
+      if (dow === 0) d.kcal = 0; // every logged Sunday totals exactly 0 kcal
+    }
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 3, name: 'Weekday pattern' })).toBeTruthy());
+    const section = screen.getByRole('heading', { level: 3, name: 'Weekday pattern' }).closest('section')!;
+    // All 7 weekdays appear somewhere in a 90-day span, so all 7 must chart.
+    expect(section.querySelectorAll('[data-bar]').length).toBe(7);
+  });
+});

@@ -9,6 +9,10 @@ import { TdeeCard } from './trends/cards/TdeeCard';
 import { IntakeCard } from './trends/cards/IntakeCard';
 import { BalanceCard } from './trends/cards/BalanceCard';
 import { ConsistencyCard } from './trends/cards/ConsistencyCard';
+import { MacrosCard } from './trends/cards/MacrosCard';
+import { WeekdayCard } from './trends/cards/WeekdayCard';
+import { MealsCard } from './trends/cards/MealsCard';
+import { MetricCard } from './trends/cards/MetricCard';
 
 type Range = '30' | '90' | '365';
 
@@ -135,7 +139,6 @@ export default function Trends() {
   );
 }
 
-/** Remaining card bodies (macros, weekday, meals, water, steps) land in a later task. */
 function CardBody({ id, data, onChanged }: { id: CardId; data: TrendsPayload; onChanged: () => void }) {
   switch (id) {
     case 'weight':
@@ -148,7 +151,17 @@ function CardBody({ id, data, onChanged }: { id: CardId; data: TrendsPayload; on
       return <BalanceCard data={data} />;
     case 'consistency':
       return <ConsistencyCard data={data} />;
+    case 'macros':
+      return <MacrosCard data={data} />;
+    case 'weekday':
+      return <WeekdayCard data={data} />;
+    case 'meals':
+      return <MealsCard data={data} />;
+    case 'water':
+      return <MetricCard data={data} metric="water" />;
+    case 'steps':
+      return <MetricCard data={data} metric="steps" />;
     default:
-      return <p className="text-sm text-text-faint">Coming in the next task: {id}</p>;
+      return null;
   }
 }
