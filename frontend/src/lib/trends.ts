@@ -127,9 +127,11 @@ export function consistencyCells(p: TrendsPayload): { date: string; level: 0 | 1
 }
 
 /** Mean intake per weekday, index 0 = Sunday. Unlogged days are excluded, so a
- * skipped Sunday does not read as a 0 kcal Sunday. NaN-free: a weekday with no
- * logged days returns 0 and the card renders it as absent. */
-export function weekdayAverages(p: TrendsPayload): number[] {
+ * skipped Sunday does not read as a 0 kcal Sunday. A weekday never logged
+ * returns null rather than 0 — a logged day can legitimately total 0 kcal, so
+ * 0 is not a safe sentinel for "no data" and the ambiguity must not leak past
+ * this transform. */
+export function weekdayAverages(p: TrendsPayload): (number | null)[] {
   const sums = new Array(7).fill(0);
   const counts = new Array(7).fill(0);
   for (const d of p.days) {
@@ -139,7 +141,7 @@ export function weekdayAverages(p: TrendsPayload): number[] {
     sums[idx] += d.kcal;
     counts[idx] += 1;
   }
-  return sums.map((s, i) => (counts[i] > 0 ? s / counts[i] : 0));
+  return sums.map((s, i) => (counts[i] > 0 ? s / counts[i] : null));
 }
 
 /** Average kcal per meal slot across the range, as StackedBar rows. */

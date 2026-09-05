@@ -9,6 +9,8 @@ import {
   weekdayAverages,
   movingAverage,
   sparseLabels,
+  mealRows,
+  regressionOverlay,
 } from './trends';
 import type { TrendsPayload, TrendDay } from './types';
 
@@ -126,6 +128,11 @@ describe('consistencyCells', () => {
     const p = payload([day('2026-01-01', 0, false), day('2026-01-02', 500), day('2026-01-03', 1900)]);
     expect(consistencyCells(p).map((c) => c.level)).toEqual([0, 1, 3]);
   });
+
+  it('grades the middle band between the low and high thresholds', () => {
+    const p = payload([day('2026-01-01', 1000)]); // 1000/2000 = 0.5, between 0.35 and 0.75
+    expect(consistencyCells(p).map((c) => c.level)).toEqual([2]);
+  });
 });
 
 describe('weekdayAverages', () => {
@@ -138,6 +145,17 @@ describe('weekdayAverages', () => {
     const avgs = weekdayAverages(p);
     expect(avgs[4]).toBeCloseTo(2500); // Thursday
     expect(avgs[5]).toBeCloseTo(1000); // Friday, ignoring the unlogged day
+    expect(avgs[0]).toBeNull(); // Sunday never appears in the payload at all
+  });
+
+  it('gives a weekday that was never logged null, not zero', () => {
+    // A logged day can legitimately total 0 kcal, so 0 is not a safe
+    // "no data" sentinel — a weekday with zero logged days must read
+    // differently from a weekday whose true average happens to be 0.
+    const p = payload([day('2026-01-01', 0, true)]); // Thursday, logged, 0 kcal
+    const avgs = weekdayAverages(p);
+    expect(avgs[4]).toBe(0); // a real, logged zero
+    expect(avgs[3]).toBeNull(); // Wednesday: never logged at all
   });
 });
 
@@ -148,5 +166,110 @@ describe('sparseLabels', () => {
     expect(labels).toHaveLength(30);
     expect(labels.filter(Boolean).length).toBeLessThanOrEqual(7);
     expect(labels[0]).toBeTruthy();
+  });
+});
+
+describe('mealRows', () => {
+  function dayWithSlots(date: string, bySlot: Record<string, number>, logged = true): TrendDay {
+    const kcal = Object.values(bySlot).reduce((s, v) => s + v, 0);
+    return {
+      date, kcal, protein: 0, carbs: 0, fat: 0,
+      entries: logged ? 1 : 0, logged, water_ml: 0, steps: 0, by_slot: bySlot,
+    };
+  }
+
+  const slots = [
+    { id: 'breakfast', name: 'Breakfast', sort_order: 0, pct_allocation: 50 },
+    { id: 'lunch', name: 'Lunch', sort_order: 1, pct_allocation: 50 },
+  ];
+
+  it('averages per slot across logged days only, without an unlogged day diluting it', () => {
+    const p = payload(
+      [
+        dayWithSlots('2026-01-01', { breakfast: 400, lunch: 600 }),
+        dayWithSlots('2026-01-02', {}, false),
+        dayWithSlots('2026-01-03', { breakfast: 600, lunch: 400 }),
+      ],
+      { slots },
+    );
+    const rows = mealRows(p);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].parts).toEqual([
+      { label: 'Breakfast', value: 500 },
+      { label: 'Lunch', value: 500 },
+    ]);
+  });
+
+  it('returns an empty array rather than dividing by zero when no day is logged', () => {
+    const p = payload(
+      [dayWithSlots('2026-01-01', {}, false), dayWithSlots('2026-01-02', {}, false)],
+      { slots },
+    );
+    expect(mealRows(p)).toEqual([]);
+  });
+
+  it('produces no rows, and no NaN, on an empty payload', () => {
+    const p = payload([], { slots });
+    expect(mealRows(p)).toEqual([]);
+  });
+});
+
+describe('regressionOverlay', () => {
+  it('is null outside the estimate window and advances by the per-day slope inside it', () => {
+    const p = payload(
+      [
+        day('2026-01-01', 2000), day('2026-01-02', 2000), day('2026-01-03', 2000),
+        day('2026-01-04', 2000), day('2026-01-05', 2000),
+      ],
+      {
+        ema: [{ date: '2026-01-03', kg: 80, interpolated: false }],
+        estimate: {
+          sufficient: true, reason: '', window_days: 3, observed_tdee: 2000,
+          margin: 0, slope_kg_per_week: -7, mean_intake: 2000,
+          qualifying_days: 3, weigh_ins: 3, span_days: 3, suggested_target: 2000,
+        },
+      },
+    );
+    const overlay = regressionOverlay(p);
+    // Window is the last 3 days (2026-01-03..05); the first two days are outside it.
+    expect(overlay[0]).toBeNull();
+    expect(overlay[1]).toBeNull();
+    expect(overlay[2]).toBeCloseTo(80); // anchored to the EMA value on the window's first day
+    expect(overlay[3]).toBeCloseTo(79); // slope_kg_per_week / 7 = -1/day
+    expect(overlay[4]).toBeCloseTo(78);
+  });
+
+  it('is all null when the estimate is insufficient', () => {
+    const p = payload([day('2026-01-01', 2000), day('2026-01-02', 2000)]);
+    expect(regressionOverlay(p)).toEqual([null, null]);
+  });
+
+  it('produces no NaN on an empty payload', () => {
+    const p = payload([], {
+      ema: [{ date: '2026-01-01', kg: 80, interpolated: false }],
+      estimate: {
+        sufficient: true, reason: '', window_days: 3, observed_tdee: 2000,
+        margin: 0, slope_kg_per_week: -7, mean_intake: 2000,
+        qualifying_days: 3, weigh_ins: 3, span_days: 3, suggested_target: 2000,
+      },
+    });
+    expect(regressionOverlay(p)).toEqual([]);
+  });
+
+  it('produces no NaN on an all-unlogged payload, still inside the window', () => {
+    const p = payload(
+      [day('2026-01-01', 0, false), day('2026-01-02', 0, false), day('2026-01-03', 0, false)],
+      {
+        ema: [{ date: '2026-01-01', kg: 80, interpolated: false }],
+        estimate: {
+          sufficient: true, reason: '', window_days: 3, observed_tdee: 2000,
+          margin: 0, slope_kg_per_week: -7, mean_intake: 2000,
+          qualifying_days: 0, weigh_ins: 0, span_days: 3, suggested_target: 2000,
+        },
+      },
+    );
+    const overlay = regressionOverlay(p);
+    expect(overlay.every((v) => v === null || !Number.isNaN(v))).toBe(true);
+    expect(overlay[0]).toBeCloseTo(80);
   });
 });
