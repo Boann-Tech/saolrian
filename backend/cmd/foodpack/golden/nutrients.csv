@@ -1,0 +1,6 @@
+source,name_regex,nutrient_key,expected,tolerance_pct,note
+usda_sr,(?i)\bbananas?\b,energy_kcal,89,5,"SR Legacy ""Bananas, raw"" (NDB 09040); spec anchor food"
+usda_sr,(?i)\bbananas?\b,carbohydrate,22.84,5,"SR Legacy ""Bananas, raw""; g-unit anchor"
+usda_sr,(?i)\bspinach\b,iron,2.71,5,"SR Legacy ""Spinach, raw"" (NDB 11457); spec anchor food"
+usda_foundation,"(?i)^milk,\s*whole\b",calcium,113,10,"Foundation Foods ""Milk, whole, 3.25% milkfat...""; spec anchor food; mg-unit anchor"
+usda_foundation,(?i)\bsalmon\b,vitamin_d,8.9,40,"Foundation Foods farmed Atlantic salmon raw; spec anchor food; ug-unit anchor; wide tolerance because farmed-fish vitamin D varies substantially with diet"
