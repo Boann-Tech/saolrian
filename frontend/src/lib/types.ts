@@ -114,3 +114,70 @@ export interface RecipeIngredient {
   fat: number;
   sort_order: number;
 }
+
+export interface TrendDay {
+  date: string;
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  entries: number;
+  /** The user recorded something this day. Distinct from "ate zero calories". */
+  logged: boolean;
+  water_ml: number;
+  steps: number;
+  by_slot: Record<string, number>;
+}
+
+export interface TrendWeight {
+  date: string;
+  kg: number;
+}
+
+export interface TrendEma {
+  date: string;
+  kg: number;
+  /** Carried forward from the previous day; not a measurement. */
+  interpolated: boolean;
+}
+
+export interface TrendEstimate {
+  sufficient: boolean;
+  reason: string;
+  window_days: number;
+  observed_tdee: number;
+  margin: number;
+  slope_kg_per_week: number;
+  mean_intake: number;
+  /** Days whose kcal cleared the qualifying floor — not the same as `logged`. */
+  qualifying_days: number;
+  weigh_ins: number;
+  span_days: number;
+  suggested_target: number;
+}
+
+export interface TrendSlot {
+  id: string;
+  name: string;
+  sort_order: number;
+  pct_allocation: number;
+}
+
+export interface TrendsPayload {
+  range: { from: string; to: string; days: number };
+  days: TrendDay[];
+  weights: TrendWeight[];
+  ema: TrendEma[];
+  budget: number | null;
+  budget_message?: string;
+  formula_tdee: number | null;
+  goal: string;
+  goal_rate: number;
+  /** '' | 'manual' | 'observed' — where the current calorie_target came from. */
+  target_source: string;
+  /** When it was set; '' when never. */
+  target_set_at: string;
+  targets: { protein_g: number; carbs_g: number; fat_g: number; water_ml: number; steps: number };
+  slots: TrendSlot[];
+  estimate: TrendEstimate;
+}
