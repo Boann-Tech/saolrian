@@ -172,30 +172,104 @@ export interface LoseItWeightRow {
   kg: number;
 }
 
+/** Which unit system a LoseIt account's weight (and, by extension, its
+ * other body-metric fields) appears to be configured in. LoseIt exports
+ * raw numbers with no unit tag, so this is always a guess — 'unknown'
+ * means neither signal below was conclusive, and callers should treat it
+ * the same as 'metric' (the historical assumption) rather than risk
+ * converting data that might already be correct. */
+export type LoseItUnitSystem = 'metric' | 'imperial' | 'unknown';
+
+const LB_TO_KG = 0.453592;
+
+function median(nums: number[]): number {
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/** Best-effort heuristic for whether a LoseIt export is in imperial units,
+ * used to decide whether `parseLoseItWeightCsv` should convert lbs to kg.
+ *
+ * Primary signal: profile.csv's Height. LoseIt keeps one unit system
+ * across a whole profile, and human height cleanly separates cm
+ * (~100-250) from inches (~36-96) with no overlap — cheap and reliable
+ * whenever profile.csv was included in the export.
+ *
+ * Fallback: the median of the parsed weight values, checked against
+ * plausible adult ranges (~30-250 kg vs ~60-550 lbs). This is
+ * deliberately weak by itself — most real weights (say, 70-250) are
+ * plausible as kg on their own, so this only fires for accounts whose
+ * median weight is implausible as kg but plausible as lbs (e.g. someone
+ * whose lbs value happens to read as an impossible >250kg). It exists
+ * only to catch the cases the height signal can't (no profile.csv, or a
+ * height outside both plausible ranges).
+ *
+ * Both checks are intentionally conservative — this is a health app, so a
+ * false-positive conversion (silently corrupting already-correct metric
+ * data) is worse than a false negative (missing a real imperial account,
+ * which is the status quo today). */
+export function detectLoseItWeightUnit(
+  profile: Pick<LoseItProfileSnapshot, 'height_cm'> | undefined,
+  weights: number[],
+): LoseItUnitSystem {
+  const height = profile?.height_cm;
+  if (height !== undefined) {
+    if (height >= 100 && height <= 250) return 'metric';
+    if (height >= 36 && height <= 96) return 'imperial';
+    // Outside both plausible human-height ranges — not a usable signal;
+    // fall through to the weight-based check.
+  }
+
+  const samples = weights.filter((w) => w > 0);
+  if (samples.length === 0) return 'unknown';
+
+  const m = median(samples);
+  const plausibleAsKg = m >= 30 && m <= 250;
+  const plausibleAsLb = m >= 60 && m <= 550;
+  if (!plausibleAsKg && plausibleAsLb) return 'imperial';
+  return 'unknown';
+}
+
 function looksLikeWeightHeader(cells: string[]): boolean {
   const lower = cells.map((c) => c.trim().toLowerCase());
   return lower[0] === 'date' && lower.includes('weight');
 }
 
-export function parseLoseItWeightCsv(text: string): LoseItWeightRow[] {
+/** Parses weights.csv, converting lbs to kg first when
+ * `detectLoseItWeightUnit` finds a reasonably confident signal that the
+ * account is imperial (see that function for the heuristic and its
+ * limits). `profile` should be the already-parsed profile.csv snapshot
+ * (or undefined if it wasn't in the export / wasn't selected). */
+export function parseLoseItWeightCsv(
+  text: string,
+  profile?: Pick<LoseItProfileSnapshot, 'height_cm'>,
+): { rows: LoseItWeightRow[]; unitSystem: LoseItUnitSystem } {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const headerIdx = lines.findIndex((l) => looksLikeWeightHeader(splitCsvLine(l)));
-  if (headerIdx === -1) return [];
+  if (headerIdx === -1) return { rows: [], unitSystem: 'unknown' };
   const header = splitCsvLine(lines[headerIdx]).map((c) => c.trim().toLowerCase());
   const dateIdx = header.indexOf('date');
   const weightIdx = header.indexOf('weight');
   const deletedIdx = header.indexOf('deleted');
 
-  const rows: LoseItWeightRow[] = [];
+  const parsed: { date: string; raw: number }[] = [];
   for (let i = headerIdx + 1; i < lines.length; i++) {
     const cells = splitCsvLine(lines[i]);
     if (deletedIdx !== -1 && isDeletedFlag(cells[deletedIdx])) continue;
     const date = (cells[dateIdx] ?? '').trim();
-    const kg = num(cells[weightIdx]);
-    if (!date || kg <= 0) continue;
-    rows.push({ date: toIsoDate(date), kg });
+    const raw = num(cells[weightIdx]);
+    if (!date || raw <= 0) continue;
+    parsed.push({ date: toIsoDate(date), raw });
   }
-  return rows;
+
+  const unitSystem = detectLoseItWeightUnit(
+    profile,
+    parsed.map((p) => p.raw),
+  );
+  const factor = unitSystem === 'imperial' ? LB_TO_KG : 1;
+  const rows: LoseItWeightRow[] = parsed.map((p) => ({ date: p.date, kg: p.raw * factor }));
+  return { rows, unitSystem };
 }
 
 // ---------------------------------------------------------------------

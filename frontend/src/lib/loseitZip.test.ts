@@ -34,4 +34,28 @@ describe('parseLoseItZip', () => {
     expect(Object.keys(categories)).toHaveLength(0);
     expect(previews).toHaveLength(0);
   });
+
+  it('converts weight and relabels its preview when profile.csv indicates an imperial account', async () => {
+    const file = makeZipFile({
+      'weights.csv': 'Date,Weight,Last Updated\n05/02/2023,180,2023-05-02T00:00:00+0100\n',
+      'profile.csv': 'Name,Value\nHeight,70.0\n',
+    });
+
+    const { categories, previews } = await parseLoseItZip(file);
+
+    expect(categories.weight).toEqual([{ date: '2023-05-02', kg: 180 * 0.453592 }]);
+    expect(previews.find((p) => p.key === 'weight')?.label).toBe('Weight (converted from lbs)');
+  });
+
+  it('leaves weight unconverted and its preview label as-is when profile.csv indicates metric', async () => {
+    const file = makeZipFile({
+      'weights.csv': 'Date,Weight,Last Updated\n05/02/2023,91.99,2023-05-02T00:00:00+0100\n',
+      'profile.csv': 'Name,Value\nHeight,178.0\n',
+    });
+
+    const { categories, previews } = await parseLoseItZip(file);
+
+    expect(categories.weight).toEqual([{ date: '2023-05-02', kg: 91.99 }]);
+    expect(previews.find((p) => p.key === 'weight')?.label).toBe('Weight (imported as kg)');
+  });
 });
