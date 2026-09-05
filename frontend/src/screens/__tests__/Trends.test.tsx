@@ -115,6 +115,13 @@ describe('Trends', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Intake vs budget' })).toBeTruthy());
     expect(screen.queryByRole('heading', { name: 'Energy balance' })).toBeNull();
+
+    // Both retained cards render, in the stored order — not just "one of
+    // them is present". Level 3 excludes the screen's own <h2>; the sheet's
+    // <h3> title is aria-hidden while closed and so is excluded too, leaving
+    // exactly the rendered card headings in DOM order.
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(['Intake vs budget', 'Weight trend']);
   });
 
   it('shows a stub instead of a chart below the card minimum', async () => {
@@ -154,5 +161,19 @@ describe('Trends', () => {
     await user.click(screen.getByRole('checkbox', { name: /Macros/i }));
 
     await waitFor(() => expect(profileRecord.trend_cards).toContain('macros'));
+  });
+
+  it('persists disabling an already-enabled default card', async () => {
+    fetchTrendsMock.mockResolvedValue(makePayload(90));
+    renderTrends();
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Weight trend' })).toBeTruthy());
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Customise' }));
+    // 'Weight trend' is on by default; un-check it.
+    await user.click(screen.getByRole('checkbox', { name: /Weight trend/i }));
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Weight trend' })).toBeNull());
+    expect(profileRecord.trend_cards).not.toContain('weight');
   });
 });
