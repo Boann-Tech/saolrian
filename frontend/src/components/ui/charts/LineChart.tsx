@@ -53,7 +53,7 @@ export function LineChart({
         const segments: { x: number; y: number }[][] = [];
         let current: { x: number; y: number }[] = [];
         s.values.forEach((v, i) => {
-          if (v == null) {
+          if (v == null || !Number.isFinite(v)) {
             if (current.length) segments.push(current);
             current = [];
             return;
@@ -68,6 +68,7 @@ export function LineChart({
             {segments.map((seg, gi) => (
               <path
                 key={gi}
+                data-series-path=""
                 d={linePath(seg)}
                 fill="none"
                 className={stroke}
