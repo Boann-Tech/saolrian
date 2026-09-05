@@ -14,6 +14,7 @@ import EditEntry from './screens/EditEntry';
 import Recipes from './screens/Recipes';
 import RecipeEditor from './screens/RecipeEditor';
 import { AppShell } from './components/AppShell';
+import { ToastProvider } from './components/ui';
 import './styles/index.css';
 
 /** Routing gate:
@@ -76,9 +77,11 @@ function AppRoutes() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </ToastProvider>
     </AppProvider>
   </StrictMode>,
 );

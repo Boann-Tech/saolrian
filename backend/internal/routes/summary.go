@@ -22,6 +22,9 @@ func Register(grp *router.Router[*core.RequestEvent]) {
 	g.GET("/food/search", foodSearchHandler)
 	g.GET("/food/barcode/{code}", foodBarcodeHandler)
 	g.POST("/import/loseit", loseItImportHandler)
+	g.GET("/push/vapid-key", pushVapidKeyHandler)
+	g.POST("/push/subscribe", pushSubscribeHandler)
+	g.POST("/push/unsubscribe", pushUnsubscribeHandler)
 }
 
 // ---------------------------------------------------------------------

@@ -14,6 +14,7 @@ backend/pb_data/
 # local env & secrets
 .env
 .env.*
+!.env.example
 
 # test artifacts
 /tmp/
