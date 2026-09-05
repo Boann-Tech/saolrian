@@ -161,6 +161,56 @@ func TestLoadCIQUALReportsUnmappedCodes(t *testing.T) {
 	}
 }
 
+// CIQUAL has shipped both as one file with COMPO nested inside ALIM and as
+// three sibling files. The adapter must produce the same profiles either
+// way: this loads both fixtures and pins the nested layout's output to the
+// sibling layout's rather than to a second, separately maintained list of
+// expected values that could quietly drift from the first.
+//
+// The nested fixture's water COMPO also omits its own alim_code, as real
+// nested releases do because the parent ALIM already carries it, so this
+// is the only test that exercises ciqualAlim's AlimCode backfill.
+func TestLoadCIQUALNestedLayoutMatchesSiblingLayout(t *testing.T) {
+	siblingFoods, _ := loadCIQUALFixture(t, ciqualTestMapping)
+
+	m, err := LoadMapping(strings.NewReader(ciqualTestMapping))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	nestedFoods, nestedSources, err := LoadCIQUAL(CIQUALOptions{Dir: "testdata/ciqual-nested", Mapping: m})
+	if err != nil {
+		t.Fatalf("LoadCIQUAL (nested): %v", err)
+	}
+	if len(nestedFoods) != len(siblingFoods) {
+		t.Fatalf("nested layout produced %d foods, sibling layout produced %d", len(nestedFoods), len(siblingFoods))
+	}
+	if len(nestedSources) != 1 || nestedSources[0].Rows != len(siblingFoods) {
+		t.Errorf("nested sources = %+v", nestedSources)
+	}
+
+	for _, name := range []string{"Banana", "Lait"} {
+		sibling := findByName(t, siblingFoods, name)
+		nested := findByName(t, nestedFoods, name)
+		siblingProf := food.Decode(sibling.Nutrients)
+		nestedProf := food.Decode(nested.Nutrients)
+		if len(nestedProf) != len(siblingProf) {
+			t.Errorf("%s: nested profile has %d keys, sibling has %d: nested=%v sibling=%v",
+				name, len(nestedProf), len(siblingProf), nestedProf, siblingProf)
+			continue
+		}
+		for key, want := range siblingProf {
+			got, ok := nestedProf[key]
+			if !ok {
+				t.Errorf("%s: nested profile is missing %q (sibling has %v)", name, key, want)
+				continue
+			}
+			if !float32Eq(got, want) {
+				t.Errorf("%s: nested %s = %v, sibling %s = %v", name, key, got, key, want)
+			}
+		}
+	}
+}
+
 // An unrecognised token must stop the build rather than become a zero.
 func TestLoadCIQUALRejectsUnknownToken(t *testing.T) {
 	dir := t.TempDir()
