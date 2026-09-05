@@ -3,9 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/boanntech/saolrian/backend/internal/food"
+	"github.com/boanntech/saolrian/backend/internal/foodpack/format"
+	"github.com/boanntech/saolrian/backend/internal/foodpack/source"
 )
 
 // TestWritePackAtomicallyLeavesDestinationUntouchedOnFailure proves that a
@@ -88,5 +91,67 @@ func TestWritePackAtomicallySucceeds(t *testing.T) {
 			names[i] = e.Name()
 		}
 		t.Errorf("expected only the destination file to remain, got %v (a temp file was left behind)", names)
+	}
+}
+
+// A work directory laid out the way fetch leaves it must build without any
+// per-source flags — that is the whole point of the manifest.
+func TestBuildFromWorkDirectory(t *testing.T) {
+	work := t.TempDir()
+	usda := filepath.Join(work, "usda_sr")
+	if err := os.MkdirAll(usda, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	copyTestdataUSDA(t, usda)
+	if err := source.WriteFetchRecord(usda, source.ManifestEntry{
+		Source: "usda_sr", URL: "https://example.test/sr.zip", SHA256: source.Unpinned,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(t.TempDir(), "pack.bin.zst")
+	if err := buildCmd([]string{"--work", work, "--version", "test", "--out", out}); err != nil {
+		t.Fatalf("buildCmd: %v", err)
+	}
+	f, err := os.Open(out)
+	if err != nil {
+		t.Fatalf("open pack: %v", err)
+	}
+	defer f.Close()
+	p, err := format.Read(f)
+	if err != nil {
+		t.Fatalf("format.Read: %v", err)
+	}
+	if len(p.Foods) == 0 {
+		t.Error("built pack has no foods")
+	}
+}
+
+// A work directory with nothing in it must say what to do, not produce an
+// empty pack.
+func TestBuildFromEmptyWorkDirectory(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "pack.bin.zst")
+	err := buildCmd([]string{"--work", t.TempDir(), "--version", "test", "--out", out})
+	if err == nil || !strings.Contains(err.Error(), "foodpack fetch") {
+		t.Fatalf("err = %v, want a message pointing at foodpack fetch", err)
+	}
+}
+
+// copyTestdataUSDA copies the Plan 1 USDA fixture CSVs into dir.
+func copyTestdataUSDA(t *testing.T, dir string) {
+	t.Helper()
+	src := filepath.Join("..", "..", "internal", "foodpack", "source", "testdata", "usda")
+	names, err := os.ReadDir(src)
+	if err != nil {
+		t.Fatalf("read fixture dir: %v", err)
+	}
+	for _, n := range names {
+		b, err := os.ReadFile(filepath.Join(src, n.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", n.Name(), err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, n.Name()), b, 0o644); err != nil {
+			t.Fatalf("write %s: %v", n.Name(), err)
+		}
 	}
 }

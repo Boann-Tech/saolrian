@@ -1,0 +1,7 @@
+source,url,sha256,archive_kind,extract_to
+usda_foundation,https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_csv_2025-04-24.zip,unpinned,zip,usda_foundation
+usda_sr,https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_csv_2018-04.zip,unpinned,zip,usda_sr
+cnf,https://food-nutrition.canada.ca/hn-vsan/assets/cnf-fce_2015_csv.zip,unpinned,zip,cnf
+ciqual,https://ciqual.anses.fr/cms/sites/default/files/inline-files/CIQUAL2020_XML_2020_07_07.zip,unpinned,zip,ciqual
+cofid,https://assets.publishing.service.gov.uk/media/5eb6296486650c2ce2ba0d24/McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2019.xlsx,unpinned,xlsx,cofid
+afcd,https://www.foodstandards.gov.au/sites/default/files/2023-11/Release%202%20-%20Food%20nutrient%20database.xlsx,unpinned,xlsx,afcd

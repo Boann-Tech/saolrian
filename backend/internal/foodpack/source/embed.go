@@ -5,10 +5,11 @@ import (
 	"fmt"
 )
 
-// MappingFS holds the checked-in, human-auditable nutrient mapping tables.
-// These are the files to open when a number looks wrong.
+// MappingFS holds the checked-in, human-auditable nutrient mapping tables
+// and the archive manifest. These are the files to open when a number looks
+// wrong or a dataset has moved.
 //
-//go:embed all:mapping
+//go:embed all:mapping all:manifest
 var MappingFS embed.FS
 
 // LoadNamedMapping loads the mapping table for one dataset, e.g. "usda".

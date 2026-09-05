@@ -3,7 +3,8 @@
 // It is never linked into the server binary: the server imports only
 // internal/foodpack/format.
 //
-//	foodpack build  --usda ./work/usda --version 2026.09 --out ./pack.bin.zst
+//	foodpack fetch  --work ./work
+//	foodpack build  --work ./work --version 2026.09 --out ./pack.bin.zst
 //	foodpack verify --pack ./pack.bin.zst
 package main
 
@@ -21,11 +22,13 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: foodpack <build|verify> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: foodpack <fetch|build|verify> [flags]")
 		os.Exit(2)
 	}
 	var err error
 	switch os.Args[1] {
+	case "fetch":
+		err = fetchCmd(os.Args[2:])
 	case "build":
 		err = buildCmd(os.Args[2:])
 	case "verify":
@@ -39,16 +42,52 @@ func main() {
 	}
 }
 
+// sourceLoader runs one adapter over one extracted directory. The registry
+// is keyed on the manifest's source column, so adding a dataset is a
+// manifest row plus an entry here.
+type sourceLoader func(dir string, sink source.UnmappedSink) ([]format.RefFood, []format.SourceInfo, error)
+
+var loaders = map[string]sourceLoader{
+	// Both USDA subtypes come from LoadUSDA; each archive extracts to its
+	// own directory and the data_type column inside decides the subtype.
+	"usda_foundation": loadUSDADir,
+	"usda_sr":         loadUSDADir,
+}
+
+func loadUSDADir(dir string, sink source.UnmappedSink) ([]format.RefFood, []format.SourceInfo, error) {
+	m, err := source.LoadNamedMapping("usda")
+	if err != nil {
+		return nil, nil, err
+	}
+	return source.LoadUSDA(source.USDAOptions{
+		Dir:       dir,
+		DataTypes: []string{"foundation_food", "sr_legacy_food"},
+		Mapping:   m,
+		Unmapped:  sink,
+	})
+}
+
 func buildCmd(args []string) error {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
-	usdaDir := fs.String("usda", "", "directory of extracted USDA FDC CSVs")
+	work := fs.String("work", "", "work directory populated by `foodpack fetch`")
+	usdaDir := fs.String("usda", "", "directory of extracted USDA FDC CSVs (overrides --work)")
 	version := fs.String("version", "", "pack version, e.g. 2026.09")
 	out := fs.String("out", "", "output pack path")
+	reportUnmapped := fs.Bool("report-unmapped", false, "list every source nutrient code no mapping table covers")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *version == "" || *out == "" {
 		return fmt.Errorf("--version and --out are required")
+	}
+	if *work == "" && *usdaDir == "" {
+		return fmt.Errorf("pass --work, or at least one per-source directory flag")
+	}
+
+	var sink source.UnmappedSink
+	collector := source.NewUnmappedCollector()
+	if *reportUnmapped {
+		sink = collector.Note
 	}
 
 	pack := format.Pack{
@@ -57,32 +96,55 @@ func buildCmd(args []string) error {
 		NutrientKeys: food.Keys(),
 	}
 
-	if *usdaDir != "" {
-		m, err := source.LoadNamedMapping("usda")
+	dirs, err := resolveSourceDirs(*work, map[string]string{"usda_sr": *usdaDir})
+	if err != nil {
+		return err
+	}
+	rows := map[string]*format.SourceInfo{}
+	var order []string
+	seen := map[string]string{} // source\x00id -> the dir that produced it
+
+	for _, d := range dirs {
+		foods, sources, err := loaders[d.source](d.dir, sink)
 		if err != nil {
-			return err
+			return fmt.Errorf("%s: %w", d.source, err)
 		}
-		foods, sources, err := source.LoadUSDA(source.USDAOptions{
-			Dir:       *usdaDir,
-			DataTypes: []string{"foundation_food", "sr_legacy_food"},
-			Mapping:   m,
-		})
-		if err != nil {
-			return fmt.Errorf("usda: %w", err)
+		for _, f := range foods {
+			key := f.Source + "\x00" + f.SourceID
+			if prev, dup := seen[key]; dup {
+				return fmt.Errorf("%s/%s appears in both %s and %s; the work directory has an archive extracted twice",
+					f.Source, f.SourceID, prev, d.dir)
+			}
+			seen[key] = d.dir
 		}
-		// The adapter, not the CLI, owns the source/region/licence strings:
-		// each RefFood carries usda_foundation or usda_sr, so the
-		// attribution rows must be per subtype or nothing can join a food
-		// to its licence.
 		pack.Foods = append(pack.Foods, foods...)
-		pack.Sources = append(pack.Sources, sources...)
 		for _, s := range sources {
-			fmt.Printf("%s: %d foods\n", s.Source, s.Rows)
+			if got, ok := rows[s.Source]; ok {
+				got.Rows += s.Rows
+				continue
+			}
+			cp := s
+			// Spec §3 wants the build to record per-source checksums
+			// alongside counts and licences. The adapter cannot know which
+			// archive it was handed, so the hash is stamped here from the
+			// breadcrumb fetch left behind.
+			cp.ArchiveSHA256 = d.sha256
+			rows[s.Source] = &cp
+			order = append(order, s.Source)
 		}
+	}
+	for _, name := range order {
+		pack.Sources = append(pack.Sources, *rows[name])
+		fmt.Printf("%s: %d foods\n", name, rows[name].Rows)
 	}
 
 	if len(pack.Foods) == 0 {
 		return fmt.Errorf("no sources produced any foods; pass at least one source directory")
+	}
+
+	if *reportUnmapped {
+		fmt.Println()
+		fmt.Println(collector.Report())
 	}
 
 	size, err := writePackAtomically(*out, pack)
@@ -90,6 +152,71 @@ func buildCmd(args []string) error {
 		return err
 	}
 	fmt.Printf("wrote %s: %d foods, %.1f MB\n", *out, len(pack.Foods), float64(size)/(1<<20))
+	return nil
+}
+
+type sourceDir struct {
+	source string
+	dir    string
+	sha256 string // the archive this directory was extracted from, if known
+}
+
+// resolveSourceDirs turns a work directory plus any explicit overrides into
+// the list of (source, directory) pairs to load, in manifest order. A
+// source whose directory is absent is skipped: building a US-only pack
+// while the French download is still running has to stay possible.
+func resolveSourceDirs(work string, overrides map[string]string) ([]sourceDir, error) {
+	entries, err := source.LoadManifest()
+	if err != nil {
+		return nil, err
+	}
+	var out []sourceDir
+	for _, e := range entries {
+		loader, known := loaders[e.Source]
+		if !known || loader == nil {
+			continue // manifest row for an adapter this build does not have yet
+		}
+		dir := overrides[e.Source]
+		if dir == "" && work != "" {
+			candidate := filepath.Join(work, e.ExtractTo)
+			if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+				dir = candidate
+				if err := checkFetchRecord(candidate, e); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if dir == "" {
+			continue
+		}
+		sha := ""
+		if rec, ok, err := source.ReadFetchRecord(dir); err == nil && ok {
+			sha = rec.SHA256
+		}
+		out = append(out, sourceDir{source: e.Source, dir: dir, sha256: sha})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no source directories found; run `foodpack fetch --work <dir>` first")
+	}
+	return out, nil
+}
+
+// checkFetchRecord catches a manifest re-pinned without a re-fetch: the
+// directory then holds the old dataset while the manifest claims the new
+// one, and nothing else would notice.
+func checkFetchRecord(dir string, e source.ManifestEntry) error {
+	rec, ok, err := source.ReadFetchRecord(dir)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Fprintf(os.Stderr, "warning: %s was not populated by `foodpack fetch`; its provenance is unrecorded\n", dir)
+		return nil
+	}
+	if e.SHA256 != source.Unpinned && rec.SHA256 != e.SHA256 {
+		return fmt.Errorf("%s holds the archive %s but the manifest now pins %s; re-run `foodpack fetch --source %s`",
+			dir, rec.SHA256, e.SHA256, e.Source)
+	}
 	return nil
 }
 
