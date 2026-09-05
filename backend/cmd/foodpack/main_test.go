@@ -155,3 +155,172 @@ func copyTestdataUSDA(t *testing.T, dir string) {
 		}
 	}
 }
+
+// Both USDA subtypes route through loadUSDADir with the same DataTypes
+// filter, so the same fdc_id extracted into both usda_foundation/ and
+// usda_sr/ really would collide -- this is the check that catches an
+// archive extracted twice under one work directory.
+func TestBuildRejectsDuplicateAcrossWorkDirectories(t *testing.T) {
+	work := t.TempDir()
+	foundation := filepath.Join(work, "usda_foundation")
+	sr := filepath.Join(work, "usda_sr")
+	for _, dir := range []string{foundation, sr} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		copyTestdataUSDA(t, dir)
+	}
+
+	out := filepath.Join(t.TempDir(), "pack.bin.zst")
+	err := buildCmd([]string{"--work", work, "--version", "test", "--out", out})
+	if err == nil {
+		t.Fatal("want an error for a work directory with the same food extracted twice")
+	}
+	// The fixture's banana row (fdc_id 1105314) is sr_legacy_food, so both
+	// copies load it as source usda_sr; the error must name that
+	// (source, id) pair and both directories it was found in.
+	if !strings.Contains(err.Error(), "usda_sr/1105314") {
+		t.Errorf("err = %v, want it to name usda_sr/1105314", err)
+	}
+	if !strings.Contains(err.Error(), foundation) || !strings.Contains(err.Error(), sr) {
+		t.Errorf("err = %v, want it to name both %s and %s", err, foundation, sr)
+	}
+}
+
+// The two USDA archives are loaded through separate calls to loadUSDADir,
+// one per directory. When both directories contribute rows for the same
+// canonical source -- here usda_sr, because every row in both fixtures is
+// tagged sr_legacy_food -- the built pack's SourceInfo for that source
+// must carry the sum of both directories' row counts, not just the last
+// directory's.
+func TestBuildMergesSourceInfoAcrossDirectories(t *testing.T) {
+	work := t.TempDir()
+	foundation := filepath.Join(work, "usda_foundation")
+	sr := filepath.Join(work, "usda_sr")
+
+	if err := os.MkdirAll(foundation, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	copyTestdataUSDA(t, foundation) // banana (1105314) + spinach (1103648), 2 usda_sr rows
+
+	if err := os.MkdirAll(sr, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	copyTestdataUSDA(t, sr)
+	writeSecondUSDAFood(t, sr) // replaces food.csv/food_nutrient.csv with a disjoint fdc_id
+
+	out := filepath.Join(t.TempDir(), "pack.bin.zst")
+	if err := buildCmd([]string{"--work", work, "--version", "test", "--out", out}); err != nil {
+		t.Fatalf("buildCmd: %v", err)
+	}
+
+	f, err := os.Open(out)
+	if err != nil {
+		t.Fatalf("open pack: %v", err)
+	}
+	defer f.Close()
+	p, err := format.Read(f)
+	if err != nil {
+		t.Fatalf("format.Read: %v", err)
+	}
+
+	wantIDs := map[string]bool{"1105314": false, "1103648": false, "2000001": false}
+	for _, rf := range p.Foods {
+		if _, ok := wantIDs[rf.SourceID]; ok {
+			wantIDs[rf.SourceID] = true
+		}
+	}
+	for id, seen := range wantIDs {
+		if !seen {
+			t.Errorf("pack is missing food %s from one of the two directories", id)
+		}
+	}
+
+	for _, s := range p.Sources {
+		if s.Source == "usda_sr" {
+			if s.Rows != 3 {
+				t.Errorf("usda_sr SourceInfo.Rows = %d, want 3 (2 from usda_foundation/ + 1 from usda_sr/)", s.Rows)
+			}
+			return
+		}
+	}
+	t.Fatal("no usda_sr SourceInfo in the built pack")
+}
+
+// writeSecondUSDAFood replaces dir's food.csv/food_nutrient.csv with a
+// single food whose fdc_id does not collide with the shared fixture, so
+// build --work has two directories to merge into one source. nutrient.csv
+// and measure_unit.csv are left as copied from the fixture: LoadUSDA
+// requires every mapped nutrient code to be defined in nutrient.csv,
+// whether or not any food actually uses it. food_portion.csv is also left
+// alone -- its rows reference fdc_ids absent from this directory's new
+// food.csv and are simply skipped.
+func writeSecondUSDAFood(t *testing.T, dir string) {
+	t.Helper()
+	food := `"fdc_id","data_type","description","food_category_id","publication_date"
+"2000001","sr_legacy_food","Second Food, raw","0900","2019-04-01"
+`
+	if err := os.WriteFile(filepath.Join(dir, "food.csv"), []byte(food), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nutrient := `"id","fdc_id","nutrient_id","amount"
+"1","2000001","1008","55.0"
+`
+	if err := os.WriteFile(filepath.Join(dir, "food_nutrient.csv"), []byte(nutrient), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// checkFetchRecord's mismatch branch is unreachable through buildCmd
+// today, because every row of the checked-in manifest is unpinned. Test
+// it directly instead.
+func TestCheckFetchRecordDetectsMismatch(t *testing.T) {
+	dir := t.TempDir()
+	if err := source.WriteFetchRecord(dir, source.ManifestEntry{
+		Source: "cnf", URL: "https://example.test/cnf.zip", SHA256: strings.Repeat("a", 64),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := checkFetchRecord(dir, source.ManifestEntry{
+		Source: "cnf", SHA256: strings.Repeat("b", 64),
+	})
+	if err == nil {
+		t.Fatal("want an error for a manifest re-pinned without a re-fetch")
+	}
+	if !strings.Contains(err.Error(), "foodpack fetch --source cnf") {
+		t.Errorf("err = %v, want it to say to re-run foodpack fetch --source cnf", err)
+	}
+}
+
+// A directory fetch never populated must warn, not error: build must
+// still be able to use a directory someone populated by hand.
+func TestCheckFetchRecordAbsentWarnsAndReturnsNil(t *testing.T) {
+	sha, err := checkFetchRecord(t.TempDir(), source.ManifestEntry{
+		Source: "cnf", SHA256: strings.Repeat("a", 64),
+	})
+	if err != nil {
+		t.Fatalf("checkFetchRecord: %v, want nil for a directory fetch never populated", err)
+	}
+	if sha != "" {
+		t.Errorf("sha = %q, want empty for a directory with no fetch record", sha)
+	}
+}
+
+// A record whose hash matches what the manifest pins must return that
+// hash and no error.
+func TestCheckFetchRecordMatchReturnsNil(t *testing.T) {
+	dir := t.TempDir()
+	sha := strings.Repeat("a", 64)
+	if err := source.WriteFetchRecord(dir, source.ManifestEntry{
+		Source: "cnf", URL: "https://example.test/cnf.zip", SHA256: sha,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := checkFetchRecord(dir, source.ManifestEntry{Source: "cnf", SHA256: sha})
+	if err != nil {
+		t.Fatalf("checkFetchRecord: %v, want nil when the recorded hash matches the pinned one", err)
+	}
+	if got != sha {
+		t.Errorf("got sha %q, want %q", got, sha)
+	}
+}
