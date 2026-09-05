@@ -106,6 +106,27 @@ than record `0`. Consequences that follow from it:
 Violating this makes every daily total under-report, which reads to a user
 as a deficiency that does not exist.
 
+#### Source sentinels
+
+Only USDA leaves missing data as an empty cell. The others encode it in
+band, and the three cases mean genuinely different things:
+
+| Sentinel | Sources | Stored as |
+|---|---|---|
+| `Tr`, `traces` | CoFID, AFCD, CIQUAL | real `0.0` |
+| `N`, `-`, blank | CoFID, AFCD, CIQUAL | absent |
+| `[12]`, `<0.1` | CoFID, CIQUAL | the number, `12` / `0.1` |
+
+Trace is a measurement, not a gap: the lab looked and found a negligible
+amount, so `0` is the honest value and dropping the key would understate
+coverage. Not-measured is a gap. Bracketed figures are estimated or
+borrowed from a similar food, but the source vouches for them, so they are
+taken at face value.
+
+Each source declares its own sentinel table. A non-numeric token that is
+not in that table is a **build error**, never a silent zero — a new
+sentinel appearing in a dataset refresh must stop the build.
+
 ### Unit normalization
 
 The main correctness hazard. CoFID reports some values in µg where CIQUAL
@@ -229,15 +250,27 @@ decoder, not the adapters. Run by hand or in CI when datasets update (roughly
 yearly). Four stages:
 
 1. **fetch** — download raw archives to a work directory. URLs and SHA-256
-   checksums are pinned in a checked-in manifest, so a silently changed
-   upstream file fails loudly.
+   checksums are pinned in a checked-in manifest
+   (`source,url,sha256,archive_kind,extract_to`), so a silently changed
+   upstream file fails loudly. On a 404 or a checksum mismatch the command
+   fails and prints the path to drop the file into by hand — the national
+   datasets move their download URLs often enough that a downloader alone
+   cannot be the only route in. `build` re-checks the recorded hash of
+   every file it reads.
 2. **normalize** — per-source adapters map raw rows to canonical
    `RefFood` structs: unit conversion, name normalization, `search_text`
    generation, portion extraction, range assertions.
 3. **build** — emit `foodpack.<version>.bin.zst` plus a manifest
    recording per-source row counts, checksums and licences.
 4. **verify** — golden assertions against known foods (banana kcal,
-   spinach iron, salmon vitamin D, whole milk calcium) within tolerance.
+   spinach iron, salmon vitamin D, whole milk calcium) within tolerance,
+   plus two whole-pack checks: **cross-source agreement**, asserting that
+   anchor foods carried by several sources agree on energy and macros
+   within a wide band (~25%), and **attribution completeness**, asserting
+   every food's source has a matching attribution row. A golden row covers
+   one food per source; a whole-column unit error — kJ read as kcal — moves
+   a source clean outside the agreement band even where no golden row
+   looks at it.
 
 ### Adapters are not equal work
 
@@ -249,9 +282,16 @@ yearly). Four stages:
 
 The genuinely reviewable artifact per source is its mapping table:
 source nutrient code → canonical key → conversion factor. These live as
-checked-in CSVs under `backend/internal/foodpack/mapping/<source>.csv`,
-not as Go maps, because that is the file a human will open when a number
-looks wrong.
+checked-in CSVs under
+`backend/internal/foodpack/source/mapping/<source>.csv`, not as Go maps,
+because that is the file a human will open when a number looks wrong.
+
+USDA, CNF and CIQUAL identify nutrients by a stable numeric code, so that
+is what `source_code` holds. CoFID and AFCD have no code column — a
+nutrient is a spreadsheet column, identified only by its header text — so
+for those two `source_code` holds the header string, and a mapped header
+absent from the sheet fails the build exactly as a mapped-but-missing
+nutrient code does.
 
 ### Pack encoding and size
 
@@ -498,6 +538,11 @@ TDD throughout, per the project's normal workflow.
 - **Mapping tables**: assert every canonical key referenced by a mapping
   exists, and every source nutrient code either maps or is explicitly
   listed as ignored — no silent drops.
+- **Spreadsheet fixtures**: the `.xlsx` adapters build their fixtures in
+  the test, writing a small workbook from a Go table literal into
+  `t.TempDir()`. No binary blobs in git, the fixture stays diffable in
+  review, and the real `excelize` read path is still exercised. Sentinel
+  cells are ordinary strings, so `Tr`, `N` and `[12]` are cheap to cover.
 - **Providers**: `httptest` fakes for OFF covering success, 404,
   malformed JSON, and timeout.
 - **Cache**: injectable clock. Fresh hit, stale serve-and-refresh, miss,
