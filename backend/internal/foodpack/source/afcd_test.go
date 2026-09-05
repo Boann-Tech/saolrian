@@ -21,6 +21,10 @@ total dietary fibre (g),fibre,1,Fibre
 sodium (na) (mg),sodium,1,Sodium
 iron (fe) (mg),iron,1,Iron
 vitamin c (mg),vitamin_c,1,Vitamin C
+"total saturated fatty acids, equated (mg)",fat_saturated,0.001,mg to g
+"total monounsaturated fatty acids, equated (mg)",fat_monounsaturated,0.001,mg to g
+"total polyunsaturated fatty acids, equated (mg)",fat_polyunsaturated,0.001,mg to g
+"total trans fatty acids, imputed (mg)",fat_trans,0.001,mg to g
 "energy, without dietary fibre, equated (kj)",-,1,superseded by the with-fibre figure
 `
 
@@ -38,10 +42,14 @@ func afcdFixture(t *testing.T) string {
 				"Available carbohydrate, without sugar alcohols \n(g)",
 				"Total dietary fibre \n(g)", "Sodium (Na) \n(mg)",
 				"Iron (Fe) \n(mg)", "Vitamin C \n(mg)", "Caffeine \n(mg)",
+				"Total saturated fatty acids, equated \n(mg)",
+				"Total monounsaturated fatty acids, equated \n(mg)",
+				"Total polyunsaturated fatty acids, equated \n(mg)",
+				"Total trans fatty acids, imputed \n(mg)",
 			},
-			{"F009784", "24101", "Banana, cavendish, peeled, raw", "395", "372", "1.4", "0.2", "20.3", "2.4", "1", "0.3", "9", "0"},
-			{"F000885", "19101", "Milk, cow, fluid, whole", "268", "268", "3.3", "3.4", "4.6", "0", "43", "0.1", "1", "0"},
-			{"F999999", "99999", "Food with no data", "", "", "", "", "", "", "", "", "", ""},
+			{"F009784", "24101", "Banana, cavendish, peeled, raw", "395", "372", "1.4", "0.2", "20.3", "2.4", "1", "0.3", "9", "0", "1000", "500", "300", "10"},
+			{"F000885", "19101", "Milk, cow, fluid, whole", "268", "268", "3.3", "3.4", "4.6", "0", "43", "0.1", "1", "0", "2200", "900", "100", "100"},
+			{"F999999", "99999", "Food with no data", "", "", "", "", "", "", "", "", "", "", "", "", "", ""},
 		},
 	})
 }
@@ -97,6 +105,42 @@ func TestLoadAFCDConvertsKilojoulesToKilocalories(t *testing.T) {
 	got := food.Decode(banana.Nutrients)["energy_kcal"]
 	if math.Abs(got-94.4) > 0.5 {
 		t.Errorf("energy_kcal = %v, want ~94.4 (395 kJ); a value near 395 means the factor was not applied", got)
+	}
+}
+
+// AFCD reports every fatty-acid family in milligrams against a canonical
+// unit of grams, so all four rows carry a deliberate 0.001 factor that
+// headerMappingCheck's unit guard cannot verify (it exempts any row whose
+// factor is not 1, because such a row is asserting its own conversion).
+// That leaves this test as the only thing standing between a typo in
+// mapping/afcd.csv and every Australian food shipping its saturated,
+// mono-, poly- and trans fat at 1000x its real value. The fixture uses a
+// different milligram figure per nutrient so a mapping row copied onto the
+// wrong canonical key is also caught, not just a wrong factor.
+func TestLoadAFCDConvertsFattyAcidMilligramsToGrams(t *testing.T) {
+	foods, _, err := loadAFCDFixture(t, afcdTestMapping)
+	if err != nil {
+		t.Fatalf("LoadAFCD: %v", err)
+	}
+	banana := findByName(t, foods, "Banana")
+	prof := food.Decode(banana.Nutrients)
+	for key, want := range map[string]float64{
+		"fat_saturated":       1.0,  // 1000 mg
+		"fat_monounsaturated": 0.5,  // 500 mg
+		"fat_polyunsaturated": 0.3,  // 300 mg
+		"fat_trans":           0.01, // 10 mg
+	} {
+		got, ok := prof[key]
+		if !ok {
+			t.Errorf("%s is missing; the mapping row did not match its fixture column", key)
+			continue
+		}
+		if !float32Eq(got, want) {
+			t.Errorf("%s = %v, want %v (source was %v mg); a value ~1000x too high means the mg-to-g factor was dropped, "+
+				"~10x too high or too low means it was mis-scaled (e.g. 0.01 instead of 0.001), "+
+				"and a value matching a different row means the mapping keys were swapped",
+				key, got, want, want*1000)
+		}
 	}
 }
 

@@ -21,9 +21,12 @@ const (
 	afcdURL     = "https://www.foodstandards.gov.au/science-data/food-composition-databases"
 )
 
-// afcdValues: AFCD leaves an unmeasured cell blank and writes a trace as 0
-// already, so the only sentinel it needs is the blank. "Tr" is accepted
-// because it appears in some derived releases.
+// afcdValues: a blank cell and "N" both mean "not measured", and "-" is
+// accepted as an alternative spelling of the same thing. "Tr" is a measured
+// trace and parses to a real 0.0. These are handled defensively, in the
+// same shape as CoFID's sentinels; they have not yet been confirmed against
+// the real AFCD codebook, so treat "N" and "-" as provisional until a real
+// download is checked against them.
 var afcdValues = ValueSyntax{
 	Absent: []string{"N", "-"},
 	Trace:  []string{"Tr"},
