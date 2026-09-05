@@ -1,13 +1,78 @@
 package routes
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	_ "github.com/boanntech/saolrian/backend/internal/migrations"
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
 )
+
+// newTestMux builds a real PocketBase router (default middlewares, incl.
+// loadAuthToken, plus this app's /api/saolrian routes) around the given test
+// app, the same way PocketBase's own tests.ApiScenario does internally
+// (see tests.ApiScenario.test in the vendored pocketbase module) — this lets
+// handler tests exercise the actual HTTP layer (auth middleware, e.BindBody,
+// status codes/response shape) rather than calling handler funcs directly.
+//
+// Unlike ApiScenario (which is built for a single request/response per
+// scenario), this returns a reusable http.Handler so a test can drive
+// several requests against the same app/data — needed for the job-creation
+// + row-assertion flow and the two-user push isolation tests below.
+func newTestMux(t *testing.T, app *tests.TestApp) http.Handler {
+	t.Helper()
+
+	baseRouter, err := apis.NewRouter(app)
+	if err != nil {
+		t.Fatalf("failed to build base router: %v", err)
+	}
+
+	serveEvent := new(core.ServeEvent)
+	serveEvent.App = app
+	serveEvent.Router = baseRouter
+
+	var mux http.Handler
+	err = app.OnServe().Trigger(serveEvent, func(e *core.ServeEvent) error {
+		Register(e.Router)
+		m, buildErr := e.Router.BuildMux()
+		if buildErr != nil {
+			return buildErr
+		}
+		mux = m
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("failed to trigger serve event: %v", err)
+	}
+	return mux
+}
+
+// authedRequest builds an httptest request authenticated as the given user,
+// the same way PocketBase's own middleware tests do (raw token in the
+// "Authorization" header, no "Bearer " prefix — see loadAuthToken in the
+// vendored apis/middlewares.go).
+func authedRequest(t *testing.T, user *core.Record, method, url string, body []byte) *http.Request {
+	t.Helper()
+	token, err := user.NewAuthToken()
+	if err != nil {
+		t.Fatalf("failed to mint auth token: %v", err)
+	}
+	var req *http.Request
+	if body != nil {
+		req = httptest.NewRequest(method, url, bytes.NewReader(body))
+	} else {
+		req = httptest.NewRequest(method, url, nil)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", token)
+	return req
+}
 
 func newTestAppWithUser(t *testing.T) (*tests.TestApp, *core.Record) {
 	t.Helper()
@@ -377,4 +442,94 @@ func TestLoseItImportHandler_CreatesJobAndProcessesAsync(t *testing.T) {
 		t.Fatalf("expected 1 diary entry, got %d (err=%v)", len(entries), err)
 	}
 	_ = done
+}
+
+// TestLoseItImportHandlerHTTP_CreatesJobAndPersistsCategories drives the
+// handler through a real HTTP request (unlike
+// TestLoseItImportHandler_CreatesJobAndProcessesAsync above, which seeds the
+// import_jobs row by hand and calls runImportJob directly) so it actually
+// exercises e.BindBody, the 202 response shape, e.Auth-based user scoping,
+// and requestedCategories persistence end to end.
+func TestLoseItImportHandlerHTTP_CreatesJobAndPersistsCategories(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+	mux := newTestMux(t, app)
+
+	body := []byte(`{
+		"categories": {
+			"diary": [{"date":"2023-05-02","name":"Toast","quantity":1,"unit":"serving","meal":"Breakfast","kcal":200}],
+			"weight": [{"date":"2023-05-02","kg":91.5}]
+		}
+	}`)
+	req := authedRequest(t, user, http.MethodPost, "/api/saolrian/import/loseit", body)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	res := rec.Result()
+
+	if res.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body = %s", res.StatusCode, http.StatusAccepted, rec.Body.String())
+	}
+
+	var respBody struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &respBody); err != nil {
+		t.Fatalf("failed to decode response body %q: %v", rec.Body.String(), err)
+	}
+	if respBody.JobID == "" {
+		t.Fatalf("expected a non-empty job_id in response, got %q", rec.Body.String())
+	}
+
+	job, err := app.FindRecordById("import_jobs", respBody.JobID)
+	if err != nil {
+		t.Fatalf("created job not found: %v", err)
+	}
+	if got := job.GetString("user"); got != user.Id {
+		t.Errorf("job.user = %q, want %q (auth scoping via e.Auth.Id)", got, user.Id)
+	}
+	gotCategories := job.GetStringSlice("categories")
+	wantCategories := []string{"diary", "weight"}
+	if len(gotCategories) != len(wantCategories) {
+		t.Fatalf("job.categories = %v, want %v", gotCategories, wantCategories)
+	}
+	for i, want := range wantCategories {
+		if gotCategories[i] != want {
+			t.Errorf("job.categories[%d] = %q, want %q", i, gotCategories[i], want)
+		}
+	}
+
+	// the job runs asynchronously; wait for it to finish so its goroutine
+	// doesn't leak past the test/app cleanup.
+	waitForJobStatus(t, app, respBody.JobID, "done")
+}
+
+// TestLoseItImportHandlerHTTP_RejectsInvalidJSON exercises e.BindBody's
+// error path through the real handler.
+func TestLoseItImportHandlerHTTP_RejectsInvalidJSON(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+	mux := newTestMux(t, app)
+
+	req := authedRequest(t, user, http.MethodPost, "/api/saolrian/import/loseit", []byte(`{not valid json`))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+// TestLoseItImportHandlerHTTP_RequiresAuth exercises the RequireAuth
+// middleware bound on the /api/saolrian group in Register — an
+// unauthenticated request must never reach the handler.
+func TestLoseItImportHandlerHTTP_RequiresAuth(t *testing.T) {
+	app, _ := newTestAppWithUser(t)
+	mux := newTestMux(t, app)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/saolrian/import/loseit", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
 }
