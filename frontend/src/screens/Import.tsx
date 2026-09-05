@@ -259,13 +259,27 @@ export default function Import() {
               }
               role={job.status === 'failed' ? 'alert' : 'status'}
             >
-              {liveStatusUnavailable
-                ? 'Import started, but live status could not be loaded — check back later.'
-                : job.status === 'queued' || job.status === 'running'
-                  ? "Importing… you can leave this page, you'll be notified when it's done."
-                  : job.status === 'done'
-                    ? 'Import complete — see the toast for totals.'
-                    : `Import failed: ${job.error ?? 'unknown error'}`}
+              {liveStatusUnavailable ? (
+                'Import started, but live status could not be loaded — check back later.'
+              ) : job.status === 'queued' || job.status === 'running' ? (
+                "Importing… you can leave this page, you'll be notified when it's done."
+              ) : job.status === 'done' ? (
+                <>
+                  Import complete.
+                  <ul className="mt-1.5 flex flex-col gap-0.5 text-xs font-normal text-good-ink">
+                    {Object.entries(job.counts)
+                      .filter(([, c]) => c.imported > 0 || c.skipped > 0)
+                      .map(([key, c]) => (
+                        <li key={key}>
+                          {previews.find((p) => p.key === key)?.label ?? key} — {formatInt(c.imported)} imported
+                          {c.skipped > 0 && `, ${formatInt(c.skipped)} skipped`}
+                        </li>
+                      ))}
+                  </ul>
+                </>
+              ) : (
+                `Import failed: ${job.error ?? 'unknown error'}`
+              )}
             </div>
           )}
         </Card>
