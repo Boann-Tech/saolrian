@@ -54,6 +54,7 @@ var loaders = map[string]sourceLoader{
 	"usda_sr":         loadUSDADir,
 	"cnf":             loadCNFDir,
 	"ciqual":          loadCIQUALDir,
+	"cofid":           loadCoFIDDir,
 }
 
 func loadUSDADir(dir string, sink source.UnmappedSink) ([]format.RefFood, []format.SourceInfo, error) {
@@ -83,6 +84,14 @@ func loadCIQUALDir(dir string, sink source.UnmappedSink) ([]format.RefFood, []fo
 		return nil, nil, err
 	}
 	return source.LoadCIQUAL(source.CIQUALOptions{Dir: dir, Mapping: m, Unmapped: sink})
+}
+
+func loadCoFIDDir(dir string, sink source.UnmappedSink) ([]format.RefFood, []format.SourceInfo, error) {
+	m, err := source.LoadNamedMapping("cofid")
+	if err != nil {
+		return nil, nil, err
+	}
+	return source.LoadCoFID(source.CoFIDOptions{Dir: dir, Mapping: m, Unmapped: sink})
 }
 
 func buildCmd(args []string) error {
