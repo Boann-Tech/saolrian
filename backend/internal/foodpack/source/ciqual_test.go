@@ -50,11 +50,10 @@ func TestLoadCIQUALReadsNutrients(t *testing.T) {
 		"fat":          0.5,  // "< 0,5" takes the bound
 		"carbohydrate": 20.0, // "[20,0]" estimated, taken at face value
 	} {
-		// food.Encode/Decode round-trips every value through float32 (see
-		// float32Eq in usda_test.go); 74.9 lands 1.53e-6 off its float64
-		// value after that round trip, just past a 1e-6 tolerance, so this
-		// loop uses the same margin float32Eq already established.
-		if got := prof[key]; math.Abs(got-want) > 1e-4 {
+		// float32Eq (usda_test.go): food.Encode/Decode round-trips every
+		// value through float32, and 74.9 lands 1.53e-6 off its float64
+		// value after that round trip -- just past a naive 1e-6 tolerance.
+		if got := prof[key]; !float32Eq(got, want) {
 			t.Errorf("%s = %v, want %v", key, got, want)
 		}
 	}
