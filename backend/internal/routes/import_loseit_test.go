@@ -119,6 +119,31 @@ func TestImportDiaryRows_SkipsNegativeQuantityAllowsZero(t *testing.T) {
 	}
 }
 
+func TestImportDiaryRows_SkipsNegativeKcalAndMacros(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+
+	rows := []diaryRow{
+		{Date: "2023-05-02", Name: "Negative Kcal", Quantity: 1, Unit: "g", Meal: "Breakfast", Kcal: -100},
+		{Date: "2023-05-02", Name: "Negative Protein", Quantity: 1, Unit: "g", Meal: "Breakfast", Kcal: 100, ProteinG: -5},
+		{Date: "2023-05-02", Name: "Negative Carbs", Quantity: 1, Unit: "g", Meal: "Breakfast", Kcal: 100, CarbsG: -5},
+		{Date: "2023-05-02", Name: "Negative Fat", Quantity: 1, Unit: "g", Meal: "Breakfast", Kcal: 100, FatG: -5},
+		{Date: "2023-05-02", Name: "Good Row", Quantity: 1, Unit: "serving", Meal: "Breakfast", Kcal: 200, ProteinG: 5, CarbsG: 30, FatG: 4},
+	}
+
+	got := importDiaryRows(app, user.Id, rows)
+	if got.Imported != 1 || got.Skipped != 4 {
+		t.Fatalf("got %+v, want 1 imported (good row), 4 skipped (negative kcal/protein/carbs/fat)", got)
+	}
+
+	entries, err := app.FindRecordsByFilter("diary_entries", "user = {:uid}", "", 0, 0, map[string]any{"uid": user.Id})
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("expected 1 diary entry, got %d (err=%v)", len(entries), err)
+	}
+	if got, want := entries[0].GetString("name_snapshot"), "Good Row"; got != want {
+		t.Errorf("name_snapshot = %v, want %v", got, want)
+	}
+}
+
 func TestImportWeightRows_DedupsOnReimport(t *testing.T) {
 	app, user := newTestAppWithUser(t)
 
@@ -201,6 +226,31 @@ func TestImportFoodCatalogRows_GramsAndServings(t *testing.T) {
 	again := importFoodCatalogRows(app, user.Id, rows)
 	if again.Skipped != 2 {
 		t.Fatalf("re-import: got %+v, want 2 skipped", again)
+	}
+}
+
+func TestImportFoodCatalogRows_SkipsNegativeKcalAndMacros(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+
+	rows := []foodRow{
+		{Name: "Negative Kcal", UniqueID: "neg-kcal", Quantity: 500, Measure: "Grams", Kcal: -300, ProteinG: 10, CarbsG: 40, FatG: 5},
+		{Name: "Negative Protein", UniqueID: "neg-protein", Quantity: 500, Measure: "Grams", Kcal: 300, ProteinG: -10, CarbsG: 40, FatG: 5},
+		{Name: "Negative Carbs", UniqueID: "neg-carbs", Quantity: 500, Measure: "Grams", Kcal: 300, ProteinG: 10, CarbsG: -40, FatG: 5},
+		{Name: "Negative Fat", UniqueID: "neg-fat", Quantity: 500, Measure: "Grams", Kcal: 300, ProteinG: 10, CarbsG: 40, FatG: -5},
+		{Name: "Good Row", UniqueID: "good-row", Quantity: 500, Measure: "Grams", Kcal: 300, ProteinG: 10, CarbsG: 40, FatG: 5},
+	}
+
+	got := importFoodCatalogRows(app, user.Id, rows)
+	if got.Imported != 1 || got.Skipped != 4 {
+		t.Fatalf("got %+v, want 1 imported (good row), 4 skipped (negative kcal/protein/carbs/fat)", got)
+	}
+
+	foods, err := app.FindRecordsByFilter("foods", "user = {:uid}", "", 0, 0, map[string]any{"uid": user.Id})
+	if err != nil || len(foods) != 1 {
+		t.Fatalf("expected 1 food record, got %d (err=%v)", len(foods), err)
+	}
+	if got, want := foods[0].GetString("source_id"), "good-row"; got != want {
+		t.Errorf("source_id = %v, want %v", got, want)
 	}
 }
 
