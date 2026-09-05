@@ -20,10 +20,40 @@ import (
 // data.
 var ErrMappingNotInSource = errors.New("mapped nutrient code absent from source dataset")
 
+// ErrDuplicateNutrientNumber means two FDC nutrient ids declare the same
+// nutrient_nbr. The whole adapter keys on nutrient_nbr because it is the
+// stable identifier across releases; if it is not unique, which of the two
+// definitions wins is decided by Go map ordering, so the same archive
+// builds a different pack on every run. Fail instead of guessing.
+var ErrDuplicateNutrientNumber = errors.New("nutrient_nbr defined by two different nutrient ids")
+
+// The USDA source subtypes, spelled exactly as spec §2 enumerates them for
+// food_ref.source. These constants and the region/licence/URL strings below
+// are the single definition: the CLI takes its SourceInfo from LoadUSDA
+// rather than restating them, because when the two disagreed there was no
+// way to join a food to its attribution row.
+const (
+	SourceUSDAFoundation = "usda_foundation"
+	SourceUSDASR         = "usda_sr"
+)
+
 const (
 	usdaLicence = "public-domain"
 	usdaRegion  = "us"
+	usdaURL     = "https://fdc.nal.usda.gov/"
 )
+
+// usdaSubtypeOrder fixes the order of the returned SourceInfo slice, so two
+// builds of the same archive produce byte-identical packs.
+var usdaSubtypeOrder = []string{SourceUSDAFoundation, SourceUSDASR}
+
+// usdaSourceFor maps an FDC data_type to a canonical source value.
+func usdaSourceFor(dataType string) string {
+	if dataType == "foundation_food" {
+		return SourceUSDAFoundation
+	}
+	return SourceUSDASR
+}
 
 // USDAOptions configures the FoodData Central adapter.
 type USDAOptions struct {
@@ -32,23 +62,24 @@ type USDAOptions struct {
 	Mapping   *Mapping
 }
 
-// LoadUSDA reads the FDC CSV export and returns canonical reference foods.
-func LoadUSDA(o USDAOptions) ([]format.RefFood, error) {
+// LoadUSDA reads the FDC CSV export and returns canonical reference foods
+// alongside one SourceInfo per USDA subtype that actually contributed rows.
+func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 	if o.Mapping == nil {
-		return nil, errors.New("usda: mapping is required")
+		return nil, nil, errors.New("usda: mapping is required")
 	}
 
 	nutrients, err := usdaNutrients(o.Dir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := usdaCheckMapping(o.Mapping, nutrients); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	foods, order, err := usdaFoods(o.Dir, o.DataTypes)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	profiles := map[string]food.Profile{}
@@ -77,15 +108,24 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, error) {
 			profiles[fdcID][key] = value
 			return nil
 		}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	portions, err := usdaPortions(o.Dir, foods)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	out := make([]format.RefFood, 0, len(order))
+	rows := map[string]int{}
+
+	// Range violations are collected across the whole load rather than
+	// returned on the first offender. A real archive surfacing one defect
+	// per run makes fixing a mapping table an afternoon of rebuilds; the
+	// operator needs the whole list at once. order is food.csv order, so
+	// the list is deterministic.
+	var violations []string
+
 	for _, fdcID := range order {
 		f := foods[fdcID]
 		prof := profiles[fdcID]
@@ -93,13 +133,15 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, error) {
 			continue // no nutrient data at all: not worth shipping
 		}
 		if err := food.Validate(prof); err != nil {
-			return nil, fmt.Errorf("usda %s (%s): %w", fdcID, f.name, err)
+			violations = append(violations, fmt.Sprintf("%s/%s (%s): %v", f.source, fdcID, f.name, err))
+			continue
 		}
 		p := portions[fdcID]
 		var defaultServing float64
 		if len(p) > 0 {
 			defaultServing = p[0].Grams
 		}
+		rows[f.source]++
 		out = append(out, format.RefFood{
 			Source:          f.source,
 			SourceID:        fdcID,
@@ -112,7 +154,21 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, error) {
 			DefaultServingG: defaultServing,
 		})
 	}
-	return out, nil
+	if err := food.RangeViolationsError(violations); err != nil {
+		return nil, nil, fmt.Errorf("usda: %w", err)
+	}
+
+	var sources []format.SourceInfo
+	for _, sub := range usdaSubtypeOrder {
+		if rows[sub] == 0 {
+			continue
+		}
+		sources = append(sources, format.SourceInfo{
+			Source: sub, Region: usdaRegion, Licence: usdaLicence,
+			URL: usdaURL, Rows: rows[sub],
+		})
+	}
+	return out, sources, nil
 }
 
 type usdaNutrient struct {
@@ -126,22 +182,45 @@ type usdaFood struct {
 }
 
 // usdaNutrients maps FDC internal nutrient id -> stable nutrient_nbr + unit.
+//
+// It rejects a dataset in which two ids declare the same non-empty
+// nutrient_nbr. Everything downstream — the mapping check and the data path
+// alike — collapses ids to nutrient_nbr, so a collision means one
+// definition silently overwrites the other in an order Go map iteration
+// picks at random.
 func usdaNutrients(dir string) (map[string]usdaNutrient, error) {
 	out := map[string]usdaNutrient{}
+	definedBy := map[string]string{} // nutrient_nbr -> the id that first declared it
+
 	err := usdaEachRow(filepath.Join(dir, "nutrient.csv"),
 		[]string{"id", "unit_name", "nutrient_nbr"},
 		func(get func(string) string) error {
-			out[get("id")] = usdaNutrient{
+			id := strings.TrimSpace(get("id"))
+			n := usdaNutrient{
 				number: strings.TrimSpace(get("nutrient_nbr")),
 				unit:   strings.ToUpper(strings.TrimSpace(get("unit_name"))),
 			}
+			if n.number != "" {
+				if prev, seen := definedBy[n.number]; seen && prev != id {
+					return fmt.Errorf("%w: nutrient_nbr %s is declared by nutrient id %s and again by id %s in nutrient.csv",
+						ErrDuplicateNutrientNumber, n.number, prev, id)
+				}
+				definedBy[n.number] = id
+			}
+			out[id] = n
 			return nil
 		})
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // usdaCheckMapping fails the build when the mapping is stale or its factor
 // disagrees with the dataset's declared unit.
+//
+// usdaNutrients has already guaranteed nutrient_nbr is unique, so this
+// by-number index cannot lose a definition.
 func usdaCheckMapping(m *Mapping, nutrients map[string]usdaNutrient) error {
 	byNumber := map[string]usdaNutrient{}
 	for _, n := range nutrients {
@@ -206,11 +285,13 @@ func usdaFoods(dir string, dataTypes []string) (map[string]usdaFood, []string, e
 				return nil
 			}
 			id := get("fdc_id")
-			src := "usda_sr"
-			if dt == "foundation_food" {
-				src = "usda_foundation"
+			if _, seen := foods[id]; seen {
+				// A repeated fdc_id would append to order twice and emit two
+				// RefFoods with the same (source, source_id), which is the
+				// unique index the seed migration relies on. First row wins.
+				return nil
 			}
-			foods[id] = usdaFood{name: name, source: src}
+			foods[id] = usdaFood{name: name, source: usdaSourceFor(dt)}
 			order = append(order, id)
 			return nil
 		})

@@ -21,7 +21,7 @@ func float32Eq(got, want float64) bool {
 
 func TestLoadUSDAFiltersByDataType(t *testing.T) {
 	m, _ := LoadNamedMapping("usda")
-	foods, err := LoadUSDA(USDAOptions{
+	foods, _, err := LoadUSDA(USDAOptions{
 		Dir:       filepath.Join("testdata", "usda"),
 		DataTypes: []string{"sr_legacy_food"},
 		Mapping:   m,
@@ -41,7 +41,7 @@ func TestLoadUSDAFiltersByDataType(t *testing.T) {
 
 func TestLoadUSDAMapsNutrientsAndKeepsAbsenceAbsent(t *testing.T) {
 	m, _ := LoadNamedMapping("usda")
-	foods, _ := LoadUSDA(USDAOptions{
+	foods, _, _ := LoadUSDA(USDAOptions{
 		Dir: filepath.Join("testdata", "usda"), DataTypes: []string{"sr_legacy_food"}, Mapping: m,
 	})
 
@@ -72,7 +72,7 @@ func TestLoadUSDAMapsNutrientsAndKeepsAbsenceAbsent(t *testing.T) {
 
 func TestLoadUSDASkipsIgnoredCodes(t *testing.T) {
 	m, _ := LoadNamedMapping("usda")
-	foods, _ := LoadUSDA(USDAOptions{
+	foods, _, _ := LoadUSDA(USDAOptions{
 		Dir: filepath.Join("testdata", "usda"), DataTypes: []string{"sr_legacy_food"}, Mapping: m,
 	})
 	for _, f := range foods {
@@ -94,7 +94,7 @@ func TestLoadUSDASkipsIgnoredCodes(t *testing.T) {
 
 func TestLoadUSDAExtractsPortions(t *testing.T) {
 	m, _ := LoadNamedMapping("usda")
-	foods, _ := LoadUSDA(USDAOptions{
+	foods, _, _ := LoadUSDA(USDAOptions{
 		Dir: filepath.Join("testdata", "usda"), DataTypes: []string{"sr_legacy_food"}, Mapping: m,
 	})
 	for _, f := range foods {
@@ -188,7 +188,7 @@ func TestLoadUSDARejectsMappedCodeMissingFromSource(t *testing.T) {
 	writeCSVRows(t, nutrientPath, kept)
 
 	m, _ := LoadNamedMapping("usda")
-	_, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
+	_, _, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
 	if !errors.Is(err, ErrMappingNotInSource) {
 		t.Fatalf("error = %v, want ErrMappingNotInSource", err)
 	}
@@ -213,7 +213,7 @@ func TestLoadUSDARejectsUnitMismatch(t *testing.T) {
 	writeCSVRows(t, nutrientPath, rows)
 
 	m, _ := LoadNamedMapping("usda")
-	_, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
+	_, _, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
 	if err == nil {
 		t.Fatal("expected a unit mismatch error")
 	}
@@ -259,7 +259,7 @@ func TestLoadUSDAAllowsDeliberateUnitConversion(t *testing.T) {
 		t.Fatalf("LoadMapping: %v", err)
 	}
 
-	foods, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
+	foods, _, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
 	if err != nil {
 		t.Fatalf("LoadUSDA: %v, want success (factor != 1 must stand down the unit guard)", err)
 	}
@@ -274,4 +274,210 @@ func TestLoadUSDAAllowsDeliberateUnitConversion(t *testing.T) {
 		return
 	}
 	t.Fatal("banana not found in output")
+}
+
+// TestLoadUSDARejectsDuplicateNutrientNumber covers the failure mode that
+// made the build non-deterministic: the adapter keys everything on
+// nutrient_nbr, so two ids claiming one nbr means Go map ordering decides
+// which unit and which values survive. A dataset with genuine duplicates
+// must fail loudly.
+func TestLoadUSDARejectsDuplicateNutrientNumber(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	nutrientPath := filepath.Join(dir, "nutrient.csv")
+	rows := readCSVRows(t, nutrientPath)
+	// A second id claiming nutrient_nbr 303 (iron), in a different unit.
+	rows = append(rows, []string{"9303", "Iron, Fe (duplicate)", "UG", "303", "9999"})
+	writeCSVRows(t, nutrientPath, rows)
+
+	m, _ := LoadNamedMapping("usda")
+	_, _, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
+	if !errors.Is(err, ErrDuplicateNutrientNumber) {
+		t.Fatalf("error = %v, want ErrDuplicateNutrientNumber", err)
+	}
+	// Naming only one of the two ids leaves the operator hunting.
+	for _, want := range []string{"303", "1089", "9303"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %v, want it to mention %q", err, want)
+		}
+	}
+}
+
+// TestLoadUSDASkipsDuplicateFdcID: a repeated fdc_id would emit two
+// RefFoods sharing one (source, source_id), breaking the unique index the
+// seed migration depends on.
+func TestLoadUSDASkipsDuplicateFdcID(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	foodPath := filepath.Join(dir, "food.csv")
+	rows := readCSVRows(t, foodPath)
+	rows = append(rows, []string{"1105314", "sr_legacy_food", "Bananas, raw (duplicate row)", "0900", "2019-04-01"})
+	writeCSVRows(t, foodPath, rows)
+
+	m, _ := LoadNamedMapping("usda")
+	foods, _, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
+	if err != nil {
+		t.Fatalf("LoadUSDA: %v", err)
+	}
+	seen := map[string]int{}
+	for _, f := range foods {
+		seen[f.Source+"/"+f.SourceID]++
+	}
+	for key, n := range seen {
+		if n > 1 {
+			t.Errorf("%s appears %d times; (source, source_id) must be unique", key, n)
+		}
+	}
+	if seen["usda_sr/1105314"] != 1 {
+		t.Errorf("banana appears %d times, want exactly 1", seen["usda_sr/1105314"])
+	}
+}
+
+// TestLoadUSDACollectsAllRangeViolations: returning on the first offender
+// makes a real-data build surface one defect per run. The report must name
+// the total and list the offenders.
+func TestLoadUSDACollectsAllRangeViolations(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	// Push iron (1089) far past its plausible maximum on the spinach row,
+	// and energy (1008) past its maximum on the banana row, so two
+	// different foods are out of range at once.
+	fnPath := filepath.Join(dir, "food_nutrient.csv")
+	rows := readCSVRows(t, fnPath)
+	for i, row := range rows {
+		if i == 0 || len(row) < 4 {
+			continue
+		}
+		switch {
+		case row[1] == "1103648" && row[2] == "1089":
+			rows[i][3] = "900000"
+		case row[1] == "1105314" && row[2] == "1008":
+			rows[i][3] = "89000"
+		}
+	}
+	writeCSVRows(t, fnPath, rows)
+
+	m, _ := LoadNamedMapping("usda")
+	_, _, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
+	if err == nil {
+		t.Fatal("expected a range violation error")
+	}
+	if !errors.Is(err, food.ErrOutOfRange) {
+		t.Fatalf("error = %v, want food.ErrOutOfRange", err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "2 food(s)") {
+		t.Errorf("error = %v, want it to report both offenders, not just the first", err)
+	}
+	for _, want := range []string{"1105314", "1103648", "energy_kcal", "iron"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error = %v, want it to mention %q", err, want)
+		}
+	}
+}
+
+// TestLoadUSDARangeViolationsAreDeterministic: food.Validate used to
+// iterate a Go map, so a food with two problems named a different nutrient
+// on every run. A message that changes between runs is useless to whoever
+// is fixing the mapping table.
+func TestLoadUSDARangeViolationsAreDeterministic(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	// One food (spinach) with two out-of-range values at once.
+	fnPath := filepath.Join(dir, "food_nutrient.csv")
+	rows := readCSVRows(t, fnPath)
+	for i, row := range rows {
+		if i > 0 && len(row) >= 4 && row[1] == "1103648" {
+			switch row[2] {
+			case "1089":
+				rows[i][3] = "900000"
+			case "1008":
+				rows[i][3] = "89000"
+			}
+		}
+	}
+	writeCSVRows(t, fnPath, rows)
+
+	m, _ := LoadNamedMapping("usda")
+	var first string
+	for i := 0; i < 20; i++ {
+		_, _, err := LoadUSDA(USDAOptions{Dir: dir, DataTypes: []string{"sr_legacy_food"}, Mapping: m})
+		if err == nil {
+			t.Fatal("expected a range violation error")
+		}
+		if i == 0 {
+			first = err.Error()
+			continue
+		}
+		if err.Error() != first {
+			t.Fatalf("range report is not deterministic:\nrun 0: %s\nrun %d: %s", first, i, err.Error())
+		}
+	}
+}
+
+// TestLoadUSDAReturnsPerSubtypeSourceInfo: the CLI used to write a single
+// SourceInfo with Source "usda", a value spec §2 does not define, while
+// every food carried usda_foundation or usda_sr. Nothing could join a food
+// to its attribution row.
+func TestLoadUSDAReturnsPerSubtypeSourceInfo(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	// Promote the spinach row to a Foundation food so both subtypes appear.
+	foodPath := filepath.Join(dir, "food.csv")
+	rows := readCSVRows(t, foodPath)
+	for i, row := range rows {
+		if i > 0 && len(row) > 1 && row[0] == "1103648" {
+			rows[i][1] = "foundation_food"
+		}
+	}
+	writeCSVRows(t, foodPath, rows)
+
+	m, _ := LoadNamedMapping("usda")
+	foods, sources, err := LoadUSDA(USDAOptions{
+		Dir: dir, DataTypes: []string{"foundation_food", "sr_legacy_food"}, Mapping: m,
+	})
+	if err != nil {
+		t.Fatalf("LoadUSDA: %v", err)
+	}
+	if len(sources) != 2 {
+		t.Fatalf("got %d SourceInfo entries, want 2 (one per subtype): %+v", len(sources), sources)
+	}
+	if sources[0].Source != SourceUSDAFoundation || sources[1].Source != SourceUSDASR {
+		t.Errorf("source order = %q, %q; want a fixed %q, %q",
+			sources[0].Source, sources[1].Source, SourceUSDAFoundation, SourceUSDASR)
+	}
+
+	rowsBySource := map[string]int{}
+	for _, f := range foods {
+		rowsBySource[f.Source]++
+	}
+	for _, s := range sources {
+		if s.Rows != rowsBySource[s.Source] {
+			t.Errorf("%s: SourceInfo.Rows = %d, but %d foods carry that source",
+				s.Source, s.Rows, rowsBySource[s.Source])
+		}
+		if s.Region != "us" || s.Licence != "public-domain" || s.URL == "" {
+			t.Errorf("%s: region/licence/url = %q/%q/%q", s.Source, s.Region, s.Licence, s.URL)
+		}
+	}
+}
+
+// TestLoadUSDAOmitsSubtypesWithNoRows: the fixture is SR Legacy only, so
+// the pack must not advertise a Foundation attribution row with 0 rows.
+func TestLoadUSDAOmitsSubtypesWithNoRows(t *testing.T) {
+	m, _ := LoadNamedMapping("usda")
+	_, sources, err := LoadUSDA(USDAOptions{
+		Dir: filepath.Join("testdata", "usda"), DataTypes: []string{"sr_legacy_food"}, Mapping: m,
+	})
+	if err != nil {
+		t.Fatalf("LoadUSDA: %v", err)
+	}
+	if len(sources) != 1 || sources[0].Source != SourceUSDASR {
+		t.Fatalf("sources = %+v, want exactly one usda_sr entry", sources)
+	}
 }

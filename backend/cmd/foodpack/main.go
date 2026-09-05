@@ -62,7 +62,7 @@ func buildCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-		foods, err := source.LoadUSDA(source.USDAOptions{
+		foods, sources, err := source.LoadUSDA(source.USDAOptions{
 			Dir:       *usdaDir,
 			DataTypes: []string{"foundation_food", "sr_legacy_food"},
 			Mapping:   m,
@@ -70,12 +70,15 @@ func buildCmd(args []string) error {
 		if err != nil {
 			return fmt.Errorf("usda: %w", err)
 		}
+		// The adapter, not the CLI, owns the source/region/licence strings:
+		// each RefFood carries usda_foundation or usda_sr, so the
+		// attribution rows must be per subtype or nothing can join a food
+		// to its licence.
 		pack.Foods = append(pack.Foods, foods...)
-		pack.Sources = append(pack.Sources, format.SourceInfo{
-			Source: "usda", Region: "us", Licence: "public-domain",
-			URL: "https://fdc.nal.usda.gov/", Rows: len(foods),
-		})
-		fmt.Printf("usda: %d foods\n", len(foods))
+		pack.Sources = append(pack.Sources, sources...)
+		for _, s := range sources {
+			fmt.Printf("%s: %d foods\n", s.Source, s.Rows)
+		}
 	}
 
 	if len(pack.Foods) == 0 {
