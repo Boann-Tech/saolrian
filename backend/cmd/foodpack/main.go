@@ -53,6 +53,7 @@ var loaders = map[string]sourceLoader{
 	"usda_foundation": loadUSDADir,
 	"usda_sr":         loadUSDADir,
 	"cnf":             loadCNFDir,
+	"ciqual":          loadCIQUALDir,
 }
 
 func loadUSDADir(dir string, sink source.UnmappedSink) ([]format.RefFood, []format.SourceInfo, error) {
@@ -74,6 +75,14 @@ func loadCNFDir(dir string, sink source.UnmappedSink) ([]format.RefFood, []forma
 		return nil, nil, err
 	}
 	return source.LoadCNF(source.CNFOptions{Dir: dir, Mapping: m, Unmapped: sink})
+}
+
+func loadCIQUALDir(dir string, sink source.UnmappedSink) ([]format.RefFood, []format.SourceInfo, error) {
+	m, err := source.LoadNamedMapping("ciqual")
+	if err != nil {
+		return nil, nil, err
+	}
+	return source.LoadCIQUAL(source.CIQUALOptions{Dir: dir, Mapping: m, Unmapped: sink})
 }
 
 func buildCmd(args []string) error {

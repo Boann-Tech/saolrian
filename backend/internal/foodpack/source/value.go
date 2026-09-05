@@ -119,3 +119,23 @@ func unitMatches(canonical food.Unit, sourceUnit string) bool {
 	}
 	return false
 }
+
+// unitFromLabel pulls "kcal" out of
+// "Energy, Regulation EU No 1169/2011 (kcal/100 g)". CIQUAL states a
+// constituent's unit nowhere else, and it is the only thing standing
+// between a kJ column and a pack where every French food carries 4.184x
+// its real energy. CoFID and AFCD name their units the same way, in a
+// column header, so this lives beside unitMatches rather than in one
+// adapter's file.
+func unitFromLabel(name string) string {
+	open := strings.LastIndex(name, "(")
+	if open < 0 {
+		return ""
+	}
+	inner := name[open+1:]
+	if close := strings.Index(inner, ")"); close >= 0 {
+		inner = inner[:close]
+	}
+	unit, _, _ := strings.Cut(inner, "/")
+	return strings.ToLower(strings.TrimSpace(unit))
+}

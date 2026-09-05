@@ -3,7 +3,7 @@ package source
 import "testing"
 
 func TestCheckedInMappingsLoad(t *testing.T) {
-	for _, name := range []string{"usda", "cnf"} {
+	for _, name := range []string{"usda", "cnf", "ciqual"} {
 		t.Run(name, func(t *testing.T) {
 			m, err := LoadNamedMapping(name)
 			if err != nil {

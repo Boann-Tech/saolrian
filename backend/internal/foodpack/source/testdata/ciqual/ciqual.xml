@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TABLE>
+  <ALIM>
+    <alim_code>13000</alim_code>
+    <alim_nom_fr>Banane, pulpe, crue</alim_nom_fr>
+    <alim_nom_eng>Banana, pulp, raw</alim_nom_eng>
+  </ALIM>
+  <ALIM>
+    <alim_code>19024</alim_code>
+    <alim_nom_fr>Lait entier, UHT</alim_nom_fr>
+    <alim_nom_eng></alim_nom_eng>
+  </ALIM>
+  <ALIM>
+    <alim_code>99999</alim_code>
+    <alim_nom_fr>Aliment sans donnée</alim_nom_fr>
+    <alim_nom_eng>Food with no data</alim_nom_eng>
+  </ALIM>
+
+  <COMPO><alim_code>13000</alim_code><const_code>328</const_code><teneur>89,0</teneur></COMPO>
+  <COMPO><alim_code>13000</alim_code><const_code>327</const_code><teneur>371</teneur></COMPO>
+  <COMPO><alim_code>13000</alim_code><const_code>25000</const_code><teneur>74,9</teneur></COMPO>
+  <COMPO><alim_code>13000</alim_code><const_code>25001</const_code><teneur>1,09</teneur></COMPO>
+  <COMPO><alim_code>13000</alim_code><const_code>40000</const_code><teneur>&lt; 0,5</teneur></COMPO>
+  <COMPO><alim_code>13000</alim_code><const_code>31000</const_code><teneur>[20,0]</teneur></COMPO>
+  <COMPO><alim_code>13000</alim_code><const_code>10200</const_code><teneur>traces</teneur></COMPO>
+  <COMPO><alim_code>13000</alim_code><const_code>10400</const_code><teneur>-</teneur></COMPO>
+  <COMPO><alim_code>13000</alim_code><const_code>60000</const_code><teneur>1,5</teneur></COMPO>
+  <COMPO><alim_code>19024</alim_code><const_code>328</const_code><teneur>63,0</teneur></COMPO>
+  <COMPO><alim_code>19024</alim_code><const_code>10120</const_code><teneur>120</teneur></COMPO>
+
+  <CONST><const_code>327</const_code><const_nom_fr>Energie, Règlement UE (kJ/100 g)</const_nom_fr><const_nom_eng>Energy, Regulation EU No 1169/2011 (kJ/100 g)</const_nom_eng></CONST>
+  <CONST><const_code>328</const_code><const_nom_fr>Energie, Règlement UE (kcal/100 g)</const_nom_fr><const_nom_eng>Energy, Regulation EU No 1169/2011 (kcal/100 g)</const_nom_eng></CONST>
+  <CONST><const_code>25000</const_code><const_nom_fr>Eau (g/100 g)</const_nom_fr><const_nom_eng>Water (g/100 g)</const_nom_eng></CONST>
+  <CONST><const_code>25001</const_code><const_nom_fr>Protéines (g/100 g)</const_nom_fr><const_nom_eng>Protein (g/100 g)</const_nom_eng></CONST>
+  <CONST><const_code>31000</const_code><const_nom_fr>Glucides (g/100 g)</const_nom_fr><const_nom_eng>Carbohydrate (g/100 g)</const_nom_eng></CONST>
+  <CONST><const_code>40000</const_code><const_nom_fr>Lipides (g/100 g)</const_nom_fr><const_nom_eng>Fat (g/100 g)</const_nom_eng></CONST>
+  <CONST><const_code>10120</const_code><const_nom_fr>Calcium (mg/100 g)</const_nom_fr><const_nom_eng>Calcium (mg/100 g)</const_nom_eng></CONST>
+  <CONST><const_code>10200</const_code><const_nom_fr>Fer (mg/100 g)</const_nom_fr><const_nom_eng>Iron (mg/100 g)</const_nom_eng></CONST>
+  <CONST><const_code>10400</const_code><const_nom_fr>Sodium (mg/100 g)</const_nom_fr><const_nom_eng>Sodium (mg/100 g)</const_nom_eng></CONST>
+  <CONST><const_code>60000</const_code><const_nom_fr>Quelque chose (g/100 g)</const_nom_fr><const_nom_eng>Something unmapped (g/100 g)</const_nom_eng></CONST>
+</TABLE>
