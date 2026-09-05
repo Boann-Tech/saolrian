@@ -14,18 +14,26 @@ Saolrian is a calorie tracker with a difference: **self-hosting is a first-class
 
 Same app either way. Your data either way.
 
-## Features (MVP)
+## Features
 
-- 🍽️ **Food logging** — search 3M+ foods via [Open Food Facts](https://world.openfoodfacts.org), scan barcodes (camera + manual), custom foods
+### Logging
+- 🍽️ **Food logging** — search 3M+ foods via [Open Food Facts](https://world.openfoodfacts.org), scan barcodes (camera + manual), save custom foods
 - ⚡ **Quick add** — log just calories (macros optional) in one tap, no search needed
+- 🥘 **Recipes** — build a recipe from searched foods or manual macro entries, see total *and* per-serving macros, then log any number of servings to the diary as a single entry
 - ✏️ **Edit & delete** — kebab menu on any diary entry; edit kcal/grams/meal in place, or delete
-- 💧 **Water & steps** — per-day hydration (+250/+500 ml) and step counters (+1,000/+5,000) on Today
-- 🗓️ **Customizable meal slots** — Breakfast, second breakfast, pre-workout — name your meals whatever you want, add as many as you like
+- 🗓️ **Customizable meal slots** — Breakfast, second breakfast, pre-workout — name your meals whatever you want, add or delete as many as you like
+
+### Dashboard
+- 📊 **Today** — animated budget meter, per-meal groups, remaining-calorie math
+- 💧 **Water & steps** — quick +250/+500 ml and +1,000/+5,000 step taps, or type an exact water amount
+- ⚖️ **Weight** — logged from Profile, stored as a full history of `weights` records
+- 🗓️ **History** — week strip with adherence dots, day summary, weekly stats
+
+### Everything else
 - 🎯 **TDEE & goals** — Mifflin-St Jeor / Katch-McArdle, five activity levels, lose/maintain/gain with macro targets
-- 📊 **History & trends** — week view, adherence dots, weight tracking
-- 📥 **Lose It! import** — bring your history with you
-- 🎨 **Theming** — 8 accent palettes + custom color, per user and per instance
-- 📴 **Offline-first PWA** — log meals on a plane, sync when you land
+- 📥 **Lose It! import** — bring your food-log history with you (CSV)
+- 🎨 **Theming** — light / dark / system appearance plus 8 accent palettes or a custom colour, saved per user and per device
+- 📴 **Offline-first PWA** — diary creates queue to localStorage when the network drops and replay when you're back
 - 🔓 **Data export** — full CSV export, anytime
 
 ## Quick start (self-host)
@@ -55,10 +63,27 @@ docker compose up -d   # full stack: backend + frontend + Caddy on :8080
 
 One command brings up everything — the app UI at `http://server:8080`, the PocketBase admin at `http://server:8080/_/`, and Caddy routing `/api/*` to the backend. Data persists in the `pb_data` volume.
 
+## Marketing site
+
+The landing page lives in [`docs/site/`](docs/site/) as its own Vite + React
+app, so it deploys to any static host without dragging marketing code into
+the PWA bundle.
+
+```bash
+cd docs/site
+npm install
+npm run dev        # http://localhost:5174
+npm run build      # → docs/site/dist/ (prerendered static HTML)
+```
+
+Every claim the page makes lives in `src/content.ts`, and the FAQ/software
+JSON-LD is generated from the same arrays — see
+[`docs/site/README.md`](docs/site/README.md).
+
 ## Development
 
 ```bash
-# backend (Go 1.24+)
+# backend (Go 1.27+)
 cd backend
 go run . serve --http 127.0.0.1:8090
 
@@ -66,6 +91,7 @@ go run . serve --http 127.0.0.1:8090
 cd frontend
 npm install
 npm run dev        # http://localhost:5173
+npm test           # vitest — 72 tests across 14 files
 ```
 
 Point the app at `http://127.0.0.1:8090` in onboarding.
@@ -73,10 +99,12 @@ Point the app at `http://127.0.0.1:8090` in onboarding.
 ## Architecture
 
 ```
-frontend/   React 19 + Vite + TypeScript PWA (pocketbase JS SDK)
-backend/    Go + PocketBase-as-framework: SQLite, auth, S3 storage,
-            realtime, admin UI, custom /api/saolrian/* routes
-docs/       landing page, logos, screenshots
+frontend/   React 19 + Vite 6 + TypeScript PWA, Tailwind v4 design tokens
+            and a shared primitive set (Button/Card/Field/Sheet/Meter/...)
+backend/    Go 1.27 + PocketBase 0.40 as a framework: SQLite, auth, S3
+            storage, realtime, admin UI, custom /api/saolrian/* routes
+docs/site/  marketing site (React 19 + Vite, prerendered static build)
+docs/       logos, screenshots, design specs + plans
 ```
 
 Custom API surface (v0, stable-ish):
@@ -85,12 +113,25 @@ Custom API surface (v0, stable-ish):
 - `GET  /api/saolrian/food/barcode/:code` — OFF product lookup
 - `POST /api/saolrian/import/loseit` — history import
 
-Collections: `profiles`, `meal_slots`, `foods`, `diary_entries`, `weights` — all user-scoped with PocketBase API rules.
+All routes require auth. Everything else — including recipes and meal slots —
+goes through plain PocketBase collections via the JS SDK, no custom handler.
+
+Collections: `profiles`, `meal_slots`, `foods`, `diary_entries`, `weights`,
+`daily_metrics`, `recipes`, `recipe_ingredients` — all user-scoped with
+PocketBase API rules.
 
 ## Roadmap
 
-- **v2** — Health Connect (Android), Strava, Liftosaur connectors; unified energy-balance dashboards
-- **v3** — smart TDEE back-calculation, AI suggestions, family/coach sharing
+**Next up** — designed, not yet built (see [`docs/superpowers/specs/`](docs/superpowers/specs/)):
+
+- **Full Lose It! import** — upload the whole "Export Data" zip instead of hunting
+  for one CSV: the app shows which of the 24 supported categories it found (exercise,
+  weight, sleep, steps, body fat, custom foods, recipes, goals), you pick what to
+  import, and it runs as a background job that push-notifies you when it's done
+
+**v2** — Health Connect (Android), Strava, Liftosaur connectors; unified energy-balance dashboards
+
+**v3** — smart TDEE back-calculation, AI suggestions, family/coach sharing
 
 ## License
 
