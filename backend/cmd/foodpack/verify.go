@@ -21,8 +21,16 @@ type CheckResult struct {
 const atwaterTolerance = 0.30
 
 // atwaterMaxSuspectFraction is how many suspect foods the pack may contain
-// before the check fails outright.
+// before the check fails outright on the soft, fractional gate.
 const atwaterMaxSuspectFraction = 0.10
+
+// atwaterHardDeviation is the second, per-food gate: a single food this far
+// off cannot be excused by averaging over a large pack. Over ~8,000 foods
+// the fractional gate alone tolerates roughly 800 foods deviating past
+// atwaterTolerance; a lone food off by 1000x still contributes only
+// 0.0125% and the fractional gate alone would report PASS. This bound
+// fails the build outright regardless of how large the pack is.
+const atwaterHardDeviation = 1.0
 
 // runChecks runs every structural check over a built pack.
 func runChecks(p format.Pack) []CheckResult {
@@ -33,6 +41,7 @@ func runChecks(p format.Pack) []CheckResult {
 		checkRanges(p),
 		checkMacroSum(p),
 		checkAtwater(p),
+		checkGolden(p),
 	}
 }
 
@@ -114,6 +123,8 @@ func checkAtwater(p format.Pack) CheckResult {
 	checked, suspect := 0, 0
 	var worst string
 	worstDev := 0.0
+	var hardFail string
+	hardDev := 0.0
 
 	for _, f := range p.Foods {
 		prof := food.Decode(f.Nutrients)
@@ -125,13 +136,34 @@ func checkAtwater(p format.Pack) CheckResult {
 			continue // too little energy for a ratio to mean anything
 		}
 		checked++
+
+		// USDA (and every other source's) carbohydrate is "by difference":
+		// total mass minus everything else measured, so it includes fibre.
+		// Fibre contributes roughly 2 kcal/g, not the 4 kcal/g of digestible
+		// carbohydrate, and treating it as digestible turns ordinary
+		// high-fibre foods (wheat bran, ground cinnamon) into false
+		// suspects — on real data wheat bran deviates 66% and ground
+		// cinnamon 41% under the naive formula. Net the fibre out of
+		// carbohydrate when it is present; fall back to the plain formula
+		// when it is absent, since then there is nothing to correct for.
 		est := 4*pro + 4*carb + 9*fat + 7*prof["alcohol"]
+		if fibre, ok := prof["fibre"]; ok {
+			netCarb := carb - fibre
+			if netCarb < 0 {
+				netCarb = 0 // a mapping error already caught elsewhere; don't let it go negative here too
+			}
+			est = 4*pro + 4*netCarb + 2*fibre + 9*fat + 7*prof["alcohol"]
+		}
+
 		dev := math.Abs(est-kcal) / kcal
 		if dev > atwaterTolerance {
 			suspect++
 			if dev > worstDev {
 				worstDev, worst = dev, fmt.Sprintf("%s/%s (%s): declared %.0f kcal, macros imply %.0f", f.Source, f.SourceID, f.Name, kcal, est)
 			}
+		}
+		if dev > atwaterHardDeviation && dev > hardDev {
+			hardDev, hardFail = dev, fmt.Sprintf("%s/%s (%s): declared %.0f kcal, macros imply %.0f (%.0f%% off)", f.Source, f.SourceID, f.Name, kcal, est, dev*100)
 		}
 	}
 
@@ -144,5 +176,10 @@ func checkAtwater(p format.Pack) CheckResult {
 	if worst != "" {
 		detail += "; worst: " + worst
 	}
-	return CheckResult{"atwater", frac <= atwaterMaxSuspectFraction, detail}
+	pass := frac <= atwaterMaxSuspectFraction
+	if hardFail != "" {
+		pass = false
+		detail += fmt.Sprintf("; HARD FAIL: a food deviates over %.0f%% (%s)", atwaterHardDeviation*100, hardFail)
+	}
+	return CheckResult{"atwater", pass, detail}
 }
