@@ -207,16 +207,64 @@ func TestCheckAttributionRequiresASourceRow(t *testing.T) {
 	}
 }
 
+// Each of licence, region and url is independently required: a
+// SourceInfo missing just one of the three must still fail, and the
+// message must name exactly the field(s) that are empty rather than
+// leaving the reader to check all three.
 func TestCheckAttributionRequiresLicenceAndURL(t *testing.T) {
+	complete := format.SourceInfo{Source: "cnf", Region: "ca", Licence: "ogl-canada", URL: "https://example.test", Rows: 1}
+	foods := []format.RefFood{goldenFoodOf("cnf", "1", "Banana, raw", food.Profile{"energy_kcal": 89})}
+
+	for field, mutate := range map[string]func(format.SourceInfo) format.SourceInfo{
+		"licence": func(s format.SourceInfo) format.SourceInfo { s.Licence = ""; return s },
+		"region":  func(s format.SourceInfo) format.SourceInfo { s.Region = ""; return s },
+		"url":     func(s format.SourceInfo) format.SourceInfo { s.URL = ""; return s },
+	} {
+		t.Run(field, func(t *testing.T) {
+			p := format.Pack{
+				NutrientKeys: food.Keys(),
+				Sources:      []format.SourceInfo{mutate(complete)},
+				Foods:        foods,
+			}
+			got := checkAttribution(p)
+			if got.Pass {
+				t.Fatalf("a source row missing %s must fail", field)
+			}
+			if !strings.Contains(got.Detail, field) {
+				t.Errorf("detail %q does not name the missing field %q", got.Detail, field)
+			}
+		})
+	}
+
+	// The reverse: a SourceInfo with all three fields set must not trip
+	// this branch (TestCheckAttributionPasses covers the whole-check
+	// positive case; this confirms the branch itself doesn't fire).
+	whole := format.Pack{NutrientKeys: food.Keys(), Sources: []format.SourceInfo{complete}, Foods: foods}
+	if got := checkAttribution(whole); !got.Pass {
+		t.Errorf("a fully-populated SourceInfo must not fail: %s", got.Detail)
+	}
+}
+
+// A SourceInfo declared for a source that contributed zero foods to the
+// pack is its own defect: the attribution screen would show a licence for
+// data that was never actually shipped. This is distinct from every other
+// branch, which is triggered by a food whose source lacks a row -- here
+// the row exists but nothing points back to it.
+func TestCheckAttributionCatchesSourceThatContributedNoFoods(t *testing.T) {
 	p := format.Pack{
 		NutrientKeys: food.Keys(),
 		Sources: []format.SourceInfo{
-			{Source: "cnf", Region: "ca", Licence: "", URL: "https://example.test", Rows: 1},
+			{Source: "cnf", Region: "ca", Licence: "ogl-canada", URL: "https://example.test", Rows: 1},
+			{Source: "ciqual", Region: "fr", Licence: "etalab-2.0", URL: "https://example.test", Rows: 0},
 		},
 		Foods: []format.RefFood{goldenFoodOf("cnf", "1", "Banana, raw", food.Profile{"energy_kcal": 89})},
 	}
-	if got := checkAttribution(p); got.Pass {
-		t.Fatal("a source row with no licence must fail")
+	got := checkAttribution(p)
+	if got.Pass {
+		t.Fatal("a SourceInfo for a source that contributed no foods must fail")
+	}
+	if !strings.Contains(got.Detail, "ciqual") {
+		t.Errorf("detail %q does not name the source that contributed nothing", got.Detail)
 	}
 }
 

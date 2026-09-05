@@ -213,8 +213,8 @@ func checkAttribution(p format.Pack) CheckResult {
 			problems = append(problems, fmt.Sprintf("%d food(s) from %q have no attribution row", counted[name], name))
 			continue
 		}
-		if s.Licence == "" || s.URL == "" || s.Region == "" {
-			problems = append(problems, fmt.Sprintf("%q is missing licence, region or url", name))
+		if missing := missingAttributionFields(s); len(missing) > 0 {
+			problems = append(problems, fmt.Sprintf("%q is missing %s", name, strings.Join(missing, ", ")))
 		}
 		if s.Rows != counted[name] {
 			problems = append(problems, fmt.Sprintf("%q claims %d rows but the pack holds %d", name, s.Rows, counted[name]))
@@ -231,6 +231,23 @@ func checkAttribution(p format.Pack) CheckResult {
 	}
 	return CheckResult{"attribution", true,
 		fmt.Sprintf("%d source(s) attributed, every food joined", len(p.Sources))}
+}
+
+// missingAttributionFields names which of a SourceInfo's three required
+// fields are empty, so a debugging session goes straight to the field an
+// adapter forgot to set instead of re-reading all three.
+func missingAttributionFields(s format.SourceInfo) []string {
+	var missing []string
+	if s.Licence == "" {
+		missing = append(missing, "licence")
+	}
+	if s.Region == "" {
+		missing = append(missing, "region")
+	}
+	if s.URL == "" {
+		missing = append(missing, "url")
+	}
+	return missing
 }
 
 func sortedKeys(m map[string]int) []string {
