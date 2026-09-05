@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
+	"github.com/pocketbase/pocketbase/tools/router"
 )
 
 // newTestMux builds a real PocketBase router (default middlewares, incl.
@@ -410,6 +412,200 @@ func TestImportProfileSnapshot_AppliesOnlyProvidedFields(t *testing.T) {
 	}
 	if got := profile.GetString("sex"); got != "male" {
 		t.Errorf("sex = %v, want male", got)
+	}
+}
+
+// seedImportJob creates an import_jobs row for the given user with the
+// given status, for tests exercising the concurrency guard and the
+// stale-job sweep directly (without going through the HTTP handler /
+// runImportJob goroutine).
+func seedImportJob(t *testing.T, app *tests.TestApp, uid, status string) *core.Record {
+	t.Helper()
+	jobsCol, err := app.FindCollectionByNameOrId("import_jobs")
+	if err != nil {
+		t.Fatalf("import_jobs collection missing: %v", err)
+	}
+	job := core.NewRecord(jobsCol)
+	job.Set("user", uid)
+	job.Set("status", status)
+	job.Set("counts", map[string]any{})
+	if err := app.Save(job); err != nil {
+		t.Fatalf("failed to seed import job (status=%s): %v", status, err)
+	}
+	return job
+}
+
+// TestHasActiveImportJob_RejectsConcurrentForSameUserOnly guards fix #1: a
+// user with a queued/running job must be blocked from starting a second
+// one, but that must not affect other users importing at the same time.
+func TestHasActiveImportJob_RejectsConcurrentForSameUserOnly(t *testing.T) {
+	app, user1 := newTestAppWithUser(t)
+	user2 := newTestUser(t, app, "import-test-2@example.com")
+
+	if hasActiveImportJob(app, user1.Id) {
+		t.Fatalf("user1 should have no active import job yet")
+	}
+
+	seedImportJob(t, app, user1.Id, "running")
+
+	if !hasActiveImportJob(app, user1.Id) {
+		t.Fatalf("user1 should be blocked while a job is running")
+	}
+	if !hasActiveImportJob(app, user1.Id) {
+		t.Fatalf("expected hasActiveImportJob to remain true on repeated checks")
+	}
+
+	// a different user must still be able to import concurrently
+	if hasActiveImportJob(app, user2.Id) {
+		t.Fatalf("user2 should not be affected by user1's running job")
+	}
+}
+
+// TestHasActiveImportJob_QueuedAlsoBlocks covers the "queued" status (the
+// brief window between job creation and runImportJob setting it to
+// "running"), which must block a second import exactly like "running" does.
+func TestHasActiveImportJob_QueuedAlsoBlocks(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+	seedImportJob(t, app, user.Id, "queued")
+
+	if !hasActiveImportJob(app, user.Id) {
+		t.Fatalf("a queued job should block a second import")
+	}
+}
+
+// TestHasActiveImportJob_DoneAndFailedDoNotBlock ensures the guard only
+// looks at in-flight statuses — a finished job (successful or not) must not
+// prevent the user from starting a new import.
+func TestHasActiveImportJob_DoneAndFailedDoNotBlock(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+	seedImportJob(t, app, user.Id, "done")
+	seedImportJob(t, app, user.Id, "failed")
+
+	if hasActiveImportJob(app, user.Id) {
+		t.Fatalf("done/failed jobs should not block a new import")
+	}
+}
+
+// TestLoseItImportHandler_RejectsSecondConcurrentImport exercises the guard
+// as wired into the actual HTTP handler, via a minimal *core.RequestEvent
+// (no real HTTP round-trip, matching how e.App/e.Auth are the only fields
+// the handler touches).
+func TestLoseItImportHandler_RejectsSecondConcurrentImport(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+	seedImportJob(t, app, user.Id, "running")
+
+	e := &core.RequestEvent{}
+	e.App = app
+	e.Auth = user
+	e.Request = httptest.NewRequest(http.MethodPost, "/api/saolrian/import/loseit", strings.NewReader("{}"))
+	e.Request.Header.Set("Content-Type", "application/json")
+
+	err := loseItImportHandler(e)
+	if err == nil {
+		t.Fatalf("expected an error rejecting the concurrent import, got nil")
+	}
+	apiErr, ok := err.(*router.ApiError)
+	if !ok {
+		t.Fatalf("expected a *router.ApiError, got %T (%v)", err, err)
+	}
+	if apiErr.Status != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", apiErr.Status, http.StatusConflict)
+	}
+
+	// exactly one import_jobs row must still exist for this user — the
+	// handler must not have created a second one before rejecting.
+	jobs, err := app.FindRecordsByFilter("import_jobs", "user = {:uid}", "", 0, 0, map[string]any{"uid": user.Id})
+	if err != nil {
+		t.Fatalf("failed to list import jobs: %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("expected exactly 1 import job to remain, got %d", len(jobs))
+	}
+}
+
+// TestSweepStaleImportJobs_MarksQueuedAndRunningAsFailed guards fix #2:
+// on startup, any job left "running" or "queued" by a crashed/restarted
+// process must be marked "failed" with an explanatory message instead of
+// spinning forever in the UI.
+func TestSweepStaleImportJobs_MarksQueuedAndRunningAsFailed(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+
+	running := seedImportJob(t, app, user.Id, "running")
+	queued := seedImportJob(t, app, user.Id, "queued")
+	done := seedImportJob(t, app, user.Id, "done")
+	failed := seedImportJob(t, app, user.Id, "failed")
+
+	if err := SweepStaleImportJobs(app); err != nil {
+		t.Fatalf("SweepStaleImportJobs failed: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		id   string
+		want string
+	}{
+		{"running", running.Id, "failed"},
+		{"queued", queued.Id, "failed"},
+		{"done", done.Id, "done"},
+		{"failed", failed.Id, "failed"},
+	} {
+		rec, err := app.FindRecordById("import_jobs", tc.id)
+		if err != nil {
+			t.Fatalf("%s: job not found: %v", tc.name, err)
+		}
+		if got := rec.GetString("status"); got != tc.want {
+			t.Errorf("%s: status = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+
+	sweptRunning, err := app.FindRecordById("import_jobs", running.Id)
+	if err != nil {
+		t.Fatalf("running job not found: %v", err)
+	}
+	if got := sweptRunning.GetString("error"); got != staleImportJobMessage {
+		t.Errorf("error = %q, want %q", got, staleImportJobMessage)
+	}
+
+	// the pre-existing "done"/"failed" jobs must be untouched (no error
+	// message stamped on them).
+	untouchedDone, err := app.FindRecordById("import_jobs", done.Id)
+	if err != nil {
+		t.Fatalf("done job not found: %v", err)
+	}
+	if got := untouchedDone.GetString("error"); got != "" {
+		t.Errorf("done job error = %q, want empty (sweep must not touch it)", got)
+	}
+}
+
+// TestSweepStaleImportJobs_FiresOnAppServe verifies the sweep is actually
+// reachable via the same OnServe hook main.go binds it to — not just
+// callable in isolation — by binding an equivalent hook here and triggering
+// it the way apis.Serve would (after migrations, before the listener
+// starts).
+func TestSweepStaleImportJobs_FiresOnAppServe(t *testing.T) {
+	app, user := newTestAppWithUser(t)
+	stuck := seedImportJob(t, app, user.Id, "running")
+
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		if err := SweepStaleImportJobs(se.App); err != nil {
+			t.Fatalf("SweepStaleImportJobs failed: %v", err)
+		}
+		return se.Next()
+	})
+
+	event := &core.ServeEvent{App: app}
+	if err := app.OnServe().Trigger(event, func(e *core.ServeEvent) error {
+		return nil // stand-in for apis.Serve starting the tcp listener
+	}); err != nil {
+		t.Fatalf("OnServe hook chain failed: %v", err)
+	}
+
+	rec, err := app.FindRecordById("import_jobs", stuck.Id)
+	if err != nil {
+		t.Fatalf("job not found: %v", err)
+	}
+	if got := rec.GetString("status"); got != "failed" {
+		t.Errorf("status = %q, want %q (sweep should have fired via OnServe)", got, "failed")
 	}
 }
 

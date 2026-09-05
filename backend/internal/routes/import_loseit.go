@@ -75,6 +75,10 @@ func loseItImportHandler(e *core.RequestEvent) error {
 
 	uid := e.Auth.Id
 
+	if hasActiveImportJob(e.App, uid) {
+		return e.Error(http.StatusConflict, "an import is already running", nil)
+	}
+
 	jobsCol, err := e.App.FindCollectionByNameOrId("import_jobs")
 	if err != nil {
 		return e.InternalServerError("failed to load import_jobs collection", err)
@@ -236,6 +240,52 @@ func failJob(app core.App, jobID, uid, message string) {
 	}
 
 	push.NotifyUser(app, uid, "Import failed", message)
+}
+
+// hasActiveImportJob reports whether the given user already has an
+// import_jobs row in "queued" or "running" state. Used to reject a second
+// concurrent import for the same user: runImportJob has no locking around
+// its per-row find-then-save upserts (see importDailyMetricRows), so two
+// jobs racing for the same user/date could otherwise violate a unique
+// index or silently clobber each other's writes.
+func hasActiveImportJob(app core.App, uid string) bool {
+	existing, err := app.FindFirstRecordByFilter(
+		"import_jobs",
+		"user = {:uid} && (status = 'queued' || status = 'running')",
+		map[string]any{"uid": uid},
+	)
+	return err == nil && existing != nil
+}
+
+// staleImportJobMessage is recorded on any import_jobs row still marked
+// queued/running when SweepStaleImportJobs runs — such a row can only mean
+// the process that owned it (and its goroutine) is gone, since a live
+// backend is the only thing that ever advances a job out of these states.
+const staleImportJobMessage = "interrupted by a server restart"
+
+// SweepStaleImportJobs marks every import_jobs row still in "queued" or
+// "running" as "failed". It's meant to run once on app startup: those
+// states are only ever driven forward by runImportJob's goroutine, so a
+// row stuck in one of them across a restart/crash would otherwise show as
+// permanently in-progress in the UI forever.
+func SweepStaleImportJobs(app core.App) error {
+	stale, err := app.FindRecordsByFilter(
+		"import_jobs", "status = 'queued' || status = 'running'",
+		"", 0, 0, nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, job := range stale {
+		job.Set("status", "failed")
+		job.Set("error", staleImportJobMessage)
+		if err := app.Save(job); err != nil {
+			app.Logger().Error("failed to mark stale import job as failed",
+				slog.String("jobId", job.Id), slog.String("error", err.Error()))
+		}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------

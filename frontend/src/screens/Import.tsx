@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ClientResponseError } from 'pocketbase';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import { parseLoseItZip, type LoseItCategoryPreview, type LoseItImportCategories } from '../lib/loseitZip';
@@ -204,7 +205,11 @@ export default function Import() {
       setJob({ id: res.job_id, status: 'queued', counts: {} });
       await watchJob(pb, res.job_id, { announceFailure: true });
     } catch (ex) {
-      toast(ex instanceof Error ? ex.message : 'Import failed to start', 'err');
+      if (ex instanceof ClientResponseError && ex.status === 409) {
+        toast('An import is already running — wait for it to finish before starting another.', 'err');
+      } else {
+        toast(ex instanceof Error ? ex.message : 'Import failed to start', 'err');
+      }
     } finally {
       setStarting(false);
     }
