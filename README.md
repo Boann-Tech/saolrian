@@ -63,6 +63,8 @@ docker compose up -d   # full stack: backend + frontend + Caddy on :8080
 
 One command brings up everything — the app UI at `http://server:8080`, the PocketBase admin at `http://server:8080/_/`, and Caddy routing `/api/*` to the backend. Data persists in the `pb_data` volume.
 
+A `.env` file is optional and only needed to enable Web Push notifications. To enable it, copy `.env.example` to `.env` and fill in your VAPID keys (and `VAPID_SUBJECT`) before running `docker compose up -d`.
+
 ## Marketing site
 
 The landing page lives in [`docs/site/`](docs/site/) as its own Vite + React

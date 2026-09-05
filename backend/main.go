@@ -9,6 +9,7 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"os"
 
 	_ "github.com/boanntech/saolrian/backend/internal/migrations" // registers app migrations
@@ -33,6 +34,14 @@ func main() {
 
 	// Custom routes under /api/saolrian/.
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// Migrations have already run by this point (apis.Serve runs them
+		// before triggering OnServe), so import_jobs is queryable here.
+		// Any row still queued/running can only mean the previous process
+		// died before finishing it.
+		if err := routes.SweepStaleImportJobs(se.App); err != nil {
+			se.App.Logger().Error("failed to sweep stale import jobs", slog.String("error", err.Error()))
+		}
+
 		routes.Register(se.Router)
 		return se.Next()
 	})

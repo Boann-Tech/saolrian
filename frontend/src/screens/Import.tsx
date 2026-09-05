@@ -1,59 +1,217 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { ClientResponseError } from 'pocketbase';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
-import { parseLoseItCsv, type LoseItRow } from '../lib/loseit';
+import { parseLoseItZip, type LoseItCategoryPreview, type LoseItImportCategories } from '../lib/loseitZip';
+import { ensurePushSubscription } from '../lib/push';
 import { toCsv, buildExportFilename, downloadText, type ExportRow } from '../lib/export';
 import { getClient } from '../lib/pb';
 import type { DiaryEntry } from '../lib/types';
 import { Button, Card, useToast } from '../components/ui';
 import { formatInt } from '../lib/format';
 
-/** Import (Lose It! CSV) + diary CSV export — prototype hairline cards. */
+/** Import (Lose It! zip, async job + realtime status) + diary CSV export. */
+
+interface ImportJobRecord {
+  id: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  counts: Record<string, { imported: number; skipped: number }>;
+  error?: string;
+}
 
 export default function Import() {
   const { endpoint } = useApp();
   const toast = useToast();
   const navigate = useNavigate();
-  const [rows, setRows] = useState<LoseItRow[] | null>(null);
+
   const [fileName, setFileName] = useState('');
-  const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
-  const [importErr, setImportErr] = useState('');
+  const [categories, setCategories] = useState<LoseItImportCategories | null>(null);
+  const [previews, setPreviews] = useState<LoseItCategoryPreview[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [parseErr, setParseErr] = useState('');
+  const [job, setJob] = useState<ImportJobRecord | null>(null);
+  const [liveStatusUnavailable, setLiveStatusUnavailable] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
-    setResult(null);
-    setImportErr('');
+    setParseErr('');
+    setJob(null);
     try {
-      const text = await file.text();
-      setRows(parseLoseItCsv(text));
+      const { categories: cats, previews: prevs } = await parseLoseItZip(file);
+      if (prevs.length === 0) {
+        setParseErr('No importable Lose It! data found in this file.');
+        setCategories(null);
+        setPreviews([]);
+        return;
+      }
+      setCategories(cats);
+      setPreviews(prevs);
+      setSelected(new Set(prevs.filter((p) => p.defaultSelected).map((p) => p.key)));
     } catch {
-      setImportErr('Could not read that file.');
-      setRows(null);
+      setParseErr('Could not read that file — is it a Lose It! export zip?');
+      setCategories(null);
+      setPreviews([]);
     }
   };
 
-  const doImport = async () => {
-    if (!rows || rows.length === 0) return;
-    setImporting(true);
-    setImportErr('');
+  const toggle = (key: string) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Reports a terminal job status (done/failed) exactly once: updates the UI
+  // state and shows the completion toast. Shared between the ongoing
+  // realtime subscription and the one-shot reconciliation fetch in watchJob
+  // below, so a job that finishes between "subscribe() resolves" and "the
+  // socket is actually listening" is still reported instead of leaving the
+  // UI stuck on "Importing…" forever. `reported` guards against both paths
+  // seeing the same terminal update and double-toasting.
+  const createTerminalHandler = useCallback(
+    (pb: ReturnType<typeof getClient>, jobId: string) => {
+      let reported = false;
+      return (rec: ImportJobRecord) => {
+        setJob(rec);
+        if (rec.status !== 'done' && rec.status !== 'failed') return;
+        if (reported) return;
+        reported = true;
+        void pb.collection('import_jobs').unsubscribe(jobId);
+        if (rec.status === 'done') {
+          const totals = Object.values(rec.counts).reduce(
+            (acc, c) => ({ imported: acc.imported + c.imported, skipped: acc.skipped + c.skipped }),
+            { imported: 0, skipped: 0 },
+          );
+          toast(`Imported ${formatInt(totals.imported)}, skipped ${formatInt(totals.skipped)}.`);
+        } else {
+          toast(rec.error || 'Import failed', 'err');
+        }
+      };
+    },
+    [toast],
+  );
+
+  // Subscribes to realtime updates for a job and reconciles once via a
+  // direct fetch. Used both to watch a freshly-started import and to resume
+  // watching a job rehydrated on mount.
+  const watchJob = useCallback(
+    async (pb: ReturnType<typeof getClient>, jobId: string, opts?: { announceFailure?: boolean }) => {
+      const handleTerminal = createTerminalHandler(pb, jobId);
+
+      // The import has genuinely started server-side at this point (we have
+      // a real job id), so a failure to subscribe (websocket/auth hiccup)
+      // must not be reported as an import-start failure — that would be
+      // false — and must not leave the UI stuck showing "Importing…" with
+      // no way for it to ever resolve. Give it its own try/catch.
+      try {
+        await pb.collection('import_jobs').subscribe<ImportJobRecord>(jobId, (e) => {
+          handleTerminal(e.record);
+        });
+      } catch (ex) {
+        console.error('Failed to subscribe to import job status:', ex);
+        setLiveStatusUnavailable(true);
+        if (opts?.announceFailure) {
+          toast('Import started — live status is unavailable right now, check back later.');
+        }
+        return;
+      }
+
+      // The subscription is live at this point, but the job may have already
+      // reached a terminal state server-side before it was fully established
+      // (e.g. a small, fast import) — in which case the realtime `update`
+      // event already fired with nobody listening. Reconcile with one fetch
+      // so that case is still reported instead of leaving the UI stuck. This
+      // is a separate try/catch from the subscribe() above: a working
+      // subscription must not be reported as "unavailable" just because this
+      // one-off reconciliation fetch happened to fail — the subscription
+      // will still catch the update if the job hasn't finished yet.
+      try {
+        const current = await pb.collection('import_jobs').getOne<ImportJobRecord>(jobId);
+        handleTerminal(current);
+      } catch (ex) {
+        console.error('Failed to fetch current import job status:', ex);
+      }
+    },
+    [createTerminalHandler, toast],
+  );
+
+  // On mount, resume showing the status of the user's most recent import job
+  // if it's still in flight — e.g. they started an import, left the app (the
+  // whole point of push notifications), and came back. A job that's already
+  // terminal isn't resurrected: there's nothing actionable left to show, and
+  // its completion toast is long gone.
+  useEffect(() => {
+    if (!endpoint) return;
+    const pb = getClient(endpoint);
+    if (!pb.authStore.isValid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await pb.collection('import_jobs').getList<ImportJobRecord>(1, 1, {
+          filter: `user="${pb.authStore.record?.id}"`,
+          sort: '-created',
+        });
+        const rec = res.items[0];
+        if (cancelled || !rec || (rec.status !== 'queued' && rec.status !== 'running')) return;
+        setJob(rec);
+        await watchJob(pb, rec.id);
+      } catch (ex) {
+        console.error('Failed to fetch existing import job status:', ex);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endpoint]);
+
+  // Tear down the realtime subscription when the current job changes or the
+  // screen unmounts — otherwise navigating away mid-import leaks it for the
+  // rest of the session. unsubscribe-by-topic is a no-op if nothing's
+  // listening, so this is harmless even after handleTerminal has already
+  // unsubscribed on a normal completion.
+  useEffect(() => {
+    if (!job?.id || !endpoint) return;
+    const pb = getClient(endpoint);
+    const jobId = job.id;
+    return () => {
+      void pb.collection('import_jobs').unsubscribe(jobId);
+    };
+  }, [job?.id, endpoint]);
+
+  const startImport = async () => {
+    if (!categories || selected.size === 0) return;
+    setStarting(true);
+    setLiveStatusUnavailable(false);
     try {
       const pb = getClient(endpoint);
-      const res = await saolrianSend<{ imported: number; skipped: number }>(
-        pb,
-        'POST',
-        '/api/saolrian/import/loseit',
-        { rows },
-      );
-      setResult(res);
-      toast(`Imported ${res.imported} entr${res.imported === 1 ? 'y' : 'ies'}`);
+      const payload: Record<string, unknown> = {};
+      for (const key of selected) {
+        payload[key] = (categories as Record<string, unknown>)[key];
+      }
+
+      void ensurePushSubscription(endpoint);
+
+      const res = await saolrianSend<{ job_id: string }>(pb, 'POST', '/api/saolrian/import/loseit', {
+        categories: payload,
+      });
+
+      setJob({ id: res.job_id, status: 'queued', counts: {} });
+      await watchJob(pb, res.job_id, { announceFailure: true });
     } catch (ex) {
-      setImportErr(ex instanceof Error ? ex.message : 'Import failed');
+      if (ex instanceof ClientResponseError && ex.status === 409) {
+        toast('An import is already running — wait for it to finish before starting another.', 'err');
+      } else {
+        toast(ex instanceof Error ? ex.message : 'Import failed to start', 'err');
+      }
     } finally {
-      setImporting(false);
+      setStarting(false);
     }
   };
 
@@ -119,60 +277,78 @@ export default function Import() {
         <Card className="p-4">
           <div className="text-xs font-semibold text-text-muted">Import from Lose It!</div>
           <p className="mt-2 mb-3 text-xs leading-normal text-text-muted">
-            Upload a Lose It! CSV export. Columns are detected from the header row, so reordered exports work too.
+            Upload your Lose It! export zip (Settings → Export Data in the Lose It! app), then pick which parts to
+            bring in.
           </p>
           <input
             type="file"
-            accept=".csv,text/csv"
-            onChange={onFile}
+            accept=".zip,application/zip"
+            onChange={(e) => void onFile(e)}
+            aria-label="Upload Lose It export zip"
             className="text-sm text-text-muted file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-accent-ink"
           />
           {fileName && <p className="mt-2 text-xs text-text-faint">File: {fileName}</p>}
+          {parseErr && (
+            <div className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-sm text-danger" role="alert">
+              {parseErr}
+            </div>
+          )}
 
-          {rows && (
+          {previews.length > 0 && !job && (
             <div className="mt-3.5 border-t border-border pt-3.5">
-              <p className="mb-2.5 text-sm text-text-muted">
-                <strong>{formatInt(rows.length)}</strong> entr{rows.length === 1 ? 'y' : 'ies'} ready to import.
-              </p>
-              {rows.length > 0 && (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs mb-3.5">
-                    <thead>
-                      <tr>
-                        <th className="border-b border-border px-2 py-1.5 text-left text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Date</th>
-                        <th className="border-b border-border px-2 py-1.5 text-left text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Name</th>
-                        <th className="border-b border-border px-2 py-1.5 text-left text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">Meal</th>
-                        <th className="border-b border-border px-2 py-1.5 text-left text-2xs font-semibold uppercase tracking-[.05em] text-text-faint">kcal</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.slice(0, 5).map((r, i) => (
-                        <tr key={i}>
-                          <td className="border-b border-dotted border-border px-2 py-1.5 text-text">{r.date}</td>
-                          <td className="border-b border-dotted border-border px-2 py-1.5 text-text">{r.name}</td>
-                          <td className="border-b border-dotted border-border px-2 py-1.5 text-text">{r.meal}</td>
-                          <td className="border-b border-dotted border-border px-2 py-1.5 text-text">{r.kcal}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {rows.length > 5 && <p className="mb-3 text-xs text-text-faint">…and {formatInt(rows.length - 5)} more</p>}
-              <Button loading={importing} disabled={rows.length === 0} onClick={() => void doImport()}>
-                {importing ? 'Importing…' : `Import ${formatInt(rows.length)} entries`}
+              <ul className="mb-3 flex flex-col gap-2">
+                {previews.map((p) => (
+                  <li key={p.key}>
+                    <label className="flex items-center gap-2 text-sm text-text">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(p.key)}
+                        onChange={() => toggle(p.key)}
+                        className="h-4 w-4 rounded border-border accent-accent"
+                      />
+                      {p.label} — {formatInt(p.count)} {p.count === 1 ? 'entry' : 'entries'}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <Button loading={starting} disabled={selected.size === 0} onClick={() => void startImport()}>
+                {starting ? 'Starting…' : `Import ${selected.size} selected`}
               </Button>
             </div>
           )}
 
-          {result && (
-            <div className="mt-3 rounded-md bg-good/12 px-3.5 py-2.5 text-sm font-semibold text-good-ink" role="status">
-              Imported {formatInt(result.imported)}, skipped {formatInt(result.skipped)}.
-            </div>
-          )}
-          {importErr && (
-            <div className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-sm text-danger" role="alert">
-              {importErr}
+          {job && (
+            <div
+              className={
+                job.status === 'failed'
+                  ? 'mt-3 rounded-md border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-sm text-danger'
+                  : liveStatusUnavailable
+                    ? 'mt-3 rounded-md border border-warn/30 bg-warn-soft px-3.5 py-2.5 text-sm font-semibold text-warn'
+                    : 'mt-3 rounded-md bg-good/12 px-3.5 py-2.5 text-sm font-semibold text-good-ink'
+              }
+              role={job.status === 'failed' ? 'alert' : 'status'}
+            >
+              {liveStatusUnavailable ? (
+                'Import started, but live status could not be loaded — check back later.'
+              ) : job.status === 'queued' || job.status === 'running' ? (
+                "Importing… you can leave this page, you'll be notified when it's done."
+              ) : job.status === 'done' ? (
+                <>
+                  Import complete.
+                  <ul className="mt-1.5 flex flex-col gap-0.5 text-xs font-normal text-good-ink">
+                    {Object.entries(job.counts)
+                      .filter(([, c]) => c.imported > 0 || c.skipped > 0)
+                      .map(([key, c]) => (
+                        <li key={key}>
+                          {previews.find((p) => p.key === key)?.label ?? key} — {formatInt(c.imported)} imported
+                          {c.skipped > 0 && `, ${formatInt(c.skipped)} skipped`}
+                        </li>
+                      ))}
+                  </ul>
+                </>
+              ) : (
+                `Import failed: ${job.error ?? 'unknown error'}`
+              )}
             </div>
           )}
         </Card>

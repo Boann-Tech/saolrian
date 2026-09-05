@@ -3,6 +3,7 @@ module github.com/boanntech/saolrian/backend
 go 1.27
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/klauspost/compress v1.20.0
 	github.com/pocketbase/pocketbase v0.40.2
 	golang.org/x/text v0.41.0
