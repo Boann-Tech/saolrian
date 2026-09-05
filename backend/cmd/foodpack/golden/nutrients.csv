@@ -4,3 +4,11 @@ usda_sr,(?i)\bbananas?\b,carbohydrate,22.84,5,"SR Legacy ""Bananas, raw""; g-uni
 usda_sr,(?i)\bspinach\b,iron,2.71,5,"SR Legacy ""Spinach, raw"" (NDB 11457); spec anchor food"
 usda_foundation,"(?i)^milk,\s*whole\b",calcium,113,10,"Foundation Foods ""Milk, whole, 3.25% milkfat...""; spec anchor food; mg-unit anchor"
 usda_foundation,(?i)\bsalmon\b,vitamin_d,8.9,40,"Foundation Foods farmed Atlantic salmon raw; spec anchor food; ug-unit anchor; wide tolerance because farmed-fish vitamin D varies substantially with diet"
+cnf,"(?i)^banana, raw$",energy_kcal,89,15,"CNF ""Banana, raw""; anchor food"
+cnf,"(?i)^spinach, raw$",iron,2.7,30,"CNF ""Spinach, raw""; mg-unit anchor"
+ciqual,"(?i)^banana, pulp, raw$",energy_kcal,90,20,"CIQUAL alim_code 13000; kcal comes from const_code 328, not the kJ column"
+ciqual,"(?i)^banana, pulp, raw$",carbohydrate,20,25,"CIQUAL carbohydrate is available carbohydrate, so lower than USDA's by-difference figure"
+cofid,"(?i)^bananas,.*raw",energy_kcal,95,25,"CoFID flesh-only banana; kcal column, not kJ"
+cofid,"(?i)^bananas,.*raw",vitamin_c,11,50,"CoFID vitamin C; wide tolerance, ascorbic acid varies with storage"
+afcd,"(?i)^banana, cavendish, peeled, raw$",energy_kcal,94,25,"AFCD publishes kJ only; a value near 395 means the 0.239006 factor was not applied"
+afcd,"(?i)^banana, cavendish, peeled, raw$",protein,1.4,40,AFCD protein; g-unit anchor

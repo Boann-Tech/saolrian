@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/boanntech/saolrian/backend/internal/food"
@@ -181,5 +182,68 @@ func TestNonEmptyCheck(t *testing.T) {
 	populated := packOf(food.Profile{"energy_kcal": 89, "protein": 1})
 	if !result(t, populated, "non_empty").Pass {
 		t.Error("non_empty failed on a pack containing a food")
+	}
+}
+
+// Four of the five sources require attribution as a condition of use, so a
+// food that cannot be joined to a licence row is a licensing defect.
+func TestCheckAttributionRequiresASourceRow(t *testing.T) {
+	p := format.Pack{
+		NutrientKeys: food.Keys(),
+		Sources: []format.SourceInfo{
+			{Source: "cnf", Region: "ca", Licence: "ogl-canada", URL: "https://example.test", Rows: 1},
+		},
+		Foods: []format.RefFood{
+			goldenFoodOf("cnf", "1", "Banana, raw", food.Profile{"energy_kcal": 89}),
+			goldenFoodOf("ciqual", "2", "Banane", food.Profile{"energy_kcal": 90}),
+		},
+	}
+	got := checkAttribution(p)
+	if got.Pass {
+		t.Fatal("a food whose source has no attribution row must fail")
+	}
+	if !strings.Contains(got.Detail, "ciqual") {
+		t.Errorf("detail %q does not name the unattributed source", got.Detail)
+	}
+}
+
+func TestCheckAttributionRequiresLicenceAndURL(t *testing.T) {
+	p := format.Pack{
+		NutrientKeys: food.Keys(),
+		Sources: []format.SourceInfo{
+			{Source: "cnf", Region: "ca", Licence: "", URL: "https://example.test", Rows: 1},
+		},
+		Foods: []format.RefFood{goldenFoodOf("cnf", "1", "Banana, raw", food.Profile{"energy_kcal": 89})},
+	}
+	if got := checkAttribution(p); got.Pass {
+		t.Fatal("a source row with no licence must fail")
+	}
+}
+
+// A Rows count that disagrees with the pack is how an attribution screen
+// ends up quoting a number nobody can reproduce.
+func TestCheckAttributionRequiresAccurateRowCounts(t *testing.T) {
+	p := format.Pack{
+		NutrientKeys: food.Keys(),
+		Sources: []format.SourceInfo{
+			{Source: "cnf", Region: "ca", Licence: "ogl-canada", URL: "https://example.test", Rows: 99},
+		},
+		Foods: []format.RefFood{goldenFoodOf("cnf", "1", "Banana, raw", food.Profile{"energy_kcal": 89})},
+	}
+	if got := checkAttribution(p); got.Pass {
+		t.Fatal("a Rows count that disagrees with the pack must fail")
+	}
+}
+
+func TestCheckAttributionPasses(t *testing.T) {
+	p := format.Pack{
+		NutrientKeys: food.Keys(),
+		Sources: []format.SourceInfo{
+			{Source: "cnf", Region: "ca", Licence: "ogl-canada", URL: "https://example.test", Rows: 1},
+		},
+		Foods: []format.RefFood{goldenFoodOf("cnf", "1", "Banana, raw", food.Profile{"energy_kcal": 89})},
+	}
+	if got := checkAttribution(p); !got.Pass {
+		t.Fatalf("well-formed pack failed: %s", got.Detail)
 	}
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 
 	"github.com/boanntech/saolrian/backend/internal/food"
 	"github.com/boanntech/saolrian/backend/internal/foodpack/format"
@@ -42,6 +44,8 @@ func runChecks(p format.Pack) []CheckResult {
 		checkMacroSum(p),
 		checkAtwater(p),
 		checkGolden(p),
+		checkCrossSource(p),
+		checkAttribution(p),
 	}
 }
 
@@ -182,4 +186,58 @@ func checkAtwater(p format.Pack) CheckResult {
 		detail += fmt.Sprintf("; HARD FAIL: a food deviates over %.0f%% (%s)", atwaterHardDeviation*100, hardFail)
 	}
 	return CheckResult{"atwater", pass, detail}
+}
+
+// checkAttribution proves every food can be joined to a licence.
+//
+// USDA is public domain, but CNF, CIQUAL, CoFID and AFCD are all open
+// licences with an attribution condition. The attribution screen is built
+// from p.Sources, so a food whose Source has no row there ships
+// unattributed — a licensing defect, not a display one.
+func checkAttribution(p format.Pack) CheckResult {
+	counted := map[string]int{}
+	for _, f := range p.Foods {
+		counted[f.Source]++
+	}
+	declared := map[string]format.SourceInfo{}
+	for _, s := range p.Sources {
+		declared[s.Source] = s
+	}
+
+	var problems []string
+	// Sorted so a pack with several problems reports them the same way
+	// every run.
+	for _, name := range sortedKeys(counted) {
+		s, ok := declared[name]
+		if !ok {
+			problems = append(problems, fmt.Sprintf("%d food(s) from %q have no attribution row", counted[name], name))
+			continue
+		}
+		if s.Licence == "" || s.URL == "" || s.Region == "" {
+			problems = append(problems, fmt.Sprintf("%q is missing licence, region or url", name))
+		}
+		if s.Rows != counted[name] {
+			problems = append(problems, fmt.Sprintf("%q claims %d rows but the pack holds %d", name, s.Rows, counted[name]))
+		}
+	}
+	for _, s := range p.Sources {
+		if counted[s.Source] == 0 {
+			problems = append(problems, fmt.Sprintf("%q is attributed but contributed no foods", s.Source))
+		}
+	}
+
+	if len(problems) > 0 {
+		return CheckResult{"attribution", false, strings.Join(problems, "; ")}
+	}
+	return CheckResult{"attribution", true,
+		fmt.Sprintf("%d source(s) attributed, every food joined", len(p.Sources))}
+}
+
+func sortedKeys(m map[string]int) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
