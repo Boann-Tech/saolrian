@@ -6,6 +6,7 @@ import { ClientResponseError } from 'pocketbase';
 import Import from '../Import';
 import { AppProvider } from '../../state/AppContext';
 import { ToastProvider } from '../../components/ui';
+import type { LoseItImportCategories, LoseItCategoryPreview } from '../../lib/loseitZip';
 
 const authRecord = { id: 'user-1' };
 
@@ -14,6 +15,8 @@ let subscribeCb: ((e: { record: JobRecord }) => void) | null = null;
 let subscribeShouldReject = false;
 let getOneResult: JobRecord = { id: 'job-1', status: 'queued', counts: {} };
 let sendShouldConflict = false;
+let mountJobs: JobRecord[] = [];
+const unsubscribeMock = vi.fn(async (_id: string) => {});
 
 const fakePb = {
   baseUrl: 'http://localhost:8090',
@@ -26,8 +29,9 @@ const fakePb = {
           subscribeCb = cb;
           return async () => {};
         },
-        unsubscribe: async () => {},
+        unsubscribe: unsubscribeMock,
         getOne: async (_id: string) => getOneResult,
+        getList: async (_page: number, _perPage: number, _opts: unknown) => ({ items: mountJobs }),
       };
     }
     if (name === 'meal_slots') return { getFullList: async () => [] };
@@ -47,10 +51,14 @@ const fakePb = {
 };
 
 beforeEach(() => {
+  localStorage.clear();
+  localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   subscribeCb = null;
   subscribeShouldReject = false;
   getOneResult = { id: 'job-1', status: 'queued', counts: {} };
   sendShouldConflict = false;
+  mountJobs = [];
+  unsubscribeMock.mockClear();
 });
 
 afterEach(() => {
@@ -64,13 +72,17 @@ vi.mock('../../lib/pb', async (importOriginal) => {
 
 vi.mock('../../lib/push', () => ({ ensurePushSubscription: async () => false }));
 
-vi.mock('../../lib/loseitZip', () => ({
-  parseLoseItZip: async () => ({
+const parseLoseItZipMock = vi.fn(
+  async (): Promise<{ categories: LoseItImportCategories; previews: LoseItCategoryPreview[] }> => ({
     categories: {
       diary: [{ date: '2023-05-02', name: 'Toast', quantity: 1, unit: 'serving', meal: 'Breakfast', kcal: 200, protein_g: 5, carbs_g: 30, fat_g: 4 }],
     },
     previews: [{ key: 'diary', label: 'Food logs', count: 1, defaultSelected: true }],
   }),
+);
+
+vi.mock('../../lib/loseitZip', () => ({
+  parseLoseItZip: () => parseLoseItZipMock(),
 }));
 
 function renderImport() {
@@ -157,5 +169,93 @@ describe('Import screen', () => {
     await user.click(screen.getByRole('button', { name: /Import 1 selected/ }));
 
     expect(await screen.findByText(/an import is already running/i)).toBeInTheDocument();
+  });
+
+  it('rehydrates a still-running job on mount so a reopened/reloaded screen shows its status', async () => {
+    mountJobs = [{ id: 'job-old', status: 'running', counts: {} }];
+
+    renderImport();
+
+    expect(await screen.findByText(/Importing…/)).toBeInTheDocument();
+  });
+
+  it('does not rehydrate a job that already reached a terminal status', async () => {
+    mountJobs = [{ id: 'job-old', status: 'done', counts: { diary: { imported: 1, skipped: 0 } } }];
+
+    renderImport();
+
+    // Give the mount effect a tick to run, then confirm nothing was resurrected.
+    await Promise.resolve();
+    expect(screen.queryByText(/Importing…/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Import complete/)).not.toBeInTheDocument();
+  });
+
+  it('unsubscribes from the realtime channel when the screen unmounts mid-import', async () => {
+    const { unmount } = renderImport();
+    const user = userEvent.setup();
+
+    const input = screen.getByLabelText('Upload Lose It export zip');
+    const file = new File(['zip-bytes'], 'loseit-export.zip', { type: 'application/zip' });
+    await user.upload(input, file);
+
+    expect(await screen.findByText(/Food logs/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Import 1 selected/ }));
+
+    await waitFor(() => expect(subscribeCb).not.toBeNull());
+    expect(await screen.findByText(/Importing…/)).toBeInTheDocument();
+
+    unmount();
+
+    expect(unsubscribeMock).toHaveBeenCalledWith('job-1');
+  });
+
+  it('shows the per-category import breakdown in the status box once the job is done', async () => {
+    parseLoseItZipMock.mockResolvedValueOnce({
+      categories: {
+        diary: [{ date: '2023-05-02', name: 'Toast', quantity: 1, unit: 'serving', meal: 'Breakfast', kcal: 200, protein_g: 5, carbs_g: 30, fat_g: 4 }],
+        weight: [{ date: '2023-05-02', kg: 80 }],
+        exercise: [],
+      },
+      previews: [
+        { key: 'diary', label: 'Food logs', count: 1, defaultSelected: true },
+        { key: 'weight', label: 'Weight', count: 1, defaultSelected: true },
+        { key: 'exercise', label: 'Exercise', count: 0, defaultSelected: true },
+      ],
+    });
+
+    renderImport();
+    const user = userEvent.setup();
+
+    const input = screen.getByLabelText('Upload Lose It export zip');
+    const file = new File(['zip-bytes'], 'loseit-export.zip', { type: 'application/zip' });
+    await user.upload(input, file);
+
+    expect(await screen.findByText(/Food logs/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Import 3 selected/ }));
+
+    await waitFor(() => expect(subscribeCb).not.toBeNull());
+    subscribeCb!({
+      record: {
+        id: 'job-1',
+        status: 'done',
+        counts: {
+          diary: { imported: 4102, skipped: 0 },
+          weight: { imported: 210, skipped: 3 },
+          exercise: { imported: 0, skipped: 0 },
+        },
+      },
+    });
+
+    // The toast stays a short aggregate summary...
+    expect(await screen.findByText(/Imported 4,312, skipped 3/)).toBeInTheDocument();
+
+    // ...while the status box surfaces the full per-category breakdown that
+    // was already fetched into state but previously discarded.
+    expect(await screen.findByText(/Food logs.*4,102 imported/)).toBeInTheDocument();
+    expect(await screen.findByText(/Weight.*210 imported, 3 skipped/)).toBeInTheDocument();
+    // A category with nothing imported or skipped isn't worth a line.
+    expect(screen.queryByText(/Exercise/)).not.toBeInTheDocument();
   });
 });

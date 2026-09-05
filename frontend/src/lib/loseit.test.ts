@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { toIsoDate, parseLoseItCsv, parseDateValueCsv, parseLoseItWeightCsv, parseLoseItExerciseCsv, parseLoseItFoodCatalogCsv, parseLoseItProfileCsv } from './loseit';
+import {
+  toIsoDate,
+  parseLoseItCsv,
+  parseDateValueCsv,
+  parseLoseItWeightCsv,
+  detectLoseItWeightUnit,
+  parseLoseItExerciseCsv,
+  parseLoseItFoodCatalogCsv,
+  parseLoseItProfileCsv,
+} from './loseit';
 
 describe('toIsoDate', () => {
   it('converts LoseIt MM/DD/YYYY dates to YYYY-MM-DD', () => {
@@ -43,8 +52,67 @@ describe('parseDateValueCsv', () => {
 describe('parseLoseItWeightCsv', () => {
   it('parses weight rows and skips deleted ones', () => {
     const csv = 'Date,Weight,Last Updated,Deleted\n05/02/2023,91.99,2023-05-02T23:21:13+0100,false\n05/03/2023,90.5,2023-05-03T00:00:00+0100,true\n';
-    const rows = parseLoseItWeightCsv(csv);
+    const { rows, unitSystem } = parseLoseItWeightCsv(csv);
     expect(rows).toEqual([{ date: '2023-05-02', kg: 91.99 }]);
+    expect(unitSystem).toBe('unknown');
+  });
+
+  it('converts lbs to kg when profile.csv Height indicates an imperial account', () => {
+    const csv = 'Date,Weight,Last Updated\n05/02/2023,180,2023-05-02T00:00:00+0100\n';
+    // 70 inches — squarely in the imperial height range, well outside cm.
+    const { rows, unitSystem } = parseLoseItWeightCsv(csv, { height_cm: 70 });
+    expect(unitSystem).toBe('imperial');
+    expect(rows).toEqual([{ date: '2023-05-02', kg: 180 * 0.453592 }]);
+  });
+
+  it('leaves weight values untouched when profile.csv Height indicates a metric account', () => {
+    const csv = 'Date,Weight,Last Updated\n05/02/2023,91.99,2023-05-02T00:00:00+0100\n';
+    // 178 cm — squarely in the metric height range, well outside inches.
+    const { rows, unitSystem } = parseLoseItWeightCsv(csv, { height_cm: 178 });
+    expect(unitSystem).toBe('metric');
+    expect(rows).toEqual([{ date: '2023-05-02', kg: 91.99 }]);
+  });
+
+  it('falls back to unconverted when there is no profile data and weights are ambiguous', () => {
+    // 82 is a perfectly plausible kg weight, so this can't be distinguished
+    // from an imperial account without more information — must not guess.
+    const csv = 'Date,Weight,Last Updated\n05/02/2023,82,2023-05-02T00:00:00+0100\n';
+    const { rows, unitSystem } = parseLoseItWeightCsv(csv);
+    expect(unitSystem).toBe('unknown');
+    expect(rows).toEqual([{ date: '2023-05-02', kg: 82 }]);
+  });
+
+  it('falls back to unconverted when profile.csv Height is present but ambiguous', () => {
+    // Outside both the 100-250cm and 36-96in windows — not usable as a signal.
+    const csv = 'Date,Weight,Last Updated\n05/02/2023,82,2023-05-02T00:00:00+0100\n';
+    const { rows, unitSystem } = parseLoseItWeightCsv(csv, { height_cm: 30 });
+    expect(unitSystem).toBe('unknown');
+    expect(rows).toEqual([{ date: '2023-05-02', kg: 82 }]);
+  });
+
+  it('falls back to the weight-based heuristic when no profile data is available at all', () => {
+    // Medians implausible as kg (>250) but plausible as lbs — the narrow
+    // case the weight-only fallback is meant to catch.
+    const csv =
+      'Date,Weight,Last Updated\n' +
+      '05/01/2023,300,2023-05-01T00:00:00+0100\n' +
+      '05/02/2023,305,2023-05-02T00:00:00+0100\n' +
+      '05/03/2023,295,2023-05-03T00:00:00+0100\n';
+    const { rows, unitSystem } = parseLoseItWeightCsv(csv);
+    expect(unitSystem).toBe('imperial');
+    expect(rows.map((r) => r.kg)).toEqual([300 * 0.453592, 305 * 0.453592, 295 * 0.453592]);
+  });
+});
+
+describe('detectLoseItWeightUnit', () => {
+  it('prefers the profile height signal over the weight-based fallback', () => {
+    // Height says metric even though the (contrived) weight values alone
+    // would look imperial — height wins.
+    expect(detectLoseItWeightUnit({ height_cm: 178 }, [300, 305, 295])).toBe('metric');
+  });
+
+  it('returns unknown with no profile and no weight samples', () => {
+    expect(detectLoseItWeightUnit(undefined, [])).toBe('unknown');
   });
 });
 

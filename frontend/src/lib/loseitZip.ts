@@ -18,6 +18,14 @@ import {
   type LoseItProfileSnapshot,
 } from './loseit';
 
+// Water intake (water-intake.csv, via parseDateValueCsv) has the same
+// unknown-unit problem as weight — LoseIt likely reports it in fl oz or
+// cups for imperial accounts rather than ml — but the only sample export
+// available while building this fix is a metric one, so there's no way to
+// confirm the imperial column's actual unit (or even whether it's fl oz
+// vs. cups) without guessing blind. Left unconverted; the picker label
+// below still flags the assumption. See issue #2.
+
 export interface LoseItImportCategories {
   diary?: LoseItRow[];
   weight?: LoseItWeightRow[];
@@ -40,6 +48,8 @@ export interface LoseItCategoryPreview {
 
 const CATEGORY_META: Record<keyof LoseItImportCategories, { file: string; label: string; defaultSelected: boolean }> = {
   diary: { file: 'food-logs.csv', label: 'Food logs', defaultSelected: true },
+  // Overwritten dynamically when unit detection finds imperial with
+  // reasonable confidence — see the `weight` handling in parseLoseItZip.
   weight: { file: 'weights.csv', label: 'Weight (imported as kg)', defaultSelected: true },
   exercise: { file: 'exercise-logs.csv', label: 'Exercise', defaultSelected: true },
   foods: { file: 'custom-foods.csv', label: 'Custom foods', defaultSelected: true },
@@ -73,11 +83,24 @@ export async function parseLoseItZip(
     previews.push({ key, label: CATEGORY_META[key].label, count, defaultSelected: CATEGORY_META[key].defaultSelected });
   }
 
+  // Parsed ahead of weight so its Height field can feed the unit-detection
+  // heuristic below (LoseIt exports don't otherwise say which units an
+  // account uses).
+  const profileText = text(CATEGORY_META.profile.file);
+  const profileSnap = profileText ? parseLoseItProfileCsv(profileText) : null;
+
   const diaryText = text(CATEGORY_META.diary.file);
   add('diary', diaryText ? parseLoseItCsv(diaryText) : null);
 
   const weightText = text(CATEGORY_META.weight.file);
-  add('weight', weightText ? parseLoseItWeightCsv(weightText) : null);
+  if (weightText) {
+    const { rows, unitSystem } = parseLoseItWeightCsv(weightText, profileSnap ?? undefined);
+    add('weight', rows);
+    if (unitSystem === 'imperial') {
+      const preview = previews.find((p) => p.key === 'weight');
+      if (preview) preview.label = 'Weight (converted from lbs)';
+    }
+  }
 
   const exerciseText = text(CATEGORY_META.exercise.file);
   add('exercise', exerciseText ? parseLoseItExerciseCsv(exerciseText) : null);
@@ -100,13 +123,9 @@ export async function parseLoseItZip(
   const sleepText = text(CATEGORY_META.sleep.file);
   add('sleep', sleepText ? parseDateValueCsv(sleepText) : null);
 
-  const profileText = text(CATEGORY_META.profile.file);
-  if (profileText) {
-    const snap = parseLoseItProfileCsv(profileText);
-    if (Object.keys(snap).length > 0) {
-      categories.profile = snap;
-      previews.push({ key: 'profile', label: CATEGORY_META.profile.label, count: 1, defaultSelected: false });
-    }
+  if (profileSnap && Object.keys(profileSnap).length > 0) {
+    categories.profile = profileSnap;
+    previews.push({ key: 'profile', label: CATEGORY_META.profile.label, count: 1, defaultSelected: false });
   }
 
   return { categories, previews };

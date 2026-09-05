@@ -325,7 +325,8 @@ func importDiaryRows(app core.App, uid string, rows []diaryRow) categoryCount {
 	slotsByName := map[string]*core.Record{}
 
 	for _, row := range rows {
-		if row.Name == "" || row.Date == "" || row.Quantity < 0 {
+		if row.Name == "" || row.Date == "" || row.Quantity < 0 ||
+			row.Kcal < 0 || row.ProteinG < 0 || row.CarbsG < 0 || row.FatG < 0 {
 			c.Skipped++
 			continue
 		}
@@ -564,7 +565,8 @@ func importFoodCatalogRows(app core.App, uid string, rows []foodRow) categoryCou
 		return c
 	}
 	for _, row := range rows {
-		if row.Name == "" || row.UniqueID == "" || row.Quantity <= 0 {
+		if row.Name == "" || row.UniqueID == "" || row.Quantity <= 0 ||
+			row.Kcal < 0 || row.ProteinG < 0 || row.CarbsG < 0 || row.FatG < 0 {
 			c.Skipped++
 			continue
 		}
