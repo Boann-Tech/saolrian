@@ -144,6 +144,61 @@ func TestLoadAFCDConvertsFattyAcidMilligramsToGrams(t *testing.T) {
 	}
 }
 
+// AFCD declares Absent: {"N", "-"} and Trace: {"Tr"}, but until now no
+// fixture exercised any of the three: the design's sentinel rule
+// (Absent -> no key at all, Trace -> a real, present 0.0) went untested in
+// this adapter even though CoFID and CIQUAL both cover it for theirs.
+func TestLoadAFCDSentinels(t *testing.T) {
+	path := writeWorkbook(t, map[string][][]string{
+		"All solids & liquids per 100g": {
+			{
+				"Public Food Key", "Food Name",
+				"Energy with dietary fibre, equated \n(kJ)",
+				"Protein \n(g)", "Fat, total \n(g)",
+				"Available carbohydrate, without sugar alcohols \n(g)",
+				"Sodium (Na) \n(mg)", "Iron (Fe) \n(mg)", "Vitamin C \n(mg)",
+			},
+			{"F000001", "Sentinel test food", "395", "1.4", "0.2", "20.3", "Tr", "N", "-"},
+		},
+	})
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
+		"\"energy with dietary fibre, equated (kj)\",energy_kcal,0.239006,kJ to kcal\n" +
+		"protein (g),protein,1,Protein\n" +
+		"\"fat, total (g)\",fat,1,Fat\n" +
+		"\"available carbohydrate, without sugar alcohols (g)\",carbohydrate,1,Carbohydrate\n" +
+		"sodium (na) (mg),sodium,1,Sodium\n" +
+		"iron (fe) (mg),iron,1,Iron\n" +
+		"vitamin c (mg),vitamin_c,1,Vitamin C\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	foods, _, err := LoadAFCD(AFCDOptions{
+		File:    path,
+		Sheet:   "All solids & liquids per 100g",
+		Mapping: m,
+	})
+	if err != nil {
+		t.Fatalf("LoadAFCD: %v", err)
+	}
+	if len(foods) != 1 {
+		t.Fatalf("got %d foods, want 1", len(foods))
+	}
+	prof := food.Decode(foods[0].Nutrients)
+
+	// Tr: measured, negligible -> a real, present zero.
+	if v, ok := prof["sodium"]; !ok || v != 0 {
+		t.Errorf("sodium = %v, ok=%v; want a real 0 from Tr", v, ok)
+	}
+	// N: never measured -> absent entirely.
+	if _, ok := prof["iron"]; ok {
+		t.Error("iron is present, but N means not measured")
+	}
+	// -: AFCD's alternative spelling of "not measured" -> also absent.
+	if _, ok := prof["vitamin_c"]; ok {
+		t.Error("vitamin_c is present, but - means not measured")
+	}
+}
+
 // The multi-line headings AFCD uses are not a real difference; the mapping
 // table must not have to reproduce them.
 func TestLoadAFCDMatchesHeadersAcrossLineBreaks(t *testing.T) {
