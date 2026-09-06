@@ -201,7 +201,7 @@ meal slot; `weights` over the range; `daily_metrics` over the range.
     "margin": 180,
     "slope_kg_per_week": -0.42,
     "mean_intake": 2050,
-    "logged_days": 26,
+    "qualifying_days": 26,
     "weigh_ins": 14,
     "span_days": 27,
     "suggested_target": 1962

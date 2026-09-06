@@ -7,6 +7,11 @@ import type { TrendsPayload } from '../../../lib/types';
 export function MealsCard({ data }: { data: TrendsPayload }) {
   const rows = mealRows(data);
 
+  // data.slots.length === 0 is reachable (tested at line 481 of Trends.test.tsx).
+  // rows.length === 0 happens only when loggedDays === 0, which the screen's
+  // minDays gate now intercepts — it shows a stub instead of this card when
+  // logged days < 7. Defensive-only, but worth keeping to guard against
+  // direct component use or future gate changes.
   if (data.slots.length === 0 || rows.length === 0) {
     return <p className="text-sm text-text-faint">No meals to compare yet — add meal slots in Profile and log to them.</p>;
   }

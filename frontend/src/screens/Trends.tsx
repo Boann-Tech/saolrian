@@ -71,7 +71,7 @@ export default function Trends() {
     void saveCards(next);
   };
 
-  const rangeDays = data?.days.length ?? 0;
+  const loggedDays = data?.days.filter((d) => d.logged).length ?? 0;
 
   return (
     <div className="p-4">
@@ -104,9 +104,9 @@ export default function Trends() {
             return (
               <Card key={id} as="section">
                 <CardTitle>{meta.title}</CardTitle>
-                {rangeDays < meta.minDays ? (
+                {loggedDays < meta.minDays ? (
                   <p className="text-sm text-text-faint">
-                    Needs {meta.minDays} days of history — you have {rangeDays}.
+                    Needs {meta.minDays} days of logging — you have {loggedDays}.
                   </p>
                 ) : (
                   <CardBody id={id} data={data} onChanged={load} />

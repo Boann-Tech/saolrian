@@ -124,17 +124,49 @@ describe('Trends', () => {
     expect(headings).toEqual(['Intake vs budget', 'Weight trend']);
   });
 
-  it('shows a stub instead of a chart below the card minimum', async () => {
-    // 10 days: below the 14-day floor for Observed TDEE (and also for Energy
-    // balance, which shares that floor — scope to the TDEE card's own
-    // section so the assertion targets that card specifically).
-    fetchTrendsMock.mockResolvedValue(makePayload(10));
+  it('shows a stub when logged days are below the card minimum', async () => {
+    // 90-day range but only 8 logged days: below the 14-day floor for Observed
+    // TDEE. The gate counts logged days, not calendar days, so the 82 zero-filled
+    // days do not contribute to the count. Restrict to just the TDEE card.
+    profileRecord.trend_cards = ['tdee'];
+    const p = makePayload(90);
+    // Keep first 8 days logged, mark the rest unlogged.
+    for (let i = 8; i < p.days.length; i++) {
+      p.days[i].logged = false;
+      p.days[i].kcal = 0;
+    }
+    fetchTrendsMock.mockResolvedValue(p);
     renderTrends();
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Observed TDEE' })).toBeTruthy());
     const heading = screen.getByRole('heading', { name: 'Observed TDEE' });
     const section = heading.closest('section')!;
-    expect(within(section).getByText(/needs 14 days/i)).toBeTruthy();
+    expect(within(section).getByText(/needs 14 days of logging/i)).toBeTruthy();
+  });
+
+  it('shows the card body when logged days meet or exceed the minimum', async () => {
+    // 90-day range with exactly 14 logged days: meets the floor for Observed TDEE.
+    // Restrict to just the TDEE card to avoid the gate triggering on other cards.
+    profileRecord.trend_cards = ['tdee'];
+    const p = makePayload(90);
+    // Keep first 14 days logged, mark the rest unlogged.
+    for (let i = 14; i < p.days.length; i++) {
+      p.days[i].logged = false;
+      p.days[i].kcal = 0;
+    }
+    p.estimate.sufficient = false;
+    p.estimate.reason = 'few_weigh_ins';
+    fetchTrendsMock.mockResolvedValue(p);
+    renderTrends();
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Observed TDEE' })).toBeTruthy());
+    const heading = screen.getByRole('heading', { name: 'Observed TDEE' });
+    const section = heading.closest('section')!;
+    // The card body renders, showing the insufficiency reason instead of a stub.
+    // The TdeeCard explains why the estimate is insufficient ("Needs 8 weigh-ins...").
+    expect(within(section).getByText(/needs 8 weigh-ins/i)).toBeTruthy();
+    // The Trends.tsx gate stub must not appear.
+    expect(within(section).queryByText(/needs 14 days of logging/i)).toBeNull();
   });
 
   it('requests a different range when the selector changes', async () => {
@@ -519,11 +551,14 @@ describe('MealsCard', () => {
   // all, and slots that exist but have nothing logged against them. Only the
   // first is covered by makePayload's default slots: [] elsewhere in this
   // file — this test pins the second, which mealRows signals by returning [].
-  it('degrades with the same message when slots exist but nothing is logged', async () => {
+  it('degrades with a message when there are no meal slots configured', async () => {
+    // Tests the card's degradation when slots.length === 0. With the new
+    // minDays gate, the case where loggedDays === 0 is now blocked by the gate
+    // stub instead of rendering the card's "no meals" message. So this test
+    // verifies the slots.length === 0 condition instead.
     profileRecord.trend_cards = ['meals'];
     const p = makePayload(90);
-    p.slots = [{ id: 's1', name: 'Breakfast', sort_order: 0, pct_allocation: 50 }];
-    for (const d of p.days) d.logged = false;
+    p.slots = []; // No meal slots configured
     fetchTrendsMock.mockResolvedValue(p);
     renderTrends();
 
