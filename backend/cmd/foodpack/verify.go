@@ -251,10 +251,24 @@ func checkAtwater(p format.Pack) CheckResult {
 // licences with an attribution condition. The attribution screen is built
 // from p.Sources, so a food whose Source has no row there ships
 // unattributed — a licensing defect, not a display one.
+//
+// This checked only the source-level SourceInfo table, never the per-food
+// Licence/Region fields design section 2 makes part of food_ref itself
+// (`licence` is a per-row field, not just a per-source one) — an adapter
+// that declared a correct SourceInfo row but shipped every food with
+// Licence: "" would have passed. The per-food loop below closes that.
 func checkAttribution(p format.Pack) CheckResult {
 	counted := map[string]int{}
+	missingLicence := map[string]int{}
+	missingRegion := map[string]int{}
 	for _, f := range p.Foods {
 		counted[f.Source]++
+		if f.Licence == "" {
+			missingLicence[f.Source]++
+		}
+		if f.Region == "" {
+			missingRegion[f.Source]++
+		}
 	}
 	declared := map[string]format.SourceInfo{}
 	for _, s := range p.Sources {
@@ -275,6 +289,12 @@ func checkAttribution(p format.Pack) CheckResult {
 		}
 		if s.Rows != counted[name] {
 			problems = append(problems, fmt.Sprintf("%q claims %d rows but the pack holds %d", name, s.Rows, counted[name]))
+		}
+		if n := missingLicence[name]; n > 0 {
+			problems = append(problems, fmt.Sprintf("%d food(s) from %q have no per-food licence", n, name))
+		}
+		if n := missingRegion[name]; n > 0 {
+			problems = append(problems, fmt.Sprintf("%d food(s) from %q have no per-food region", n, name))
 		}
 	}
 	for _, s := range p.Sources {

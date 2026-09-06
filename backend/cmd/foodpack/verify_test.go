@@ -367,6 +367,36 @@ func TestCheckAttributionRequiresAccurateRowCounts(t *testing.T) {
 	}
 }
 
+// checkAttribution used to inspect only p.Sources; an adapter that
+// declared a perfectly correct SourceInfo row but shipped every food with
+// Licence: "" (or Region: "") would still pass, even though design
+// section 2 makes licence a per-row field on food_ref, not just a
+// per-source one.
+func TestCheckAttributionRequiresPerFoodLicenceAndRegion(t *testing.T) {
+	complete := format.SourceInfo{Source: "cnf", Region: "ca", Licence: "ogl-canada", URL: "https://example.test", Rows: 1}
+
+	nutrients := food.Encode(food.Profile{"energy_kcal": 89})
+	for field, rf := range map[string]format.RefFood{
+		"licence": {Source: "cnf", SourceID: "1", Name: "Banana, raw", Region: "ca", Licence: "", Nutrients: nutrients},
+		"region":  {Source: "cnf", SourceID: "1", Name: "Banana, raw", Region: "", Licence: "ogl-canada", Nutrients: nutrients},
+	} {
+		t.Run(field, func(t *testing.T) {
+			p := format.Pack{
+				NutrientKeys: food.Keys(),
+				Sources:      []format.SourceInfo{complete},
+				Foods:        []format.RefFood{rf},
+			}
+			got := checkAttribution(p)
+			if got.Pass {
+				t.Fatalf("a food missing its per-food %s must fail attribution", field)
+			}
+			if !strings.Contains(got.Detail, "per-food "+field) {
+				t.Errorf("detail %q does not name the missing per-food %s", got.Detail, field)
+			}
+		})
+	}
+}
+
 func TestCheckAttributionPasses(t *testing.T) {
 	p := format.Pack{
 		NutrientKeys: food.Keys(),

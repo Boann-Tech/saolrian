@@ -48,9 +48,16 @@ func TestGoldenTableLoads(t *testing.T) {
 	}
 }
 
-// goldenFoodOf builds a minimal RefFood for evalGolden tests.
+// goldenFoodOf builds a minimal RefFood for evalGolden tests. Region and
+// Licence are filled with placeholders, not left blank: checkAttribution
+// asserts both per food (see TestCheckAttributionRequiresPerFoodLicence),
+// and callers testing something else entirely should not have to know
+// that to avoid tripping it.
 func goldenFoodOf(source, sourceID, name string, prof food.Profile) format.RefFood {
-	return format.RefFood{Source: source, SourceID: sourceID, Name: name, Nutrients: food.Encode(prof)}
+	return format.RefFood{
+		Source: source, SourceID: sourceID, Name: name, Nutrients: food.Encode(prof),
+		Region: "test-region", Licence: "test-licence",
+	}
 }
 
 func goldenPackOf(sources []string, foods ...format.RefFood) format.Pack {
