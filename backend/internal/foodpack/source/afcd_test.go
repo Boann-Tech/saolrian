@@ -182,3 +182,61 @@ func TestLoadAFCDReportsUnmappedColumns(t *testing.T) {
 		t.Errorf("report does not name the unmapped column:\n%s", rep)
 	}
 }
+
+// Real AFCD workbooks carry free-text columns (Description, Group, Main
+// data references, Footnote) alongside the numeric ones. If the mapping
+// is consulted only after Parse, a value like "Cereals and cereal
+// products" raises ErrUnknownToken and the build dies on the first data
+// row; a column absent from the mapping table must never reach Parse.
+func TestLoadAFCDIgnoresUnmappedFreeTextColumn(t *testing.T) {
+	path := writeWorkbook(t, map[string][][]string{
+		"All solids & liquids per 100g": {
+			{"Public Food Key", "Food Name", "Energy with dietary fibre, equated \n(kJ)", "Classification description"},
+			{"F009784", "Banana, cavendish, peeled, raw", "395", "Cereals and cereal products"},
+		},
+	})
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
+		"\"energy with dietary fibre, equated (kj)\",energy_kcal,0.239006,kJ to kcal\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	foods, _, err := LoadAFCD(AFCDOptions{
+		File:    path,
+		Sheet:   "All solids & liquids per 100g",
+		Mapping: m,
+	})
+	if err != nil {
+		t.Fatalf("LoadAFCD: %v (a free-text column not in the mapping must never reach Parse)", err)
+	}
+	if len(foods) != 1 {
+		t.Fatalf("got %d foods, want 1", len(foods))
+	}
+	if _, ok := food.Decode(foods[0].Nutrients)["energy_kcal"]; !ok {
+		t.Error("energy_kcal missing: the mapped column must still be read")
+	}
+}
+
+// A column explicitly marked "-" in the mapping must also be skipped
+// before Parse, not just after: the whole point of "-" is that its cells
+// are never inspected.
+func TestLoadAFCDNeverParsesAnExplicitlyIgnoredColumn(t *testing.T) {
+	path := writeWorkbook(t, map[string][][]string{
+		"All solids & liquids per 100g": {
+			{"Public Food Key", "Food Name", "Energy with dietary fibre, equated \n(kJ)", "Footnote"},
+			{"F009784", "Banana, cavendish, peeled, raw", "395", "not a number, not a sentinel either"},
+		},
+	})
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
+		"\"energy with dietary fibre, equated (kj)\",energy_kcal,0.239006,kJ to kcal\n" +
+		"footnote,-,1,Free-text annotation; not a nutrient\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	if _, _, err := LoadAFCD(AFCDOptions{
+		File:    path,
+		Sheet:   "All solids & liquids per 100g",
+		Mapping: m,
+	}); err != nil {
+		t.Fatalf("LoadAFCD: %v (an explicitly ignored column must never reach Parse)", err)
+	}
+}

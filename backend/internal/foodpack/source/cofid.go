@@ -141,6 +141,21 @@ func LoadCoFID(o CoFIDOptions) ([]format.RefFood, []format.SourceInfo, error) {
 				if h == "" || h == o.CodeColumn || h == o.NameColumn {
 					continue
 				}
+				// Consult the mapping before Parse, not after. Real
+				// workbooks carry free-text columns (Description, Group,
+				// Previous, Main data references, Footnote); Parse on
+				// "Cereals and cereal products" raises ErrUnknownToken,
+				// which is fatal by design. An unmapped column is noted
+				// and skipped without ever being parsed; an explicitly
+				// ignored ("-") column is skipped the same way, silently,
+				// because ignoring it is the whole point.
+				if !o.Mapping.Known(h) {
+					noteUnmapped(o.Unmapped, h, t.Sheet)
+					continue
+				}
+				if o.Mapping.Ignored(h) {
+					continue
+				}
 				raw, ok := t.Cell(row, h)
 				if !ok {
 					continue
@@ -154,9 +169,8 @@ func LoadCoFID(o CoFIDOptions) ([]format.RefFood, []format.SourceInfo, error) {
 				}
 				key, out, mapped := o.Mapping.Apply(h, value)
 				if !mapped {
-					if !o.Mapping.Known(h) {
-						noteUnmapped(o.Unmapped, h, t.Sheet)
-					}
+					// Known and not ignored means mapped; Apply cannot
+					// fail here. Kept as a guard rather than a panic.
 					continue
 				}
 				if profiles[code] == nil {

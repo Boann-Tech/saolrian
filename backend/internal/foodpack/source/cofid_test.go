@@ -294,3 +294,66 @@ func TestLoadCoFIDDropsFoodWithNoNameOnAnySheet(t *testing.T) {
 		t.Fatalf("got %d foods, want 0: a food with no name on any sheet must be dropped", len(foods))
 	}
 }
+
+// Real CoFID workbooks carry free-text columns -- Description, Group,
+// Previous, Main data references, Footnote -- that are not nutrient
+// values at all. If the mapping is consulted only after Parse, a value
+// like "Cereals and cereal products" raises ErrUnknownToken and the build
+// dies on the first data row; a column absent from the mapping table (or
+// explicitly marked "-") must never reach Parse.
+func TestLoadCoFIDIgnoresUnmappedFreeTextColumn(t *testing.T) {
+	path := writeWorkbook(t, map[string][][]string{
+		"1.3 Proximates": {
+			{"Food Code", "Food Name", "Energy (kcal)", "Description", "Group"},
+			{"13-100", "Bananas, raw, flesh only", "95", "Cereals and cereal products", "Fruit"},
+		},
+	})
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
+		"energy (kcal),energy_kcal,1,Energy\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	foods, _, err := LoadCoFID(CoFIDOptions{
+		File:      path,
+		Sheets:    []string{"1.3 Proximates"},
+		HeaderRow: 1,
+		Mapping:   m,
+	})
+	if err != nil {
+		t.Fatalf("LoadCoFID: %v (a free-text column not in the mapping must never reach Parse)", err)
+	}
+	if len(foods) != 1 {
+		t.Fatalf("got %d foods, want 1", len(foods))
+	}
+	prof := food.Decode(foods[0].Nutrients)
+	if _, ok := prof["energy_kcal"]; !ok {
+		t.Error("energy_kcal missing: the mapped column must still be read")
+	}
+}
+
+// A column explicitly marked "-" in the mapping (as opposed to simply
+// absent from it) must also be skipped before Parse, not just after: the
+// whole point of "-" is that its cells are never inspected.
+func TestLoadCoFIDNeverParsesAnExplicitlyIgnoredColumn(t *testing.T) {
+	path := writeWorkbook(t, map[string][][]string{
+		"1.3 Proximates": {
+			{"Food Code", "Food Name", "Energy (kcal)", "Previous"},
+			{"13-100", "Bananas, raw, flesh only", "95", "not a number, not a sentinel either"},
+		},
+	})
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
+		"energy (kcal),energy_kcal,1,Energy\n" +
+		"previous,-,1,Free-text cross-reference to a prior food code; not a nutrient\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	_, _, err = LoadCoFID(CoFIDOptions{
+		File:      path,
+		Sheets:    []string{"1.3 Proximates"},
+		HeaderRow: 1,
+		Mapping:   m,
+	})
+	if err != nil {
+		t.Fatalf("LoadCoFID: %v (an explicitly ignored column must never reach Parse)", err)
+	}
+}
