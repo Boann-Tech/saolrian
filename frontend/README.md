@@ -39,4 +39,4 @@ If a diary-entry create fails with a network error, the payload is queued in loc
 
 ### PWA
 
-`vite-plugin-pwa` with auto-update service worker. Workbox `NetworkFirst` strategy for `/api/` requests. Icons: SVG source (`public/icons/icon.svg`, rounded square + white S) rasterized to 192/512 PNG plus a maskable variant.
+`vite-plugin-pwa` with auto-update service worker. Workbox `NetworkFirst` strategy for `/api/` requests. Icons: SVG source (`public/icons/icon.svg`, rounded square + white flame-and-pulse mark) rasterized to 192/512 PNG plus a maskable variant.

@@ -1,9 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" role="img" aria-label="Saolrian">
-  <!-- Mark: track ring with a gap; a dot sets off around it. saol = life, rian = track. -->
+  <!-- Mark: a flame (calories) carrying a heartbeat trace (health). saol = life, rian = track. -->
   <g transform="translate(4,4)">
-    <path d="M 49.66 41.39 A 20 20 0 1 1 49.66 22.61"
-          fill="none" stroke="#ffffff" stroke-width="6.5" stroke-linecap="round"/>
-    <circle cx="47.6" cy="19.6" r="5.5" fill="#ffffff"/>
+    <mask id="saolrian-pulse-logo-dark">
+      <rect width="64" height="64" fill="#fff"/>
+      <path d="M10 39.5h14l3.2-8.4 4 13.6 3.2-9.4h6.8"
+            fill="none" stroke="#000" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+    <path d="M31 5c6.4 8.4 6.6 14.2 4.6 18.8 3.4-1.8 5.4-4.6 6-8.2C46.8 22.4 49 29 49 35.4 49 45.2 41 53 31.6 53 22.2 53 15 45.6 15 36.2c0-6.4 3-12.2 8.6-16.6-.5 5 .7 8.8 3.4 11.2C24.2 22.6 25.8 12.6 31 5Z"
+          fill="#ffffff" mask="url(#saolrian-pulse-logo-dark)"/>
+    <!-- rim keeps the silhouette unbroken where the trace enters -->
+    <path d="M31 5c6.4 8.4 6.6 14.2 4.6 18.8 3.4-1.8 5.4-4.6 6-8.2C46.8 22.4 49 29 49 35.4 49 45.2 41 53 31.6 53 22.2 53 15 45.6 15 36.2c0-6.4 3-12.2 8.6-16.6-.5 5 .7 8.8 3.4 11.2C24.2 22.6 25.8 12.6 31 5Z"
+          fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linejoin="round"/>
   </g>
   <!-- Wordmark -->
   <text x="72" y="47" font-family="'Inter Tight','Inter',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif"
