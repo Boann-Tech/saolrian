@@ -379,3 +379,76 @@ func TestCheckAttributionPasses(t *testing.T) {
 		t.Fatalf("well-formed pack failed: %s", got.Detail)
 	}
 }
+
+func TestCheckSubNutrientsPassesOnAConsistentFood(t *testing.T) {
+	p := packOf(food.Profile{
+		"fat":                 10,
+		"fat_saturated":       3,
+		"fat_monounsaturated": 3,
+		"fat_polyunsaturated": 3,
+		"carbohydrate":        50,
+		"sugars":              20,
+		"starch":              20,
+		"fibre":               5,
+		"vitamin_a_rae":       100,
+		"retinol":             90,
+	})
+	if got := result(t, p, "sub_nutrients"); !got.Pass {
+		t.Fatalf("a consistent food must pass: %s", got.Detail)
+	}
+}
+
+func TestCheckSubNutrientsFailsWhenFatSubtypesExceedTotal(t *testing.T) {
+	p := packOf(food.Profile{
+		"fat":                 10,
+		"fat_saturated":       20,
+		"fat_monounsaturated": 20,
+		"fat_polyunsaturated": 20,
+	})
+	got := result(t, p, "sub_nutrients")
+	if got.Pass {
+		t.Fatal("fat subtypes summing to 6x total fat must fail")
+	}
+	if !strings.Contains(got.Detail, "fat") {
+		t.Errorf("detail should name the food and the relation, got: %s", got.Detail)
+	}
+}
+
+// A missing side of a relationship must be skipped, not treated as 0 --
+// treating an absent denominator as 0 would make sum > 0*Mult true for
+// almost any positive numerator, and absent is never the same as zero
+// elsewhere in this codebase.
+func TestCheckSubNutrientsSkipsFoodsMissingEitherSide(t *testing.T) {
+	p := packOf(food.Profile{
+		"fat_saturated":       50,
+		"fat_monounsaturated": 50,
+		// no "fat" key at all
+	})
+	if got := result(t, p, "sub_nutrients"); !got.Pass {
+		t.Fatalf("a food missing the denominator must be skipped, not failed: %s", got.Detail)
+	}
+
+	p2 := packOf(food.Profile{
+		"fat": 1,
+		// no fat_saturated/mono/poly at all
+	})
+	if got := result(t, p2, "sub_nutrients"); !got.Pass {
+		t.Fatalf("a food missing every numerator must be skipped, not failed: %s", got.Detail)
+	}
+}
+
+// Below each relation's floor, a near-zero denominator makes the ratio
+// meaningless (rounding noise between two trace figures), so it must not
+// fail even though the numerator technically exceeds Mult times the
+// denominator.
+func TestCheckSubNutrientsIgnoresNearZeroTraceNoise(t *testing.T) {
+	p := packOf(food.Profile{
+		"fat":                 0,
+		"fat_saturated":       0.01,
+		"fat_monounsaturated": 0.01,
+		"fat_polyunsaturated": 0,
+	})
+	if got := result(t, p, "sub_nutrients"); !got.Pass {
+		t.Fatalf("trace-level values below the floor must not fail: %s", got.Detail)
+	}
+}

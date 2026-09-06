@@ -67,6 +67,7 @@ func runChecks(p format.Pack) []CheckResult {
 		checkGolden(p),
 		checkCrossSource(p),
 		checkAttribution(p),
+		checkSubNutrients(p),
 	}
 }
 
@@ -304,6 +305,162 @@ func missingAttributionFields(s format.SourceInfo) []string {
 		missing = append(missing, "url")
 	}
 	return missing
+}
+
+// subNutrientRelation is one internal-consistency rule: the numerators
+// (measured independently of the denominator, e.g. individual fatty
+// acids) may not sum to much more than the denominator they are part of.
+//
+// Floor is the minimum denominator value below which the ratio stops
+// meaning anything — 0.01 g of saturated fat against 0.00 g of total fat
+// is rounding noise, not a mapping error, exactly like crossSourceFloor
+// above. A food whose denominator is missing, or any of whose numerators
+// is missing, is skipped entirely: absent is not zero, and treating it as
+// zero would only ever make this check laxer or noisier, never catch
+// anything.
+type subNutrientRelation struct {
+	Name        string // used in the failure message
+	Numerators  []string
+	Denominator string
+	Mult        float64
+	Floor       float64
+}
+
+// subNutrientRelations are checked against the real USDA-only build
+// (8,202 foods) that this branch can currently produce; each Mult/Floor
+// pair is the smallest that lets every food in that build pass, with a
+// small margin, not a value picked in advance. This is a hard check in
+// the style of checkRanges: any violation fails the whole build on the
+// first food found, so these bounds must actually hold.
+//
+// "vitamin_d + vitamin_e ..." and similar RE-vs-RAE style relationships
+// are deliberately not here: the four below are the ones that held (with
+// a defensible floor and margin) against real data; nothing else from the
+// design's suggested set survived contact with it — see the fix-wave
+// report for what was tried and dropped.
+var subNutrientRelations = []subNutrientRelation{
+	{
+		// USDA measures fatty acid subtypes independently of total fat
+		// rather than deriving one from the other, so they do not sum
+		// exactly to it even in good data. Confirmed worst case in the
+		// real build: usda_sr/174513 "Turkey, retail parts, breast, meat
+		// only, with added solution, raw" sums to 7.213g across the three
+		// subtypes against 2.53g of total fat (2.85x) — an "added
+		// solution" (brine-injected) product, a category USDA is known to
+		// carry some nutrient values for by retention/imputation rather
+		// than direct proportional measurement of the diluted product.
+		// The next worst, usda_sr/170603 "Beef, chuck, under blade pot
+		// roast..." (1.67x), is an ordinary raw cut with no such
+		// explanation, so the margin is real headroom, not just a
+		// one-food carve-out. 3.0 clears both with room, while still
+		// failing outright on the kind of order-of-magnitude factor error
+		// (a forgotten mg->g conversion, a 0.001 applied to the wrong
+		// column) this check exists to catch. Floor 1.0g: below that,
+		// e.g. "Beverages, Orange juice drink" at 0.00g fat against
+		// 0.02g of summed subtypes, the comparison is rounding noise
+		// between two near-zero figures.
+		Name:        "fat_saturated + fat_monounsaturated + fat_polyunsaturated <= fat",
+		Numerators:  []string{"fat_saturated", "fat_monounsaturated", "fat_polyunsaturated"},
+		Denominator: "fat",
+		Mult:        3.0,
+		Floor:       1.0,
+	},
+	{
+		// Sugars and starch are likewise measured separately from
+		// carbohydrate-by-difference. Confirmed worst case:
+		// usda_sr/173327 "HOT POCKETS Ham 'N Cheese Stuffed Sandwich,
+		// frozen" sums to 32.15g against 24.69g of carbohydrate (1.30x),
+		// a composite prepared dish where the two measurements come from
+		// different methods. 1.35 clears the real build with a small
+		// margin. Floor 1.0g excludes trace-level foods such as
+		// usda_sr/171528 "Turkey, retail parts, breast, meat and skin,
+		// raw" (0.01g summed against 0.00g carbohydrate).
+		Name:        "sugars + starch <= carbohydrate",
+		Numerators:  []string{"sugars", "starch"},
+		Denominator: "carbohydrate",
+		Mult:        1.35,
+		Floor:       1.0,
+	},
+	{
+		// Fibre is a component of carbohydrate-by-difference by
+		// definition (it is not measured independently and subtracted
+		// out the way sugars/starch are), so this one holds exactly: 0
+		// violations across every one of the 7,403 real foods carrying
+		// both keys. No floor and no margin beyond the design's own 1.0
+		// were needed.
+		Name:        "fibre <= carbohydrate",
+		Numerators:  []string{"fibre"},
+		Denominator: "carbohydrate",
+		Mult:        1.0,
+		Floor:       0,
+	},
+	{
+		// Retinol is one component that feeds into vitamin_a_rae (the
+		// other being carotenes divided by their RAE conversion factors),
+		// so it cannot exceed RAE by more than measurement noise. Holds
+		// with 0 violations across 4,439 real foods at the design's own
+		// 1.1. Floor 1.0ug excludes usda_sr/167889 "Pork, fresh, loin,
+		// center rib..." where vitamin_a_rae rounds to 0ug against 2ug of
+		// retinol — noise between two near-zero figures, not a real
+		// disagreement.
+		Name:        "retinol <= vitamin_a_rae",
+		Numerators:  []string{"retinol"},
+		Denominator: "vitamin_a_rae",
+		Mult:        1.1,
+		Floor:       1.0,
+	},
+}
+
+// checkSubNutrients asserts that, within a single food, sub-nutrients
+// measured independently of a total do not sum to much more than that
+// total. Unlike every other check here, this one is a pure function of
+// the pack itself — it needs no second source to compare against, so it
+// is exercised by today's USDA-only build rather than waiting on a
+// second real source to exist.
+//
+// It exists because every other range check in this file only rejects a
+// value for being too LARGE (food.Validate rejects v > n.Max). A
+// conversion factor wrong in the shrinking direction — a 0.001 applied to
+// a column already in grams, milligrams read as grams — produces values a
+// thousandfold too small and sails through every other check unnoticed.
+// Scaling one side of one of these relationships out of proportion to the
+// other, in either direction, is exactly what this catches.
+func checkSubNutrients(p format.Pack) CheckResult {
+	checked := 0
+	for _, f := range p.Foods {
+		prof := food.Decode(f.Nutrients)
+		for _, rel := range subNutrientRelations {
+			denom, ok := prof[rel.Denominator]
+			if !ok {
+				continue
+			}
+			sum := 0.0
+			complete := true
+			for _, k := range rel.Numerators {
+				v, ok := prof[k]
+				if !ok {
+					complete = false
+					break
+				}
+				sum += v
+			}
+			if !complete {
+				continue
+			}
+			if denom < rel.Floor {
+				continue
+			}
+			checked++
+			if sum > denom*rel.Mult {
+				return CheckResult{"sub_nutrients", false, fmt.Sprintf(
+					"%s/%s (%s): %s but %s = %.3f and %s sum to %.3f",
+					f.Source, f.SourceID, f.Name, rel.Name, rel.Denominator, denom,
+					strings.Join(rel.Numerators, "+"), sum)}
+			}
+		}
+	}
+	return CheckResult{"sub_nutrients", true,
+		fmt.Sprintf("%d relation checks held across %d food(s)", checked, len(p.Foods))}
 }
 
 func sortedKeys(m map[string]int) []string {
