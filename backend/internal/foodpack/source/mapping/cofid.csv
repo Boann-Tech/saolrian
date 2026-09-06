@@ -26,7 +26,7 @@ selenium (µg),selenium,1,Inorganics
 iodine (µg),iodine,1,Inorganics
 retinol (µg),retinol,1,Vitamins
 carotene (µg),carotene_beta,1,Vitamins
-vitamin a (µg),vitamin_a_rae,1,Vitamins: retinol equivalents
+vitamin a (µg),-,1,"Vitamins: this column is retinol equivalents (RE), not retinol activity equivalents (RAE) -- they are different quantities that can differ by up to 2x for carotene-rich foods (RE historically used a 1:6 beta-carotene:retinol ratio; RAE uses 1:12). The aggregate RE figure alone cannot be converted to RAE without the underlying carotene breakdown, which this column does not carry, so it is dropped rather than stored under vitamin_a_rae. The canonical vocabulary has no separate RE key; retinol and carotene_beta are mapped individually below instead"
 vitamin d (µg),vitamin_d,1,Vitamins
 vitamin e (mg),vitamin_e,1,Vitamins
 vitamin k1 (µg),vitamin_k,1,Vitamins

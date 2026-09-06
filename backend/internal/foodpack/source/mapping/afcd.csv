@@ -25,7 +25,7 @@ copper (cu) (mg),copper,1,Copper
 manganese (mn) (mg),manganese,1,Manganese
 selenium (se) (µg),selenium,1,Selenium
 iodine (i) (µg),iodine,1,Iodine
-"vitamin a retinol equivalents (µg)",vitamin_a_rae,1,Vitamin A RE
+"vitamin a retinol equivalents (µg)",-,1,"This column is retinol equivalents (RE), not retinol activity equivalents (RAE) -- they are different quantities that can differ by up to 2x for carotene-rich foods (RE historically used a 1:6 beta-carotene:retinol ratio; RAE uses 1:12). The aggregate RE figure alone cannot be converted to RAE without the underlying carotene breakdown, which this column does not carry, so it is dropped rather than stored under vitamin_a_rae. The canonical vocabulary has no separate RE key; retinol and carotene_beta are mapped individually below instead"
 retinol (µg),retinol,1,Retinol
 beta-carotene (µg),carotene_beta,1,Beta-carotene
 vitamin d3 equivalents (µg),vitamin_d,1,Vitamin D
