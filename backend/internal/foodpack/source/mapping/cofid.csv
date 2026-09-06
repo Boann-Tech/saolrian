@@ -6,10 +6,10 @@ carbohydrate (g),carbohydrate,1,"Proximates: available carbohydrate, monosacchar
 englyst fibre (g),fibre,1,Proximates
 total sugars (g),sugars,1,Proximates
 starch (g),starch,1,Proximates
-satd fa /100g fa (g),fat_saturated,1,Proximates
-mono fa /100g fa (g),fat_monounsaturated,1,Proximates
-poly fa /100g fa (g),fat_polyunsaturated,1,Proximates
-trans fa /100g fa (g),fat_trans,1,Proximates
+satd fa /100g fd (g),fat_saturated,1,Proximates
+mono fa /100g fd (g),fat_monounsaturated,1,Proximates
+poly fa /100g fd (g),fat_polyunsaturated,1,Proximates
+trans fa /100g fd (g),fat_trans,1,Proximates
 cholesterol (mg),cholesterol,1,Proximates
 alcohol (g),alcohol,1,Proximates
 water (g),water,1,Proximates
@@ -43,3 +43,7 @@ energy (kj) (kj),-,1,Proximates: energy in kJ; superseded by kcal
 chloride (mg),-,1,Inorganics: outside the canonical vocabulary
 tryptophan/60 (g),-,1,Proximates: a protein component
 niacin equivalent (mg),-,1,Vitamins: superseded by preformed niacin
+satd fa /100g fa (g),-,1,"Proximates: this is grams per 100g of FATTY ACIDS (a composition percentage of the fat fraction), not per 100g of food. fat_saturated means per 100g food; use the /100g fd column for that. Mapping this column here previously stored ~65g saturated fat against 0.1g of total fat for skimmed milk -- do not repeat that mistake"
+mono fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_monounsaturated, use the /100g fd column"
+poly fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_polyunsaturated, use the /100g fd column"
+trans fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_trans, use the /100g fd column"
