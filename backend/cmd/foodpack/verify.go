@@ -34,6 +34,27 @@ const atwaterMaxSuspectFraction = 0.10
 // fails the build outright regardless of how large the pack is.
 const atwaterHardDeviation = 1.0
 
+// atwaterAshExemptionThreshold exempts a very-high-ash food from the hard
+// gate only (it still counts toward the fractional gate below, so it
+// stays visible in the reported percentage). Atwater arithmetic assumes
+// carbohydrate-by-difference is mostly digestible carbohydrate; that
+// breaks down for a food that is mostly inert mineral salts, where the
+// "carbohydrate" left over after subtracting protein/fat/water/ash is
+// largely non-caloric filler rather than anything metabolisable.
+//
+// Confirmed against real SR Legacy data rather than picked to make one
+// check pass: "Leavening agents, baking powder, double-acting, sodium
+// aluminum sulfate" (fdc_id 172803) is 67.3g/100g ash and is the only food
+// in a real two-source, ~8,200-food build that fails this gate (108% off);
+// it is also the highest-ash food anywhere near the failure boundary. The
+// highest ash content among ordinary dietary foods in that same build —
+// meat extender, miso, canned anchovy, dried milk, hard cheese — tops out
+// at 13.13g/100g (fdc_id 174268), so 50 sits with nearly 4x margin above
+// any real food's actual ash content and well below every confirmed
+// mineral-dominated product (baking powder 46.4-71.8g, table salt/pure
+// seasoning blends 99+g) that this exists to exempt.
+const atwaterAshExemptionThreshold = 50.0
+
 // runChecks runs every structural check over a built pack.
 func runChecks(p format.Pack) []CheckResult {
 	return []CheckResult{
@@ -95,7 +116,7 @@ func checkVocabulary(p format.Pack) CheckResult {
 // "Salt, table, iodized" entry (0kcal is correct but apparently never
 // recorded) and roughly fifty specialty dry-bean cultivar samples that
 // read as a proximate-only research batch. 0.01 (1%) sits comfortably
-// above that confirmed gap (58 of 8,198 foods, ~0.7%) while still failing
+// above that confirmed gap (58 of 8,201 foods, ~0.7%) while still failing
 // loudly on a mapping regression that took out a meaningfully larger
 // slice.
 const energyPresentMaxMissingFraction = 0.01
@@ -197,7 +218,11 @@ func checkAtwater(p format.Pack) CheckResult {
 				worstDev, worst = dev, fmt.Sprintf("%s/%s (%s): declared %.0f kcal, macros imply %.0f", f.Source, f.SourceID, f.Name, kcal, est)
 			}
 		}
-		if dev > atwaterHardDeviation && dev > hardDev {
+		// The hard gate assumes a normal food; a mineral-dominated one is
+		// exempt from it specifically (see atwaterAshExemptionThreshold),
+		// but still contributed to suspect/checked above, so it remains
+		// visible in the reported percentage.
+		if dev > atwaterHardDeviation && dev > hardDev && prof["ash"] < atwaterAshExemptionThreshold {
 			hardDev, hardFail = dev, fmt.Sprintf("%s/%s (%s): declared %.0f kcal, macros imply %.0f (%.0f%% off)", f.Source, f.SourceID, f.Name, kcal, est, dev*100)
 		}
 	}

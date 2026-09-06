@@ -578,11 +578,12 @@ func TestLoadUSDAEnergyFallbackDoesNotOverrideDirectFigure(t *testing.T) {
 	t.Fatal("food not found in output")
 }
 
-// TestLoadUSDAEnergyFallbackPrefers957Over958 proves the documented
-// priority order: a food with neither 208 nor 957 alone, but with both
-// 957 and 958, takes its energy from 957 (Atwater General Factors), not
-// 958 (Atwater Specific Factors).
-func TestLoadUSDAEnergyFallbackPrefers957Over958(t *testing.T) {
+// TestLoadUSDAEnergyFallbackPrefers958Over957 proves the documented
+// priority order: a food with no 208 but with both 957 and 958 takes its
+// energy from 958 (Atwater Specific Factors), not 957 (Atwater General
+// Factors) -- see usdaEnergyFallbackOrder's doc comment for why specific
+// factors are tried first.
+func TestLoadUSDAEnergyFallbackPrefers958Over957(t *testing.T) {
 	dir := t.TempDir()
 	copyFixtures(t, dir)
 
@@ -622,8 +623,78 @@ func TestLoadUSDAEnergyFallbackPrefers957Over958(t *testing.T) {
 			continue
 		}
 		p := food.Decode(f.Nutrients)
-		if got := p["energy_kcal"]; !float32Eq(got, 111.0) {
-			t.Errorf("energy_kcal = %v, want 111 (957, the documented first fallback, not 958's 222)", got)
+		if got := p["energy_kcal"]; !float32Eq(got, 222.0) {
+			t.Errorf("energy_kcal = %v, want 222 (958, the documented first fallback, not 957's 111)", got)
+		}
+		return
+	}
+	t.Fatal("food not found in output")
+}
+
+// TestLoadUSDARejectsEnergyFallbackUnitMismatch proves the fallback's own
+// unit guard: a release that declares nutrient_nbr 957 in a unit other
+// than kcal must fail the build loudly, exactly as usdaCheckMapping would
+// for a normally-mapped code, rather than silently reading the wrong-unit
+// value through the fallback.
+func TestLoadUSDARejectsEnergyFallbackUnitMismatch(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	nutrientPath := filepath.Join(dir, "nutrient.csv")
+	rows := readCSVRows(t, nutrientPath)
+	rows = append(rows, []string{"90957", "Energy (Atwater General Factors)", "KJ", "957", "9999"})
+	writeCSVRows(t, nutrientPath, rows)
+
+	m, err := LoadNamedMapping("usda")
+	if err != nil {
+		t.Fatalf("LoadNamedMapping: %v", err)
+	}
+	_, _, err = LoadUSDA(USDAOptions{
+		Dir: dir, DataTypes: []string{"foundation_food", "sr_legacy_food"}, Mapping: m,
+	})
+	if err == nil {
+		t.Fatal("expected an error for a fallback nutrient declared in the wrong unit")
+	}
+	if !strings.Contains(err.Error(), "957") || !strings.Contains(err.Error(), "KJ") {
+		t.Errorf("error = %v, want it to name the code (957) and the unit found (KJ)", err)
+	}
+}
+
+// TestLoadUSDALeavesEnergyAbsentWithNoFallbackFigure proves a food with
+// neither 208 nor either Atwater-factor fallback is left exactly as it
+// was: absence stays absence, it is not defaulted to 0 or any other
+// value.
+func TestLoadUSDALeavesEnergyAbsentWithNoFallbackFigure(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	foodPath := filepath.Join(dir, "food.csv")
+	fRows := readCSVRows(t, foodPath)
+	fRows = append(fRows, []string{"5000004", "foundation_food", "No Energy Figure At All", "", "2025-01-01"})
+	writeCSVRows(t, foodPath, fRows)
+
+	fnPath := filepath.Join(dir, "food_nutrient.csv")
+	fnRows := readCSVRows(t, fnPath)
+	fnRows = append(fnRows, []string{"105", "5000004", "1003", "2.0"}) // protein only, nutrient_nbr 203
+	writeCSVRows(t, fnPath, fnRows)
+
+	m, err := LoadNamedMapping("usda")
+	if err != nil {
+		t.Fatalf("LoadNamedMapping: %v", err)
+	}
+	foods, _, err := LoadUSDA(USDAOptions{
+		Dir: dir, DataTypes: []string{"foundation_food", "sr_legacy_food"}, Mapping: m,
+	})
+	if err != nil {
+		t.Fatalf("LoadUSDA: %v", err)
+	}
+	for _, f := range foods {
+		if f.SourceID != "5000004" {
+			continue
+		}
+		p := food.Decode(f.Nutrients)
+		if _, has := p["energy_kcal"]; has {
+			t.Errorf("energy_kcal = %v, want absent: this food has no 208, 957 or 958 figure at all", p["energy_kcal"])
 		}
 		return
 	}

@@ -58,7 +58,58 @@ var usdaSubtypeOrder = []string{SourceUSDAFoundation, SourceUSDASR}
 // 957 or 958 there instead would trade a small, real gap for a huge one.
 // This fallback is where Foundation's real energy figure is picked up
 // instead, per food, only when 208 is absent for it.
-var usdaEnergyFallbackOrder = []string{"957", "958"}
+//
+// 958 (Atwater Specific Factors) is tried before 957 (Atwater General
+// Factors) where a food reports both. FDC's own Foundation Foods
+// documentation describes general factors (uniform 4/9/4 kcal/g) as what
+// "most" foods get, and specific factors as calculated "per food as
+// outlined in USDA Handbook 74" — i.e. adjusted for that food's actual
+// digestibility (fibre fermentation, protein bioavailability) rather than
+// a flat constant. Handbook 74's own rationale for computing specific
+// factors at all is that they land closer to true metabolizable energy,
+// particularly for high-fibre and processed foods, which is why USDA
+// bothers computing them only where food-specific data supports it. That
+// is evidence about which calculation is more accurate for a given food,
+// not a direct FDC statement of "prefer 958" — no such explicit statement
+// was found in FDC's public documentation — but it is the only documented
+// signal available, and it points at specific factors as the more
+// food-appropriate figure when both exist. Coverage counts (299 vs 289
+// among Foundation Foods) were also checked and do not favour either
+// order, so they play no part in this choice.
+var usdaEnergyFallbackOrder = []string{"958", "957"}
+
+// usdaEnergyFallbackUnit is the unit every fallback number in
+// usdaEnergyFallbackOrder must be declared in. Both are always kcal in
+// practice, but nothing else asserts that: unlike every code in
+// mapping/usda.csv, which usdaCheckMapping checks against the canonical
+// unit before any value is trusted, these two are read directly from raw
+// amounts and bypass that guard entirely. usdaCheckEnergyFallbackUnits
+// closes that gap the same way the mapping guard would.
+const usdaEnergyFallbackUnit = "KCAL"
+
+// usdaCheckEnergyFallbackUnits fails the build if either Atwater-factor
+// fallback nutrient (usdaEnergyFallbackOrder) is declared in a unit other
+// than kcal in this release. The fallback reads raw amounts directly
+// rather than going through Mapping.Apply, so usdaCheckMapping's unit
+// guard never sees it; this is the equivalent check for those two codes,
+// with the same "name the code and the unit found" shape.
+func usdaCheckEnergyFallbackUnits(nutrients map[string]usdaNutrient) error {
+	byNumber := map[string]usdaNutrient{}
+	for _, n := range nutrients {
+		byNumber[n.number] = n
+	}
+	for _, code := range usdaEnergyFallbackOrder {
+		n, present := byNumber[code]
+		if !present {
+			continue // this release does not define it; nothing to fall back to
+		}
+		if n.unit != usdaEnergyFallbackUnit {
+			return fmt.Errorf("usda energy fallback nutrient_nbr %s: source unit %q but the fallback assumes %q; check usdaEnergyFallbackOrder in usda.go",
+				code, n.unit, usdaEnergyFallbackUnit)
+		}
+	}
+	return nil
+}
 
 // applyUSDAEnergyFallback fills energy_kcal from usdaEnergyFallbackOrder
 // for any food in profiles that has no energy_kcal of its own, using the
@@ -114,6 +165,9 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 		return nil, nil, err
 	}
 	if err := usdaCheckMapping(o.Mapping, nutrients); err != nil {
+		return nil, nil, err
+	}
+	if err := usdaCheckEnergyFallbackUnits(nutrients); err != nil {
 		return nil, nil, err
 	}
 

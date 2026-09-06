@@ -186,6 +186,35 @@ func TestAtwaterSoftGateFailsOnHighFraction(t *testing.T) {
 	}
 }
 
+// A very-high-ash food (a mineral-dominated product like baking powder,
+// not an ordinary one) must not trip the hard gate even at a catastrophic
+// deviation: Atwater arithmetic simply does not model it. It must still
+// count toward the fractional gate, so it stays visible in the reported
+// percentage.
+func TestAtwaterHighAshFoodExemptFromHardGate(t *testing.T) {
+	profiles := []food.Profile{}
+	for i := 0; i < 20; i++ {
+		profiles = append(profiles, food.Profile{
+			"energy_kcal": 89, "protein": 1.09, "carbohydrate": 22.8, "fat": 0.33,
+		})
+	}
+	// Real SR Legacy baking powder shape: declared 53 kcal, mostly
+	// carbohydrate-by-difference and ash, no protein or fat -- a 108%
+	// deviation that would otherwise hard-fail the build.
+	profiles = append(profiles, food.Profile{
+		"energy_kcal": 53, "protein": 0, "fat": 0, "carbohydrate": 27.7, "ash": 67.3,
+	})
+
+	p := packOf(profiles...)
+	r := result(t, p, "atwater")
+	if !r.Pass {
+		t.Errorf("atwater failed on a pack whose only >100%% deviation is a 67.3g/100g-ash food; detail: %s", r.Detail)
+	}
+	if !strings.Contains(r.Detail, "21") {
+		t.Errorf("the exempt food must still be counted as checked/suspect so it stays visible in the percentage; detail: %s", r.Detail)
+	}
+}
+
 func TestMacroSumCheck(t *testing.T) {
 	bad := packOf(food.Profile{
 		"energy_kcal": 89, "protein": 60, "carbohydrate": 60, "fat": 60, "water": 60,

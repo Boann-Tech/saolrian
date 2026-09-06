@@ -5,9 +5,10 @@ import (
 	"fmt"
 )
 
-// MappingFS holds the checked-in, human-auditable nutrient mapping tables
-// and the archive manifest. These are the files to open when a number looks
-// wrong or a dataset has moved.
+// MappingFS holds the checked-in, human-auditable nutrient mapping tables,
+// the archive manifest, and the per-food exclusion table (exclusions.csv).
+// These are the files to open when a number looks wrong, a dataset has
+// moved, or a food is missing and might have been deliberately dropped.
 //
 //go:embed all:mapping all:manifest exclusions.csv
 var MappingFS embed.FS
