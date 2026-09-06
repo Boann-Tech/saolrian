@@ -2,11 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import type { DailyMetric, ExerciseEntry, Summary } from '../lib/types';
-import { dateFromOffset, formatInt, formatNumber, prettyDate, todayISO, weekdayLabel } from '../lib/format';
+import { dateFromOffset, formatInt, formatNumber, monthTitle, prettyDate, todayISO, weekdayLabel } from '../lib/format';
 import { getClient } from '../lib/pb';
 import { normalizeSummary } from '../lib/normalize';
 import { MealGroup } from '../components/MealGroup';
-import { Card, Empty, Spinner, StatTile, useToast } from '../components/ui';
+import { Calendar, Card, Empty, Sheet, Spinner, StatTile, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
 
 /** History — prototype structure: subhead, 7-day day-pill strip with
@@ -27,6 +27,8 @@ export default function History() {
   const [metrics, setMetrics] = useState<Record<string, DailyMetric>>({});
   const [exercise, setExercise] = useState<ExerciseEntry[]>([]);
   const [selected, setSelected] = useState<string>(todayISO());
+  const [anchor, setAnchor] = useState<string>(todayISO());
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
@@ -45,7 +47,7 @@ export default function History() {
     if (!endpoint) return;
     setLoading(true);
     const pb = getClient(endpoint);
-    const dates = Array.from({ length: 7 }, (_, i) => dateFromOffset(i - 6));
+    const dates = Array.from({ length: 7 }, (_, i) => dateFromOffset(i - 6, anchor));
     const results = await Promise.all(
       dates.map(async (date) => {
         try {
@@ -93,7 +95,7 @@ export default function History() {
     }
 
     setLoading(false);
-  }, [endpoint]);
+  }, [endpoint, anchor]);
 
   useEffect(() => {
     void load();
@@ -108,17 +110,30 @@ export default function History() {
     <div>
       <div className="flex items-center justify-between px-6 pb-3 pt-4">
         <h2 className="text-xl font-bold tracking-[-.02em]">History</h2>
-        <span
-          role="presentation"
-          className="flex items-center gap-1.5 rounded-full border border-border bg-raised px-3.5 py-2 text-xs font-semibold text-text"
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={pickerOpen}
+          onClick={() => setPickerOpen(true)}
+          className="flex items-center gap-1.5 rounded-full border border-border bg-raised px-3.5 py-2 text-xs font-semibold text-text transition hover:border-accent-line"
         >
-          {new Date(sel?.date ?? todayISO() + 'T12:00:00').toLocaleDateString('en-GB', {
-            month: 'long',
-            year: 'numeric',
-          })}{' '}
-          <span className="text-text-faint">▾</span>
-        </span>
+          {monthTitle(selected)} <span className="text-text-faint">▾</span>
+        </button>
       </div>
+
+      <Sheet open={pickerOpen} onClose={() => setPickerOpen(false)} title="Jump to date">
+        <div className="mt-3">
+          <Calendar
+            value={selected}
+            max={todayISO()}
+            onSelect={(iso) => {
+              setAnchor(iso);
+              setSelected(iso);
+              setPickerOpen(false);
+            }}
+          />
+        </div>
+      </Sheet>
 
       {loading ? (
         <div className="flex items-center gap-2 px-6 py-5 text-sm text-text-muted">
@@ -162,7 +177,10 @@ export default function History() {
             <>
               <div className="px-6 pt-5">
                 <Card className="p-5">
-                  <div className="text-xs font-semibold uppercase tracking-[.05em] text-text-faint">
+                  <div
+                    data-testid="day-summary"
+                    className="text-xs font-semibold uppercase tracking-[.05em] text-text-faint"
+                  >
                     {sel.date === todayISO() ? 'Today' : prettyDate(sel.date)}
                   </div>
                   <div className="mt-2.5 flex [&>div+div]:border-l [&>div+div]:border-border [&>div+div]:pl-3.5">
