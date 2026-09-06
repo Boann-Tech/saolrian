@@ -19,6 +19,7 @@ func Register(grp *router.Router[*core.RequestEvent]) {
 	g.Bind(apis.RequireAuth())
 
 	g.GET("/summary", summaryHandler)
+	g.GET("/trends", trendsHandler)
 	g.GET("/food/search", foodSearchHandler)
 	g.GET("/food/barcode/{code}", foodBarcodeHandler)
 	g.POST("/import/loseit", loseItImportHandler)

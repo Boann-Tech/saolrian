@@ -42,6 +42,16 @@ const TABS = [
     ),
   },
   {
+    to: '/trends',
+    label: 'Trends',
+    glyph: (
+      <svg viewBox="0 0 24 24" aria-hidden>
+        <path d="M4 18l5-6 4 3 6-8" />
+        <path d="M15 7h4v4" />
+      </svg>
+    ),
+  },
+  {
     to: '/profile',
     label: 'Profile',
     glyph: (

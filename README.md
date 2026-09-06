@@ -31,6 +31,8 @@ Same app either way. Your data either way.
 
 ### Everything else
 - 🎯 **TDEE & goals** — Mifflin-St Jeor / Katch-McArdle, five activity levels, lose/maintain/gain with macro targets
+- 📈 **Trends** — weight trend with a fitted rate, intake vs budget, cumulative energy balance, logging heatmap, macros, weekday pattern, meal split, water and steps; pick which cards you want
+- 🧮 **Observed TDEE** — your real calorie burn worked out from your own intake and weight history, offered as a suggestion you accept rather than applied behind your back
 - 📥 **Lose It! import** — bring your food-log history with you (CSV)
 - 🎨 **Theming** — light / dark / system appearance plus 8 accent palettes or a custom colour, saved per user and per device
 - 📴 **Offline-first PWA** — diary creates queue to localStorage when the network drops and replay when you're back
@@ -111,6 +113,7 @@ docs/       logos, screenshots, design specs + plans
 
 Custom API surface (v0, stable-ish):
 - `GET  /api/saolrian/summary?date=YYYY-MM-DD` — day totals + meal groups + budget
+- `GET  /api/saolrian/trends?days=` — day series, weight trend and observed TDEE
 - `GET  /api/saolrian/food/search?q=` — local foods + Open Food Facts proxy
 - `GET  /api/saolrian/food/barcode/:code` — OFF product lookup
 - `POST /api/saolrian/import/loseit` — history import

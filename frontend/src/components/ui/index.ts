@@ -8,3 +8,7 @@ export { Sheet } from './Sheet';
 export { Modal } from './Modal';
 export { Spinner, Empty, ToastProvider, useToast } from './feedback';
 export { StatTile, Meter, ProgressBar } from './StatTile';
+export { LineChart } from './charts/LineChart';
+export { BarChart } from './charts/BarChart';
+export { Heatmap } from './charts/Heatmap';
+export { StackedBar } from './charts/StackedBar';

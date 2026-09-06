@@ -13,6 +13,7 @@ import Welcome from './screens/Welcome';
 import EditEntry from './screens/EditEntry';
 import Recipes from './screens/Recipes';
 import RecipeEditor from './screens/RecipeEditor';
+import Trends from './screens/Trends';
 import { AppShell } from './components/AppShell';
 import { ToastProvider } from './components/ui';
 import './styles/index.css';
@@ -62,6 +63,7 @@ function AppRoutes() {
         <Route path="/today" element={<Today />} />
         <Route path="/add" element={<AddFood />} />
         <Route path="/history" element={<History />} />
+        <Route path="/trends" element={<Trends />} />
         <Route path="/profile" element={<ProfileGoals />} />
         <Route path="/profile/import" element={<Import />} />
         <Route path="/recipes" element={<Recipes />} />
