@@ -44,6 +44,46 @@ const (
 // builds of the same archive produce byte-identical packs.
 var usdaSubtypeOrder = []string{SourceUSDAFoundation, SourceUSDASR}
 
+// usdaEnergyFallbackOrder are FDC's computed-energy nutrient numbers, tried
+// in this order for any food whose mapped energy code (nutrient_nbr 208,
+// mapped to energy_kcal in mapping/usda.csv) produced no value at all.
+//
+// USDA Foundation Foods commonly reports energy this way instead of the
+// classic "Energy" figure 208 uses: of one 2025 Foundation release's ~340
+// foods, only 97 carry 208 while 299 carry 957 (Atwater General Factors)
+// and 289 carry 958 (Atwater Specific Factors); SR Legacy never defines
+// either number at all, so this fallback is inert there. LoadMapping
+// allows only one source_code per canonical key, and 208 stays the mapped
+// code because it covers SR Legacy's much larger ~7,800-food set — mapping
+// 957 or 958 there instead would trade a small, real gap for a huge one.
+// This fallback is where Foundation's real energy figure is picked up
+// instead, per food, only when 208 is absent for it.
+var usdaEnergyFallbackOrder = []string{"957", "958"}
+
+// applyUSDAEnergyFallback fills energy_kcal from usdaEnergyFallbackOrder
+// for any food in profiles that has no energy_kcal of its own, using the
+// first fallback number that food actually reported. A food with neither
+// 208 nor any fallback figure is left exactly as it was: absence stays
+// absence, per Profile's own contract.
+func applyUSDAEnergyFallback(profiles map[string]food.Profile, fallback map[string]map[string]float64) {
+	for fdcID, byNumber := range fallback {
+		if _, has := profiles[fdcID]["energy_kcal"]; has {
+			continue
+		}
+		for _, code := range usdaEnergyFallbackOrder {
+			v, ok := byNumber[code]
+			if !ok {
+				continue
+			}
+			if profiles[fdcID] == nil {
+				profiles[fdcID] = food.Profile{}
+			}
+			profiles[fdcID]["energy_kcal"] = v
+			break
+		}
+	}
+}
+
 // usdaSourceFor maps an FDC data_type to a canonical source value.
 func usdaSourceFor(dataType string) string {
 	if dataType == "foundation_food" {
@@ -83,6 +123,7 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 	}
 
 	profiles := map[string]food.Profile{}
+	fallbackEnergy := map[string]map[string]float64{} // fdcID -> nutrient_nbr -> kcal
 	if err := eachCSVRow(filepath.Join(o.Dir, "food_nutrient.csv"),
 		[]string{"fdc_id", "nutrient_id", "amount"},
 		func(get func(string) string) error {
@@ -103,6 +144,18 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 				if !o.Mapping.Known(n.number) {
 					noteUnmapped(o.Unmapped, n.number, n.name)
 				}
+				// mapping/usda.csv ignores 957/958 outright (see
+				// usdaEnergyFallbackOrder's doc comment for why), but the
+				// raw kcal figure is still worth remembering per food in
+				// case 208 turns out absent for it.
+				for _, fb := range usdaEnergyFallbackOrder {
+					if n.number == fb {
+						if fallbackEnergy[fdcID] == nil {
+							fallbackEnergy[fdcID] = map[string]float64{}
+						}
+						fallbackEnergy[fdcID][fb] = amount
+					}
+				}
 				return nil // unmapped or explicitly ignored
 			}
 			if profiles[fdcID] == nil {
@@ -113,6 +166,7 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 		}); err != nil {
 		return nil, nil, err
 	}
+	applyUSDAEnergyFallback(profiles, fallbackEnergy)
 
 	portions, err := usdaPortions(o.Dir, foods)
 	if err != nil {

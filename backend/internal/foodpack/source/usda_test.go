@@ -481,3 +481,151 @@ func TestLoadUSDAOmitsSubtypesWithNoRows(t *testing.T) {
 		t.Fatalf("sources = %+v, want exactly one usda_sr entry", sources)
 	}
 }
+
+// TestLoadUSDAFallsBackToAtwaterFactorsForEnergy proves the Foundation
+// Foods energy gap fix: a food with no nutrient_nbr 208 (the mapped
+// energy code) but with 957 (Atwater General Factors) still gets an
+// energy_kcal value, taken from 957.
+func TestLoadUSDAFallsBackToAtwaterFactorsForEnergy(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	nutrientPath := filepath.Join(dir, "nutrient.csv")
+	rows := readCSVRows(t, nutrientPath)
+	rows = append(rows, []string{"90957", "Energy (Atwater General Factors)", "KCAL", "957", "9999"})
+	writeCSVRows(t, nutrientPath, rows)
+
+	foodPath := filepath.Join(dir, "food.csv")
+	fRows := readCSVRows(t, foodPath)
+	fRows = append(fRows, []string{"5000001", "foundation_food", "Fallback Food, no direct energy figure", "", "2025-01-01"})
+	writeCSVRows(t, foodPath, fRows)
+
+	fnPath := filepath.Join(dir, "food_nutrient.csv")
+	fnRows := readCSVRows(t, fnPath)
+	fnRows = append(fnRows, []string{"100", "5000001", "90957", "77.0"})
+	writeCSVRows(t, fnPath, fnRows)
+
+	m, err := LoadNamedMapping("usda")
+	if err != nil {
+		t.Fatalf("LoadNamedMapping: %v", err)
+	}
+	foods, _, err := LoadUSDA(USDAOptions{
+		Dir: dir, DataTypes: []string{"foundation_food", "sr_legacy_food"}, Mapping: m,
+	})
+	if err != nil {
+		t.Fatalf("LoadUSDA: %v", err)
+	}
+	for _, f := range foods {
+		if f.SourceID != "5000001" {
+			continue
+		}
+		p := food.Decode(f.Nutrients)
+		got, ok := p["energy_kcal"]
+		if !ok {
+			t.Fatal("energy_kcal is absent; the Atwater-factor fallback did not fire")
+		}
+		if !float32Eq(got, 77.0) {
+			t.Errorf("energy_kcal = %v, want 77 (from nutrient_nbr 957)", got)
+		}
+		return
+	}
+	t.Fatal("fallback food not found in output")
+}
+
+// TestLoadUSDAEnergyFallbackDoesNotOverrideDirectFigure proves the
+// fallback only fills a gap: a food carrying both 208 and 957 keeps 208's
+// value.
+func TestLoadUSDAEnergyFallbackDoesNotOverrideDirectFigure(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	nutrientPath := filepath.Join(dir, "nutrient.csv")
+	rows := readCSVRows(t, nutrientPath)
+	rows = append(rows, []string{"90957", "Energy (Atwater General Factors)", "KCAL", "957", "9999"})
+	writeCSVRows(t, nutrientPath, rows)
+
+	foodPath := filepath.Join(dir, "food.csv")
+	fRows := readCSVRows(t, foodPath)
+	fRows = append(fRows, []string{"5000002", "foundation_food", "Both Energy Figures Food", "", "2025-01-01"})
+	writeCSVRows(t, foodPath, fRows)
+
+	fnPath := filepath.Join(dir, "food_nutrient.csv")
+	fnRows := readCSVRows(t, fnPath)
+	fnRows = append(fnRows, []string{"101", "5000002", "1008", "55.0"})   // nutrient_nbr 208
+	fnRows = append(fnRows, []string{"102", "5000002", "90957", "999.0"}) // nutrient_nbr 957
+	writeCSVRows(t, fnPath, fnRows)
+
+	m, err := LoadNamedMapping("usda")
+	if err != nil {
+		t.Fatalf("LoadNamedMapping: %v", err)
+	}
+	foods, _, err := LoadUSDA(USDAOptions{
+		Dir: dir, DataTypes: []string{"foundation_food", "sr_legacy_food"}, Mapping: m,
+	})
+	if err != nil {
+		t.Fatalf("LoadUSDA: %v", err)
+	}
+	for _, f := range foods {
+		if f.SourceID != "5000002" {
+			continue
+		}
+		p := food.Decode(f.Nutrients)
+		if got := p["energy_kcal"]; !float32Eq(got, 55.0) {
+			t.Errorf("energy_kcal = %v, want 55 (the direct 208 figure, not the 957 fallback)", got)
+		}
+		return
+	}
+	t.Fatal("food not found in output")
+}
+
+// TestLoadUSDAEnergyFallbackPrefers957Over958 proves the documented
+// priority order: a food with neither 208 nor 957 alone, but with both
+// 957 and 958, takes its energy from 957 (Atwater General Factors), not
+// 958 (Atwater Specific Factors).
+func TestLoadUSDAEnergyFallbackPrefers957Over958(t *testing.T) {
+	dir := t.TempDir()
+	copyFixtures(t, dir)
+
+	nutrientPath := filepath.Join(dir, "nutrient.csv")
+	rows := readCSVRows(t, nutrientPath)
+	rows = append(rows,
+		[]string{"90957", "Energy (Atwater General Factors)", "KCAL", "957", "9999"},
+		[]string{"90958", "Energy (Atwater Specific Factors)", "KCAL", "958", "9998"},
+	)
+	writeCSVRows(t, nutrientPath, rows)
+
+	foodPath := filepath.Join(dir, "food.csv")
+	fRows := readCSVRows(t, foodPath)
+	fRows = append(fRows, []string{"5000003", "foundation_food", "Both Fallbacks Food", "", "2025-01-01"})
+	writeCSVRows(t, foodPath, fRows)
+
+	fnPath := filepath.Join(dir, "food_nutrient.csv")
+	fnRows := readCSVRows(t, fnPath)
+	fnRows = append(fnRows,
+		[]string{"103", "5000003", "90957", "111.0"},
+		[]string{"104", "5000003", "90958", "222.0"},
+	)
+	writeCSVRows(t, fnPath, fnRows)
+
+	m, err := LoadNamedMapping("usda")
+	if err != nil {
+		t.Fatalf("LoadNamedMapping: %v", err)
+	}
+	foods, _, err := LoadUSDA(USDAOptions{
+		Dir: dir, DataTypes: []string{"foundation_food", "sr_legacy_food"}, Mapping: m,
+	})
+	if err != nil {
+		t.Fatalf("LoadUSDA: %v", err)
+	}
+	for _, f := range foods {
+		if f.SourceID != "5000003" {
+			continue
+		}
+		p := food.Decode(f.Nutrients)
+		if got := p["energy_kcal"]; !float32Eq(got, 111.0) {
+			t.Errorf("energy_kcal = %v, want 111 (957, the documented first fallback, not 958's 222)", got)
+		}
+		return
+	}
+	t.Fatal("food not found in output")
+}

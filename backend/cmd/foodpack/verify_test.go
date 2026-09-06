@@ -43,6 +43,36 @@ func TestEnergyPresentCheck(t *testing.T) {
 	}
 }
 
+// A confirmed, small gap in the source itself (see
+// energyPresentMaxMissingFraction's doc comment) must not fail the build;
+// only a fraction large enough to look like a mapping regression should.
+func TestEnergyPresentCheckToleratesASmallConfirmedFraction(t *testing.T) {
+	profiles := make([]food.Profile, 0, 200)
+	for i := 0; i < 199; i++ {
+		profiles = append(profiles, food.Profile{"energy_kcal": 89, "protein": 1})
+	}
+	profiles = append(profiles, food.Profile{"protein": 1}) // 1 of 200, 0.5%
+	p := packOf(profiles...)
+	r := result(t, p, "energy_present")
+	if !r.Pass {
+		t.Errorf("energy_present failed at a 0.5%% missing fraction, under the %.0f%% bound: %s",
+			energyPresentMaxMissingFraction*100, r.Detail)
+	}
+}
+
+func TestEnergyPresentCheckFailsOnALargeFraction(t *testing.T) {
+	profiles := []food.Profile{
+		{"energy_kcal": 89, "protein": 1},
+		{"energy_kcal": 89, "protein": 1},
+		{"protein": 1},
+		{"protein": 1}, // 2 of 4, 50% -- far past the confirmed real-data gap
+	}
+	p := packOf(profiles...)
+	if result(t, p, "energy_present").Pass {
+		t.Error("energy_present passed at a 50% missing fraction; the tolerance must not admit a real mapping regression")
+	}
+}
+
 func TestRangesCheckCatchesUnitError(t *testing.T) {
 	bad := packOf(food.Profile{"energy_kcal": 89, "iron": 300000})
 	if result(t, bad, "ranges").Pass {
@@ -162,6 +192,31 @@ func TestMacroSumCheck(t *testing.T) {
 	})
 	if result(t, bad, "macro_sum").Pass {
 		t.Error("macro_sum passed on components totalling far more than 100 g")
+	}
+}
+
+// SR Legacy's independently-measured (not by-difference) cooked-fish
+// entries genuinely sum a little past 100g -- up to 106.5g for
+// "Fish, salmon, chinook, cooked, dry heat" (fdc_id 171999), see the
+// limit's doc comment -- and must not fail the build.
+func TestMacroSumCheckAdmitsRealIndependentMeasurementNoise(t *testing.T) {
+	realFish := packOf(food.Profile{
+		"energy_kcal": 172, "protein": 25.72, "fat": 13.38, "carbohydrate": 0, "water": 65.6, "ash": 1.76,
+	}) // sums to 106.46, SR Legacy fdc_id 171999
+	if !result(t, realFish, "macro_sum").Pass {
+		t.Error("macro_sum failed on SR Legacy's real, confirmed cooked-fish figures (106.46g); the 107 buffer must admit them")
+	}
+}
+
+// The 107 buffer is still tight enough to catch what this check exists
+// for: a column mapped onto the wrong canonical key, such as fibre folded
+// into carbohydrate.
+func TestMacroSumCheckStillCatchesADoubleCountedColumn(t *testing.T) {
+	doubleCounted := packOf(food.Profile{
+		"energy_kcal": 89, "protein": 25, "fat": 20, "carbohydrate": 70, "water": 10,
+	}) // sums to 125, well past even the widened buffer
+	if result(t, doubleCounted, "macro_sum").Pass {
+		t.Error("macro_sum passed on a food whose components sum to 125g; the widened buffer must not admit a real mapping error")
 	}
 }
 

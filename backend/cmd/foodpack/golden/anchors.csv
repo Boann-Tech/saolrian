@@ -14,7 +14,7 @@ spinach_raw,cnf,"(?i)^spinach, raw$",CNF
 spinach_raw,ciqual,"(?i)^spinach, raw$",CIQUAL
 spinach_raw,cofid,"(?i)^spinach, raw$",CoFID
 spinach_raw,afcd,"(?i)^spinach, raw$",AFCD
-chicken_breast_raw,usda_sr,"(?i)^chicken, broilers or fryers, breast, meat only, raw$",SR Legacy
+chicken_breast_raw,usda_sr,"(?i)^chicken, broiler or fryers, breast, skinless, boneless, meat only, raw$",SR Legacy fdc_id 171077; real name is singular broiler with a skinless/boneless qualifier the old regex lacked
 chicken_breast_raw,cnf,"(?i)^chicken, broiler, breast, meat only, raw$",CNF
 chicken_breast_raw,cofid,"(?i)^chicken, breast, meat only, raw$",CoFID
 chicken_breast_raw,afcd,"(?i)^chicken, breast, lean flesh, raw$",AFCD

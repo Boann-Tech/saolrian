@@ -84,6 +84,22 @@ func checkVocabulary(p format.Pack) CheckResult {
 	return CheckResult{"vocabulary", true, fmt.Sprintf("%d keys match", len(want))}
 }
 
+// energyPresentMaxMissingFraction bounds how many foods in the pack may
+// carry no energy_kcal value before this check fails.
+//
+// USDA Foundation Foods' own dataset does not always publish one under any
+// of the three nutrient numbers usda.go looks at (208, and the 957/958
+// Atwater-factor fallback): a real-data build turned up 58 foods with
+// none of the three, confirmed directly against the source's own
+// food_nutrient.csv rather than a downstream defect -- a
+// "Salt, table, iodized" entry (0kcal is correct but apparently never
+// recorded) and roughly fifty specialty dry-bean cultivar samples that
+// read as a proximate-only research batch. 0.01 (1%) sits comfortably
+// above that confirmed gap (58 of 8,198 foods, ~0.7%) while still failing
+// loudly on a mapping regression that took out a meaningfully larger
+// slice.
+const energyPresentMaxMissingFraction = 0.01
+
 func checkEnergyPresent(p format.Pack) CheckResult {
 	missing := 0
 	for _, f := range p.Foods {
@@ -91,8 +107,12 @@ func checkEnergyPresent(p format.Pack) CheckResult {
 			missing++
 		}
 	}
-	return CheckResult{"energy_present", missing == 0,
-		fmt.Sprintf("%d of %d foods have no energy value", missing, len(p.Foods))}
+	frac := 0.0
+	if len(p.Foods) > 0 {
+		frac = float64(missing) / float64(len(p.Foods))
+	}
+	return CheckResult{"energy_present", frac <= energyPresentMaxMissingFraction,
+		fmt.Sprintf("%d of %d foods have no energy value (%.1f%%)", missing, len(p.Foods), frac*100)}
 }
 
 func checkRanges(p format.Pack) CheckResult {
@@ -106,9 +126,20 @@ func checkRanges(p format.Pack) CheckResult {
 }
 
 func checkMacroSum(p format.Pack) CheckResult {
-	// Components of 100 g cannot sum to much more than 100 g. 105 allows for
-	// independent rounding across a dataset's own columns.
-	const limit = 105.0
+	// Components of 100 g cannot sum to much more than 100 g. 105 was a
+	// guess made before any real dataset had been seen; real SR Legacy data
+	// raised it to 107. USDA measures protein, fat, water and ash
+	// independently rather than computing them by difference, so cooking
+	// (which concentrates nutrients as water evaporates) can legitimately
+	// push their sum a little past 100 with no mapping error involved: SR
+	// Legacy's "Fish, salmon, chinook, cooked, dry heat" (fdc_id 171999)
+	// sums to 106.5, "Fish, herring, Pacific, cooked, dry heat" (174233) to
+	// 105.33, and "Fish, yellowtail, mixed species, cooked, dry heat"
+	// (174248) to 105.12 -- all three confirmed independently-measured, not
+	// a column mapped onto the wrong canonical key. 107 still catches what
+	// this check is for: a mapping that double-counts fibre into
+	// carbohydrate lands well past 110.
+	const limit = 107.0
 	for _, f := range p.Foods {
 		prof := food.Decode(f.Nutrients)
 		sum := 0.0
@@ -120,7 +151,7 @@ func checkMacroSum(p format.Pack) CheckResult {
 				fmt.Sprintf("%s/%s (%s): components sum to %.1f g per 100 g", f.Source, f.SourceID, f.Name, sum)}
 		}
 	}
-	return CheckResult{"macro_sum", true, "no food exceeds 105 g of components per 100 g"}
+	return CheckResult{"macro_sum", true, "no food exceeds 107 g of components per 100 g"}
 }
 
 func checkAtwater(p format.Pack) CheckResult {
