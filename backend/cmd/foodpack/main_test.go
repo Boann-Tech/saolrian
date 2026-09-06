@@ -103,8 +103,25 @@ func TestBuildFromWorkDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	copyTestdataUSDA(t, usda)
+	// The manifest now pins a real hash for usda_sr (Task 8), and
+	// checkFetchRecord rejects a fetch record whose hash disagrees with
+	// it. The fixture here is not the real archive, so what matters is
+	// agreement with the manifest, not with the archive's true digest.
+	entries, err := source.LoadManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var srHash string
+	for _, e := range entries {
+		if e.Source == "usda_sr" {
+			srHash = e.SHA256
+		}
+	}
+	if srHash == "" {
+		t.Fatal("manifest has no usda_sr row")
+	}
 	if err := source.WriteFetchRecord(usda, source.ManifestEntry{
-		Source: "usda_sr", URL: "https://example.test/sr.zip", SHA256: source.Unpinned,
+		Source: "usda_sr", URL: "https://example.test/sr.zip", SHA256: srHash,
 	}); err != nil {
 		t.Fatal(err)
 	}

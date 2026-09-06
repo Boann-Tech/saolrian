@@ -182,6 +182,7 @@ func LoadCoFID(o CoFIDOptions) ([]format.RefFood, []format.SourceInfo, error) {
 	if err := b.Err("cofid"); err != nil {
 		return nil, nil, err
 	}
+	b.ReportExcluded()
 
 	rows := b.Rows()[SourceCoFID]
 	if rows == 0 {

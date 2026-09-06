@@ -9,7 +9,7 @@ import (
 // and the archive manifest. These are the files to open when a number looks
 // wrong or a dataset has moved.
 //
-//go:embed all:mapping all:manifest
+//go:embed all:mapping all:manifest exclusions.csv
 var MappingFS embed.FS
 
 // LoadNamedMapping loads the mapping table for one dataset, e.g. "usda".

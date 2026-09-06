@@ -126,3 +126,84 @@ func TestUnmappedCollectorReportsEachCodeOnce(t *testing.T) {
 func TestNoteUnmappedToleratesNilSink(t *testing.T) {
 	noteUnmapped(nil, "1", "x")
 }
+
+// A food named in the exclusion table is dropped silently as far as the
+// range check is concerned: it must not appear in Foods(), must not turn
+// up in Err(), and must be counted in Excluded() so the drop is visible
+// somewhere.
+func TestBuilderExcludesListedFoodWithoutFailingBuild(t *testing.T) {
+	ex, err := ParseExclusions(strings.NewReader(
+		"source,source_id,reason\ncnf,2,confirmed source error see report\n"))
+	if err != nil {
+		t.Fatalf("ParseExclusions: %v", err)
+	}
+	b := NewBuilder()
+	b.SetExclusions(ex)
+	b.Add(sampleInput("1", "Fine", food.Profile{"energy_kcal": 89}))
+	b.Add(sampleInput("2", "Excluded despite the bad value", food.Profile{"iron": 2710}))
+
+	foods := b.Foods()
+	if len(foods) != 1 || foods[0].SourceID != "1" {
+		t.Fatalf("Foods() = %v, want only source_id 1", foods)
+	}
+	if err := b.Err("cnf"); err != nil {
+		t.Fatalf("Err() = %v, want nil: the excluded food must not count as a range violation", err)
+	}
+	if got := b.Excluded()["cnf"]; got != 1 {
+		t.Errorf("Excluded()[cnf] = %d, want 1", got)
+	}
+}
+
+// A food that violates a range check and is NOT on the exclusion table
+// must still fail the build exactly as it did before exclusions existed.
+func TestBuilderStillFailsOnRangeViolationNotExcluded(t *testing.T) {
+	ex, err := ParseExclusions(strings.NewReader(
+		"source,source_id,reason\ncnf,999,not the food this test adds\n"))
+	if err != nil {
+		t.Fatalf("ParseExclusions: %v", err)
+	}
+	b := NewBuilder()
+	b.SetExclusions(ex)
+	b.Add(sampleInput("2", "Iron in ug not mg", food.Profile{"iron": 2710}))
+
+	if len(b.Foods()) != 0 {
+		t.Errorf("got %d foods, want 0: an unlisted violation must still be dropped from Foods()", len(b.Foods()))
+	}
+	err = b.Err("cnf")
+	if !errors.Is(err, food.ErrOutOfRange) {
+		t.Fatalf("Err() = %v, want ErrOutOfRange: exclusions must not blunt the range guard for foods not on the list", err)
+	}
+	if got := b.Excluded()["cnf"]; got != 0 {
+		t.Errorf("Excluded()[cnf] = %d, want 0", got)
+	}
+}
+
+func TestFlushRoundingArtifactsZeroesSmallNegatives(t *testing.T) {
+	in := food.Profile{"carbohydrate": -0.47505}
+	out := flushRoundingArtifacts(in)
+	if got := out["carbohydrate"]; got != 0 {
+		t.Errorf("carbohydrate = %v, want 0", got)
+	}
+	// The input must be untouched: Add must not mutate a Profile map an
+	// adapter still holds a reference to.
+	if got := in["carbohydrate"]; got != -0.47505 {
+		t.Errorf("input profile was mutated: carbohydrate = %v, want -0.47505 unchanged", got)
+	}
+}
+
+func TestFlushRoundingArtifactsLeavesPastFloorNegativeForValidateToReject(t *testing.T) {
+	out := flushRoundingArtifacts(food.Profile{"carbohydrate": -5})
+	if got := out["carbohydrate"]; got != -5 {
+		t.Errorf("carbohydrate = %v, want -5 unchanged (past the floor)", got)
+	}
+	if err := food.Validate(out); err == nil {
+		t.Error("Validate must still reject a value past roundingArtifactFloor")
+	}
+}
+
+func TestFlushRoundingArtifactsLeavesPositiveValuesUntouched(t *testing.T) {
+	out := flushRoundingArtifacts(food.Profile{"protein": 12.5})
+	if got := out["protein"]; got != 12.5 {
+		t.Errorf("protein = %v, want 12.5 unchanged", got)
+	}
+}

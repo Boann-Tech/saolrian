@@ -153,6 +153,7 @@ func LoadAFCD(o AFCDOptions) ([]format.RefFood, []format.SourceInfo, error) {
 	if err := b.Err("afcd"); err != nil {
 		return nil, nil, err
 	}
+	b.ReportExcluded()
 
 	rows := b.Rows()[SourceAFCD]
 	if rows == 0 {

@@ -135,6 +135,7 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 	if err := b.Err("usda"); err != nil {
 		return nil, nil, err
 	}
+	b.ReportExcluded()
 
 	rows := b.Rows()
 	var sources []format.SourceInfo

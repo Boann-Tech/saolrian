@@ -121,6 +121,7 @@ func LoadCNF(o CNFOptions) ([]format.RefFood, []format.SourceInfo, error) {
 	if err := b.Err("cnf"); err != nil {
 		return nil, nil, err
 	}
+	b.ReportExcluded()
 
 	rows := b.Rows()[SourceCNF]
 	if rows == 0 {

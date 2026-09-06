@@ -132,6 +132,7 @@ func LoadCIQUAL(o CIQUALOptions) ([]format.RefFood, []format.SourceInfo, error) 
 	if err := b.Err("ciqual"); err != nil {
 		return nil, nil, err
 	}
+	b.ReportExcluded()
 
 	rows := b.Rows()[SourceCIQUAL]
 	if rows == 0 {
