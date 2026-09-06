@@ -5,6 +5,7 @@ banana,ciqual,"(?i)^banana, pulp, raw$",CIQUAL alim_code 13000
 banana,cofid,"(?i)^bananas,.*raw",CoFID names the flesh-only preparation
 banana,afcd,"(?i)^banana, cavendish, peeled, raw$",AFCD names the cultivar
 milk_whole,usda_foundation,"(?i)^milk, whole, 3\.25% milkfat",Foundation Foods
+milk_whole,usda_sr,"(?i)^milk, whole, 3\.25% milkfat, with added vitamin d$",SR Legacy fdc_id 171265; anchored so cross_source has an anchor food carried by two sources present in the USDA-only build rather than passing vacuously
 milk_whole,cnf,"(?i)^milk, fluid, whole, 3\.25%",CNF
 milk_whole,ciqual,"(?i)^milk, whole, UHT",CIQUAL
 milk_whole,cofid,"(?i)^milk, whole, pasteurised",CoFID

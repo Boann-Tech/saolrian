@@ -193,8 +193,15 @@ func evalCrossSource(p format.Pack, entries []anchorEntry) CheckResult {
 		return CheckResult{"cross_source", false,
 			fmt.Sprintf("%d disagreement(s): %s", len(failures), strings.Join(failures, "; "))}
 	case compared == 0:
+		// Pass-on-vacuous is deliberate: a single-source pack, or one
+		// where no anchor food happens to be carried by two or more of
+		// the sources present, is a legitimate development state, not a
+		// failure. But the detail line must say that plainly rather than
+		// implying two sources were compared and simply agreed -- with
+		// %d source(s) present and 0 compared, "nothing to compare
+		// across" alone reads as ambiguous about which of those it is.
 		return CheckResult{"cross_source", true,
-			fmt.Sprintf("%d source(s) in this pack; nothing to compare across", len(p.Sources))}
+			fmt.Sprintf("%d source(s) in this pack, but no anchor food is carried by two or more of them; nothing was actually compared", len(p.Sources))}
 	default:
 		return CheckResult{"cross_source", true,
 			fmt.Sprintf("%d nutrient comparisons agree within %.0f%%", compared, crossSourceTolerance*100)}
