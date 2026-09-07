@@ -6,6 +6,8 @@ import { getClient, UnreachableError } from '../lib/pb';
 import { createDiaryEntry } from '../lib/offline';
 import { foodMath, perServing } from '../lib/nutrition';
 import { listRecipes } from '../lib/recipes';
+import { defaultSlotForTime, type LoggedAt } from '../lib/slotDefault';
+import { recentFoods, type DiaryHistoryRow } from '../lib/recentFoods';
 import { normalizeSearch, normalizeBarcode } from '../lib/normalize';
 import type { Recipe } from '../lib/types';
 import { formatInt, loggedAtISO, todayISO } from '../lib/format';
@@ -73,6 +75,8 @@ export default function AddFood() {
   const [qaF, setQaF] = useState('');
   const [qaAdding, setQaAdding] = useState(false);
   const [qaErr, setQaErr] = useState('');
+  // One history fetch feeds both the slot inference and the recents list.
+  const [slotHistory, setSlotHistory] = useState<(LoggedAt & DiaryHistoryRow)[] | null>(null);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
@@ -114,11 +118,37 @@ export default function AddFood() {
     return () => window.clearTimeout(debounce.current);
   }, [query, endpoint]);
 
+  // When each slot is actually used, so the default can match the time of day
+  // instead of always landing on whichever slot sorts first.
+  useEffect(() => {
+    if (!endpoint || !userId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await getClient(endpoint)
+          .collection('diary_entries')
+          .getList(1, 200, { filter: `user="${userId}"`, sort: '-logged_at' });
+        if (!cancelled) setSlotHistory(res.items as unknown as (LoggedAt & DiaryHistoryRow)[]);
+      } catch {
+        if (!cancelled) setSlotHistory([]); // fall back to the even-day split
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [endpoint, userId]);
+
   useEffect(() => {
     if (slotId || slots.length === 0) return;
-    const wanted = slotParam && slots.some((s) => s.id === slotParam) ? slotParam : slots[0].id;
-    setSlotId(wanted);
-  }, [slots, slotId, slotParam]);
+    // An explicit ?slot= is a deliberate choice and always wins.
+    if (slotParam && slots.some((s) => s.id === slotParam)) {
+      setSlotId(slotParam);
+      return;
+    }
+    // Otherwise wait for the history before guessing, so the guess is informed.
+    if (slotHistory === null) return;
+    setSlotId(defaultSlotForTime(slots, slotHistory) ?? slots[0].id);
+  }, [slots, slotId, slotParam, slotHistory]);
 
   const openDetail = (food: Food) => {
     setSelected(food);
@@ -310,6 +340,8 @@ export default function AddFood() {
     navigate(doneHref);
   };
 
+  const recents = recentFoods(slotHistory ?? []);
+
   const math = selected
     ? foodMath(
         selected.kcal_per_100g,
@@ -442,6 +474,42 @@ export default function AddFood() {
             </span>
           </button>
 
+          {query.trim().length < 2 && recents.length > 0 && (
+            <div className="pt-4">
+              <div className="mb-3 flex items-baseline justify-between">
+                <h2 className="text-md font-bold tracking-[-.01em]">Recently logged</h2>
+                <span className="text-xs font-semibold text-text-faint">tap to log again</span>
+              </div>
+              <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised shadow-card">
+                {recents.map((f) => (
+                  <button
+                    key={`${f.name}-${f.brand ?? ''}`}
+                    type="button"
+                    className="flex w-full items-center gap-3 p-3.5 text-left"
+                    onClick={() => openDetail(f)}
+                  >
+                    <div className={IC_CHIP}>
+                      <svg viewBox="0 0 24 24" aria-hidden>
+                        <path d="M12 7v5l3 2" />
+                        <circle cx="12" cy="12" r="9" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-base font-semibold tracking-[-.01em]">{f.name}</div>
+                      <div className="mt-0.5 text-xs text-text-faint">
+                        {f.brand || 'Generic'} · {formatInt(f.default_serving_g ?? 0)} g
+                      </div>
+                    </div>
+                    <div className="whitespace-nowrap text-base font-bold tracking-[-.01em]">
+                      {formatInt(((f.kcal_per_100g ?? 0) * (f.default_serving_g ?? 0)) / 100)}{' '}
+                      <small className="text-2xs font-medium text-text-faint">kcal</small>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="pb-4">
             {searching && (
               <div className="flex items-center gap-2 pt-4 text-sm text-text-faint">
@@ -490,7 +558,7 @@ export default function AddFood() {
                 </div>
               </div>
             )}
-            {query.trim().length < 2 && !searchErr && (
+            {query.trim().length < 2 && !searchErr && recents.length === 0 && (
               <Empty>Type at least 2 characters to search the food database.</Empty>
             )}
           </div>

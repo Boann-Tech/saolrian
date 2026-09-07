@@ -24,6 +24,7 @@ const fakePb = {
       };
     if (name === 'diary_entries') {
       return {
+        getList: async () => ({ items: slotHistory }),
         create: async (data: Record<string, unknown>) => {
           created.push(data);
           return { id: 'entry-1', ...data };
@@ -35,6 +36,7 @@ const fakePb = {
 };
 
 let searchResults: Record<string, unknown> = { local: [], remote: [] };
+let slotHistory: Record<string, unknown>[] = [];
 
 vi.mock('../../lib/pb', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/pb')>();
@@ -63,6 +65,7 @@ beforeEach(() => {
   localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   created.length = 0;
   searchResults = { local: [], remote: [] };
+  slotHistory = [];
 });
 afterEach(() => cleanup());
 
@@ -212,5 +215,94 @@ describe('AddFood — search results are real controls', () => {
     row.focus();
     await user.keyboard(' ');
     expect(await screen.findByText(/Add to meal/i)).toBeInTheDocument();
+  });
+});
+
+
+describe('AddFood — the meal slot is inferred from the time of day', () => {
+  async function quickAddNow(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole('button', { name: /quick add/i }));
+    await user.type(await screen.findByLabelText(/Calories/i), '250');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+  }
+
+  it('defaults to the slot the user usually logs into at this hour', async () => {
+    const now = new Date();
+    const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600_000).toISOString();
+    // slot-2 is what gets used around now; slot-1 is used 8 hours away.
+    slotHistory = [
+      { meal_slot: 'slot-2', logged_at: now.toISOString() },
+      { meal_slot: 'slot-2', logged_at: now.toISOString() },
+      { meal_slot: 'slot-1', logged_at: hoursAgo(8) },
+    ];
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await quickAddNow(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]['meal_slot']).toBe('slot-2');
+  });
+
+  it('still lets an explicit ?slot= win over the inference', async () => {
+    const now = new Date();
+    slotHistory = [{ meal_slot: 'slot-2', logged_at: now.toISOString() }];
+    const user = userEvent.setup();
+    renderAddFood('/add?slot=slot-1');
+
+    await quickAddNow(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]['meal_slot']).toBe('slot-1');
+  });
+});
+
+
+describe('AddFood — recents', () => {
+  const recentRows = [
+    {
+      meal_slot: 'slot-1', name_snapshot: 'Porridge', brand_snapshot: 'Flahavans',
+      grams: 200, kcal: 300, protein: 10, carbs: 50, fat: 6,
+      logged_at: '2026-09-06T08:00:00Z',
+    },
+  ];
+
+  it('offers recently logged foods before anything is typed', async () => {
+    slotHistory = recentRows;
+    renderAddFood();
+
+    expect(await screen.findByText('Recently logged')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /porridge/i })).toBeInTheDocument();
+  });
+
+  it('opens a recent food pre-filled with the amount last logged', async () => {
+    slotHistory = recentRows;
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.click(await screen.findByRole('button', { name: /porridge/i }));
+
+    // 300 kcal for 200 g, pre-filled at 200 g again.
+    expect(await screen.findByLabelText(/serving size in grams/i)).toHaveValue('200');
+    expect(screen.getByText('300')).toBeInTheDocument();
+  });
+
+  it('hides the recents once a search is under way', async () => {
+    slotHistory = recentRows;
+    const user = userEvent.setup();
+    renderAddFood();
+    await screen.findByText('Recently logged');
+
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+
+    await waitFor(() => expect(screen.queryByText('Recently logged')).not.toBeInTheDocument());
+  });
+
+  it('says nothing when there is no history to show', async () => {
+    slotHistory = [];
+    renderAddFood();
+
+    await screen.findByRole('button', { name: /quick add/i });
+    expect(screen.queryByText('Recently logged')).not.toBeInTheDocument();
   });
 });

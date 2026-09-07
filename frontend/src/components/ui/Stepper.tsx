@@ -57,7 +57,6 @@ export function Stepper({
         className,
       )}
       role="group"
-      aria-label={ariaLabel}
     >
       <button
         type="button"
