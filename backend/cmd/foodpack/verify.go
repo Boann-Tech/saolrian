@@ -68,6 +68,7 @@ func runChecks(p format.Pack) []CheckResult {
 		checkCrossSource(p),
 		checkAttribution(p),
 		checkSubNutrients(p),
+		checkPortions(p),
 	}
 }
 
@@ -481,6 +482,55 @@ func checkSubNutrients(p format.Pack) CheckResult {
 	}
 	return CheckResult{"sub_nutrients", true,
 		fmt.Sprintf("%d relation checks held across %d food(s)", checked, len(p.Foods))}
+}
+
+// portionMaxPlausibleGrams bounds a single household-measure portion
+// before it counts as implausible. Nothing in the pipeline had ever read
+// Portions or DefaultServingG before this check: a wrong portion weight
+// is the most user-visible error the pack can carry, because it
+// multiplies every diary entry logged from that food, and arithmetic like
+// CNF's `factor * 100` is exactly the kind of thing that goes wrong
+// quietly.
+//
+// Confirmed against the real USDA build rather than picked in advance:
+// the largest real portion in the 8,202-food build is usda_sr/172868
+// "Turkey, whole, meat only, with added solution, raw", whose "1 bird"
+// portion is 5,717g -- a real whole turkey is plausibly that heavy. The
+// next largest values cluster in the 3,000-5,000g band (other whole
+// birds and roasts). 10,000g (10kg) sits with nearly 2x margin above the
+// largest confirmed real portion while still failing outright on the
+// kind of error this exists to catch: CNF's serving-size arithmetic is
+// `factor * 100`, so a factor mistakenly left in a per-kg rather than
+// per-100g unit would land here immediately.
+const portionMaxPlausibleGrams = 10000.0
+
+// checkPortions asserts every portion is a plausible positive weight, and
+// that DefaultServingG (denormalized for fast list rendering) actually
+// agrees with the portion list it was denormalized from.
+func checkPortions(p format.Pack) CheckResult {
+	checked := 0
+	for _, f := range p.Foods {
+		for _, port := range f.Portions {
+			checked++
+			if port.Grams <= 0 {
+				return CheckResult{"portions", false, fmt.Sprintf(
+					"%s/%s (%s): portion %q is %g g, not greater than 0",
+					f.Source, f.SourceID, f.Name, port.Label, port.Grams)}
+			}
+			if port.Grams > portionMaxPlausibleGrams {
+				return CheckResult{"portions", false, fmt.Sprintf(
+					"%s/%s (%s): portion %q is %g g, over the %g g plausible ceiling",
+					f.Source, f.SourceID, f.Name, port.Label, port.Grams, portionMaxPlausibleGrams)}
+			}
+		}
+		if len(f.Portions) > 0 && f.DefaultServingG != f.Portions[0].Grams {
+			return CheckResult{"portions", false, fmt.Sprintf(
+				"%s/%s (%s): DefaultServingG is %g g but the first portion (%q) is %g g",
+				f.Source, f.SourceID, f.Name, f.DefaultServingG, f.Portions[0].Label, f.Portions[0].Grams)}
+		}
+	}
+	return CheckResult{"portions", true,
+		fmt.Sprintf("%d portions across %d foods within bounds", checked, len(p.Foods))}
 }
 
 func sortedKeys(m map[string]int) []string {

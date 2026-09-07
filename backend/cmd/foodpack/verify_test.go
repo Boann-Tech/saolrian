@@ -482,3 +482,78 @@ func TestCheckSubNutrientsIgnoresNearZeroTraceNoise(t *testing.T) {
 		t.Fatalf("trace-level values below the floor must not fail: %s", got.Detail)
 	}
 }
+
+func portionFoodOf(portions []format.Portion, defaultServingG float64) format.RefFood {
+	return format.RefFood{
+		Source: "usda_sr", SourceID: "1", Name: "Test food", Region: "test-region", Licence: "test-licence",
+		Nutrients:       food.Encode(food.Profile{"energy_kcal": 89}),
+		Portions:        portions,
+		DefaultServingG: defaultServingG,
+	}
+}
+
+func TestCheckPortionsPassesOnPlausiblePortions(t *testing.T) {
+	p := format.Pack{
+		NutrientKeys: food.Keys(),
+		Foods: []format.RefFood{portionFoodOf([]format.Portion{
+			{Label: "1 medium", Grams: 118},
+			{Label: "1 cup, sliced", Grams: 150},
+		}, 118)},
+	}
+	if got := checkPortions(p); !got.Pass {
+		t.Fatalf("plausible portions must pass: %s", got.Detail)
+	}
+}
+
+func TestCheckPortionsRejectsNonPositiveGrams(t *testing.T) {
+	for _, grams := range []float64{0, -5} {
+		p := format.Pack{
+			NutrientKeys: food.Keys(),
+			Foods:        []format.RefFood{portionFoodOf([]format.Portion{{Label: "1 medium", Grams: grams}}, grams)},
+		}
+		if got := checkPortions(p); got.Pass {
+			t.Errorf("a %g g portion must fail (not greater than 0)", grams)
+		}
+	}
+}
+
+func TestCheckPortionsRejectsImplausiblyLargeGrams(t *testing.T) {
+	p := format.Pack{
+		NutrientKeys: food.Keys(),
+		Foods:        []format.RefFood{portionFoodOf([]format.Portion{{Label: "1 bag", Grams: 50000}}, 50000)},
+	}
+	got := checkPortions(p)
+	if got.Pass {
+		t.Fatal("a 50,000g portion must fail the plausible ceiling")
+	}
+	if !strings.Contains(got.Detail, "ceiling") {
+		t.Errorf("detail should explain the ceiling was exceeded, got: %s", got.Detail)
+	}
+}
+
+func TestCheckPortionsRequiresDefaultServingGMatchesFirstPortion(t *testing.T) {
+	p := format.Pack{
+		NutrientKeys: food.Keys(),
+		Foods: []format.RefFood{portionFoodOf([]format.Portion{
+			{Label: "1 medium", Grams: 118},
+			{Label: "1 cup, sliced", Grams: 150},
+		}, 150)}, // wrong: should be 118, the first portion's grams
+	}
+	got := checkPortions(p)
+	if got.Pass {
+		t.Fatal("a DefaultServingG that disagrees with the first portion must fail")
+	}
+	if !strings.Contains(got.Detail, "DefaultServingG") {
+		t.Errorf("detail should name the mismatch, got: %s", got.Detail)
+	}
+}
+
+func TestCheckPortionsPassesWhenNoPortionsExist(t *testing.T) {
+	p := format.Pack{
+		NutrientKeys: food.Keys(),
+		Foods:        []format.RefFood{portionFoodOf(nil, 0)},
+	}
+	if got := checkPortions(p); !got.Pass {
+		t.Fatalf("a food with no portions at all must pass: %s", got.Detail)
+	}
+}
