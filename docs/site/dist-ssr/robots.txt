@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://saolrian.boanntech.com/sitemap.xml

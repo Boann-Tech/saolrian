@@ -6,7 +6,8 @@ import type { ActivityLevel, Goal, Sex, TdeeFormula } from './types';
  *   BMR (Mifflin-St Jeor) = 10*kg + 6.25*cm - 5*age + (male: +5, female: -161, other: 0)
  *   BMR (Katch-McArdle)   = 370 + 21.6 * LBM(kg), LBM = kg * (1 - body_fat_pct/100)
  *   TDEE = BMR * activity factor
- *   goal adjustment: lose -500, maintain 0, gain +350
+ *   goal adjustment: rate_kg_per_week * 7700 / 7 (0 when maintaining)
+ *   the result is then clamped up to a sex-aware calorie floor
  */
 
 export const ACTIVITY_FACTORS: Record<ActivityLevel, number> = {
@@ -28,11 +29,39 @@ export const ACTIVITY_LEVEL_HINT: Record<ActivityLevel, string> = {
   extreme: 'Very hard daily training or manual labour — e.g. twice-daily sessions or an athlete’s schedule',
 };
 
-export const GOAL_ADJUSTMENT: Record<Goal, number> = {
-  lose: -500,
-  maintain: 0,
-  gain: 350,
+/** Energy in a kilogram of bodyweight, the constant the backend divides by 7
+ *  to turn a weekly rate into a daily calorie adjustment. */
+export const KCAL_PER_KG = 7700;
+
+/** Daily goals for a user who hasn't set their own. Must match the Go
+ *  constants in internal/routes/targets.go. */
+export const DEFAULT_WATER_GOAL_ML = 2000;
+export const DEFAULT_STEPS_GOAL = 10000;
+
+/** Lowest daily target we will hand a user, whatever rate they asked for.
+ *  The usual clinical guidance: 1200 kcal/day for women, 1500 for men. */
+export const CALORIE_FLOOR: Record<Sex, number> = {
+  male: 1500,
+  female: 1200,
+  other: 1200,
 };
+
+export function calorieFloor(sex: Sex | null): number {
+  return sex ? CALORIE_FLOOR[sex] : CALORIE_FLOOR.other;
+}
+
+/** Normalise a rate to the sign the goal implies: loss is stored negative,
+ *  gain positive, maintain flat. */
+export function signedRate(goal: Goal, rate: number): number {
+  if (goal === 'maintain') return 0;
+  return goal === 'lose' ? -Math.abs(rate) : Math.abs(rate);
+}
+
+/** Daily kcal delta for a weekly weight-change rate in kg (negative = loss). */
+export function rateAdjustment(goal: Goal, ratePerWeek: number): number {
+  if (goal === 'maintain') return 0;
+  return (ratePerWeek * KCAL_PER_KG) / 7;
+}
 
 export interface ProfileInput {
   height_cm: number | null;
@@ -65,10 +94,38 @@ export function computeTdee(p: ProfileInput): number | null {
   return bmr * factor;
 }
 
-export function computeCalorieTarget(p: ProfileInput, goal: Goal): number | null {
+export interface CalorieTarget {
+  /** What the user is actually held to — `uncapped`, raised to `floor`. */
+  target: number;
+  /** What the requested rate asked for, before the floor was applied. */
+  uncapped: number;
+  /** The floor that applied, from the profile's sex. */
+  floor: number;
+  /** True when the floor bit — i.e. the requested rate isn't achievable. */
+  capped: boolean;
+}
+
+/** Full target breakdown, so callers can tell the user their rate was capped
+ *  rather than silently handing them a different number than they asked for. */
+export function computeCalorieTargetDetail(
+  p: ProfileInput,
+  goal: Goal,
+  ratePerWeek = 0,
+): CalorieTarget | null {
   const tdee = computeTdee(p);
   if (tdee == null) return null;
-  return tdee + GOAL_ADJUSTMENT[goal];
+  const uncapped = tdee + rateAdjustment(goal, ratePerWeek);
+  const floor = calorieFloor(p.sex);
+  return {
+    target: Math.max(floor, uncapped),
+    uncapped,
+    floor,
+    capped: uncapped < floor,
+  };
+}
+
+export function computeCalorieTarget(p: ProfileInput, goal: Goal, ratePerWeek = 0): number | null {
+  return computeCalorieTargetDetail(p, goal, ratePerWeek)?.target ?? null;
 }
 
 export const FORMULA_LABEL: Record<TdeeFormula, string> = {

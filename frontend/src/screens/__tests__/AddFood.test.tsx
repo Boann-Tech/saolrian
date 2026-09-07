@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import AddFood from '../AddFood';
 import { AppProvider } from '../../state/AppContext';
+import { todayISO } from '../../lib/format';
 
 const authRecord = { id: 'user-1' };
 const created: Record<string, unknown>[] = [];
@@ -14,9 +15,16 @@ const fakePb = {
   collection: (name: string) => {
     if (name === 'profiles') return { getFullList: async () => [] };
     if (name === 'weights') return { getList: async () => ({ items: [] }) };
-    if (name === 'meal_slots') return { getFullList: async () => [{ id: 'slot-1', name: 'Lunch', sort_order: 0, pct_allocation: null }] };
+    if (name === 'meal_slots')
+      return {
+        getFullList: async () => [
+          { id: 'slot-1', name: 'Lunch', sort_order: 0, pct_allocation: null },
+          { id: 'slot-2', name: 'Dinner', sort_order: 1, pct_allocation: null },
+        ],
+      };
     if (name === 'diary_entries') {
       return {
+        getList: async () => ({ items: slotHistory }),
         create: async (data: Record<string, unknown>) => {
           created.push(data);
           return { id: 'entry-1', ...data };
@@ -27,9 +35,12 @@ const fakePb = {
   },
 };
 
+let searchResults: Record<string, unknown> = { local: [], remote: [] };
+let slotHistory: Record<string, unknown>[] = [];
+
 vi.mock('../../lib/pb', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/pb')>();
-  return { ...actual, getClient: () => fakePb, saolrianSend: vi.fn().mockResolvedValue({ local: [], remote: [] }) };
+  return { ...actual, getClient: () => fakePb, saolrianSend: async () => searchResults };
 });
 
 vi.mock('../../lib/recipes', () => ({
@@ -38,11 +49,18 @@ vi.mock('../../lib/recipes', () => ({
   ]),
 }));
 
-function renderAddFood() {
+/** Reports the live location, so tests can assert on URL state. */
+function StageProbe() {
+  const location = useLocation();
+  return <div data-testid="stage-probe">{location.search}</div>;
+}
+
+function renderAddFood(route = '/add') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[route]}>
       <AppProvider>
         <AddFood />
+        <StageProbe />
       </AppProvider>
     </MemoryRouter>,
   );
@@ -53,6 +71,8 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   created.length = 0;
+  searchResults = { local: [], remote: [] };
+  slotHistory = [];
 });
 afterEach(() => cleanup());
 
@@ -89,5 +109,264 @@ describe('AddFood — From recipe', () => {
       carbs: 30,
       fat: 7.5,
     });
+  });
+});
+
+
+describe('AddFood — logging to a chosen day', () => {
+  async function quickAdd(user: ReturnType<typeof userEvent.setup>, kcal = '250') {
+    await user.click(await screen.findByRole('button', { name: /quick add/i }));
+    await user.type(await screen.findByLabelText(/Calories/i), kcal);
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+  }
+
+  it('stamps the entry with the date from the query string', async () => {
+    const user = userEvent.setup();
+    renderAddFood('/add?date=2026-09-01');
+
+    await quickAdd(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(String(created[0]['logged_at'])).toMatch(/^2026-09-01/);
+  });
+
+  it('stamps today when no date is given', async () => {
+    const user = userEvent.setup();
+    renderAddFood('/add');
+
+    await quickAdd(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(String(created[0]['logged_at']).slice(0, 10)).toBe(todayISO());
+  });
+
+  it('preselects the meal slot named in the query string', async () => {
+    const user = userEvent.setup();
+    renderAddFood('/add?slot=slot-2');
+
+    await quickAdd(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]['meal_slot']).toBe('slot-2');
+  });
+
+  it('names the day it is logging to when that day is not today', async () => {
+    renderAddFood('/add?date=2026-09-01');
+    expect(await screen.findByText(/1 September 2026/i)).toBeInTheDocument();
+  });
+
+  it('says nothing about the date when logging to today', async () => {
+    renderAddFood('/add');
+    await screen.findByRole('button', { name: /quick add/i });
+    expect(screen.queryByTestId('logging-to')).not.toBeInTheDocument();
+  });
+});
+
+
+describe('AddFood — food source attribution', () => {
+  const food = {
+    name: 'Hummus', brand: 'Acme', kcal_per_100g: 300,
+    protein_per_100g: 8, carbs_per_100g: 12, fat_per_100g: 24,
+    default_serving_g: 100, barcode: '3017620422003', local: false,
+  };
+
+  it('links the Open Food Facts credit to the product it came from', async () => {
+    searchResults = { local: [], remote: [food] };
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+    await user.click(await screen.findByText('Hummus'));
+
+    const credit = await screen.findByRole('link', { name: /open food facts/i });
+    expect(credit).toHaveAttribute('href', 'https://world.openfoodfacts.org/product/3017620422003');
+  });
+
+  it('does not dress the credit as a link when there is nothing to link to', async () => {
+    searchResults = { local: [], remote: [{ ...food, barcode: undefined }] };
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+    await user.click(await screen.findByText('Hummus'));
+
+    await screen.findByText(/Add to meal/i);
+    expect(screen.queryByRole('link', { name: /open food facts/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/↗/)).not.toBeInTheDocument();
+  });
+});
+
+
+describe('AddFood — search results are real controls', () => {
+  it('exposes each result as a button, not a div playing one', async () => {
+    searchResults = {
+      local: [],
+      remote: [
+        {
+          name: 'Hummus', brand: 'Acme', kcal_per_100g: 300,
+          protein_per_100g: 8, carbs_per_100g: 12, fat_per_100g: 24,
+          default_serving_g: 100, local: false,
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+
+    const row = await screen.findByRole('button', { name: /hummus/i });
+    // A native button gets Enter *and* Space from the browser, without the
+    // page scrolling on Space the way a role="button" div does.
+    expect(row.tagName).toBe('BUTTON');
+
+    row.focus();
+    await user.keyboard(' ');
+    expect(await screen.findByText(/Add to meal/i)).toBeInTheDocument();
+  });
+});
+
+
+describe('AddFood — the meal slot is inferred from the time of day', () => {
+  async function quickAddNow(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole('button', { name: /quick add/i }));
+    await user.type(await screen.findByLabelText(/Calories/i), '250');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+  }
+
+  it('defaults to the slot the user usually logs into at this hour', async () => {
+    const now = new Date();
+    const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600_000).toISOString();
+    // slot-2 is what gets used around now; slot-1 is used 8 hours away.
+    slotHistory = [
+      { meal_slot: 'slot-2', logged_at: now.toISOString() },
+      { meal_slot: 'slot-2', logged_at: now.toISOString() },
+      { meal_slot: 'slot-1', logged_at: hoursAgo(8) },
+    ];
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await quickAddNow(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]['meal_slot']).toBe('slot-2');
+  });
+
+  it('still lets an explicit ?slot= win over the inference', async () => {
+    const now = new Date();
+    slotHistory = [{ meal_slot: 'slot-2', logged_at: now.toISOString() }];
+    const user = userEvent.setup();
+    renderAddFood('/add?slot=slot-1');
+
+    await quickAddNow(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]['meal_slot']).toBe('slot-1');
+  });
+});
+
+
+describe('AddFood — recents', () => {
+  const recentRows = [
+    {
+      meal_slot: 'slot-1', name_snapshot: 'Porridge', brand_snapshot: 'Flahavans',
+      grams: 200, kcal: 300, protein: 10, carbs: 50, fat: 6,
+      logged_at: '2026-09-06T08:00:00Z',
+    },
+  ];
+
+  it('offers recently logged foods before anything is typed', async () => {
+    slotHistory = recentRows;
+    renderAddFood();
+
+    expect(await screen.findByText('Recently logged')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /porridge/i })).toBeInTheDocument();
+  });
+
+  it('opens a recent food pre-filled with the amount last logged', async () => {
+    slotHistory = recentRows;
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.click(await screen.findByRole('button', { name: /porridge/i }));
+
+    // 300 kcal for 200 g, pre-filled at 200 g again.
+    expect(await screen.findByLabelText(/serving size in grams/i)).toHaveValue('200');
+    expect(screen.getByText('300')).toBeInTheDocument();
+  });
+
+  it('hides the recents once a search is under way', async () => {
+    slotHistory = recentRows;
+    const user = userEvent.setup();
+    renderAddFood();
+    await screen.findByText('Recently logged');
+
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+
+    await waitFor(() => expect(screen.queryByText('Recently logged')).not.toBeInTheDocument());
+  });
+
+  it('says nothing when there is no history to show', async () => {
+    slotHistory = [];
+    renderAddFood();
+
+    await screen.findByRole('button', { name: /quick add/i });
+    expect(screen.queryByText('Recently logged')).not.toBeInTheDocument();
+  });
+});
+
+
+describe('AddFood — moving between stages', () => {
+  const food = {
+    name: 'Hummus', brand: 'Acme', kcal_per_100g: 300,
+    protein_per_100g: 8, carbs_per_100g: 12, fat_per_100g: 24,
+    default_serving_g: 100, local: false,
+  };
+
+  async function openTheFood(user: ReturnType<typeof userEvent.setup>) {
+    searchResults = { local: [], remote: [food] };
+    renderAddFood();
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+    await user.click(await screen.findByRole('button', { name: /hummus/i }));
+    await screen.findByText(/Add to meal/i);
+  }
+
+  it('returns to the results when backing out of a food, not to the dashboard', async () => {
+    const user = userEvent.setup();
+    await openTheFood(user);
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+
+    // Back at the search stage with the query intact.
+    expect(await screen.findByRole('button', { name: /hummus/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/search foods/i)).toHaveValue('hummus');
+  });
+
+  it('puts the stage in the URL, so it is a history entry the browser can go back to', async () => {
+    const user = userEvent.setup();
+    await openTheFood(user);
+
+    // MemoryRouter has no window.history to drive, so assert the mechanism:
+    // the stage is URL state, which is what makes it a history entry at all.
+    expect(screen.getByTestId('stage-probe')).toHaveTextContent('stage=detail');
+  });
+
+  it('hides the search field while a food is open', async () => {
+    const user = userEvent.setup();
+    await openTheFood(user);
+
+    expect(screen.queryByPlaceholderText(/search foods/i)).not.toBeInTheDocument();
+  });
+
+  it('returns to the search stage when backing out of the recipe list', async () => {
+    searchResults = { local: [], remote: [] };
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.click(await screen.findByRole('button', { name: /from recipe/i }));
+    await screen.findByText(/Manage recipes/i);
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+
+    expect(await screen.findByRole('button', { name: /quick add/i })).toBeInTheDocument();
   });
 });

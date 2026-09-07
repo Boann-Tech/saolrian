@@ -176,7 +176,7 @@ describe('Trends', () => {
     expect(fetchTrendsMock.mock.calls[0][1]).toBe(90);
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('tab', { name: '30 days' }));
+    await user.click(screen.getByRole('radio', { name: '30 days' }));
 
     await waitFor(() => expect(fetchTrendsMock.mock.calls.at(-1)?.[1]).toBe(30));
   });
@@ -473,8 +473,8 @@ describe('optional cards', () => {
     fetchTrendsMock.mockResolvedValue(makePayload(90));
     renderTrends();
 
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Carbs' })).toBeTruthy());
-    await userEvent.click(screen.getByRole('tab', { name: 'Carbs' }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Carbs' })).toBeTruthy());
+    await userEvent.click(screen.getByRole('radio', { name: 'Carbs' }));
     expect(screen.getByRole('img', { name: /carbs/i })).toBeTruthy();
   });
 
@@ -566,5 +566,17 @@ describe('MealsCard', () => {
     const section = screen.getByRole('heading', { level: 3, name: 'Meal distribution' }).closest('section')!;
     expect(within(section).getByText(/no meals/i)).toBeTruthy();
     expect(within(section).queryByRole('img')).toBeNull();
+  });
+});
+
+
+describe('Trends — no cards selected', () => {
+  it('explains how to get cards back instead of rendering nothing', async () => {
+    profileRecord = { ...freshProfileRecord(), trend_cards: [] };
+    fetchTrendsMock.mockResolvedValue(makePayload(90));
+    renderTrends();
+
+    expect(await screen.findByText(/no cards/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /customise/i })).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Field, Sheet, Spinner, TextInput } from './ui';
+import { BARCODE_HINT } from '../screens/AddFood';
 
 /**
  * Barcode scan sheet — camera-first when the browser supports it
@@ -120,7 +121,7 @@ export default function ScanSheet({ open, onClose, onCode }: ScanSheetProps) {
   const submitManual = () => {
     const c = code.trim();
     if (!/^\d{6,}$/.test(c)) {
-      setErr('Enter a numeric barcode (at least 6 digits).');
+      setErr(BARCODE_HINT);
       return;
     }
     setErr('');
@@ -167,7 +168,9 @@ export default function ScanSheet({ open, onClose, onCode }: ScanSheetProps) {
 
       <Field label="Or enter barcode manually">
         <TextInput
-          autoFocus
+          // Only when manual entry *is* the path — autofocusing while the
+          // camera runs raises the keyboard over the viewfinder.
+          autoFocus={cam === 'unsupported' || cam === 'denied'}
           inputMode="numeric"
           pattern="[0-9]*"
           placeholder="e.g. 3017620422003"

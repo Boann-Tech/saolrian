@@ -42,15 +42,15 @@ describe('Onboarding (no backend running)', () => {
   it('renders the choice screen on first run', () => {
     renderOnboarding();
     expect(screen.getByText(/SAOLRIAN/i, { selector: '.wordmark' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Hosted/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Self-hosted/ })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^Hosted/ })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^Self-hosted/ })).toBeInTheDocument();
     expect(localStorage.getItem('saolrian-endpoint')).toBeNull();
   });
 
   it('shows connecting-then-failure for the unreachable hosted placeholder, with Change endpoint', async () => {
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(screen.getByRole('button', { name: /^Hosted/ }));
+    await user.click(screen.getByRole('radio', { name: /^Hosted/ }));
 
     // Connecting state appears first
     expect(await screen.findByText(/Connecting to/i)).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('Onboarding (no backend running)', () => {
   it('rejects an invalid self-hosted URL without persisting', async () => {
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(screen.getByRole('button', { name: /^Self-hosted/ }));
+    await user.click(screen.getByRole('radio', { name: /^Self-hosted/ }));
     await user.type(screen.getByRole('textbox'), 'not-a-url');
     fireEvent.submit(screen.getByRole('textbox').closest('form')!);
     expect(await screen.findByText(/valid URL/i)).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe('Onboarding (no backend running)', () => {
   it('persists a reachable self-hosted endpoint', async () => {
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(screen.getByRole('button', { name: /^Self-hosted/ }));
+    await user.click(screen.getByRole('radio', { name: /^Self-hosted/ }));
     await user.type(screen.getByRole('textbox'), 'http://localhost:9999');
     fireEvent.submit(screen.getByRole('textbox').closest('form')!);
     await waitFor(() => expect(localStorage.getItem('saolrian-endpoint')).toBe('http://localhost:9999'));
@@ -88,9 +88,30 @@ describe('Onboarding (no backend running)', () => {
   it('Change endpoint returns to the choice screen', async () => {
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(screen.getByRole('button', { name: /^Hosted/ }));
+    await user.click(screen.getByRole('radio', { name: /^Hosted/ }));
     await screen.findByText(/Couldn't reach/i);
     await user.click(screen.getByRole('button', { name: /change endpoint/i }));
     expect(await screen.findByText(/Self-hosted/)).toBeInTheDocument();
+  });
+});
+
+
+describe('Onboarding — the choice is a real radio group', () => {
+  it('groups the two options', () => {
+    renderOnboarding();
+    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+  });
+
+  it('can be chosen with Space, not just Enter', async () => {
+    const user = userEvent.setup();
+    renderOnboarding();
+
+    const selfHosted = screen.getByRole('radio', { name: /^Self-hosted/ });
+    selfHosted.focus();
+    await user.keyboard(' ');
+
+    expect(selfHosted).toBeChecked();
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 });

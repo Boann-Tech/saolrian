@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useApp } from '../state/AppContext';
+import { NavLink, useLocation } from 'react-router-dom';
 import { queueDepth } from '../lib/offline';
 import { cn } from '../lib/cn';
 
 /** Bottom tab bar + content frame for signed-in screens.
  *  Visual system ported from the approved prototype: fixed glass tabbar
  *  (blur, hairline top border, SVG glyphs + labels), with the prototype's
- *  .no-tabs behavior — it slides away on AddFood / Import screens. */
+ *  .no-tabs behavior — it slides away on AddFood / Import screens.
+ *
+ *  Destinations only: sign out lives on Profile, where a rare and destructive
+ *  action can be confirmed rather than sitting a thumb-slip from a tab. */
 
 const TABS = [
   {
@@ -69,17 +71,9 @@ const NV_GLYPH =
   '[&_svg]:size-[22px] [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:[stroke-width:1.9] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]';
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { clearEndpoint, pb } = useApp();
-  const navigate = useNavigate();
   const location = useLocation();
   const pending = queueDepth();
   const noTabs = location.pathname.startsWith('/add') || location.pathname.startsWith('/profile/import');
-
-  const signOut = () => {
-    pb?.authStore.clear();
-    clearEndpoint();
-    navigate('/onboarding', { replace: true });
-  };
 
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-[640px] flex-col bg-bg">
@@ -127,19 +121,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span>{t.label}</span>
           </NavLink>
         ))}
-        <button
-          className={cn(
-            'flex flex-[0.55] flex-col items-center gap-[3px] border-none bg-transparent text-2xs font-semibold text-text-faint',
-            NV_GLYPH,
-          )}
-          onClick={signOut}
-          title="Sign out"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden>
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
-          </svg>
-          <span>Sign out</span>
-        </button>
       </nav>
     </div>
   );

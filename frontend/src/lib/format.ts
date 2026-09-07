@@ -72,3 +72,14 @@ export function monthGrid(iso: string): string[][] {
     Array.from({ length: 7 }, (_, i) => dateFromOffset(w * 7 + i, start)),
   );
 }
+
+/** Timestamp to stamp a diary entry with when logging to `date`.
+ *
+ * Logging to today keeps the real clock time, so the diary reads in the order
+ * things were eaten. Backfilling an earlier day has no meaningful time of day,
+ * so it lands at local noon — safely inside the day in every timezone, rather
+ * than midnight, which can fall into the neighbouring day once converted. */
+export function loggedAtISO(date: string): string {
+  if (date === todayISO()) return new Date().toISOString();
+  return new Date(`${date}T12:00:00`).toISOString();
+}

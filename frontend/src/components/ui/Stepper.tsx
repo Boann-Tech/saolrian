@@ -57,12 +57,11 @@ export function Stepper({
         className,
       )}
       role="group"
-      aria-label={ariaLabel}
     >
       <button
         type="button"
         aria-label="decrease"
-        className="h-9 w-9 text-md text-text hover:text-accent"
+        className="h-11 w-11 text-md text-text hover:text-accent"
         onClick={() => onChange(clamp(value - step))}
       >
         −
@@ -72,7 +71,10 @@ export function Stepper({
           type="text"
           inputMode={inputMode}
           aria-label={ariaLabel}
-          className="w-[3ch] min-w-0 flex-none bg-transparent text-center text-sm font-semibold text-text outline-none"
+          // Grows with the value: a 3ch box clipped any quantity of 1,000+
+          // while it was being typed.
+          style={{ width: `${Math.max(3, draft.length)}ch` }}
+          className="min-w-0 flex-none bg-transparent text-center text-sm font-semibold text-text outline-none"
           value={draft}
           onChange={(e) => handleChange(e.target.value)}
           onBlur={commit}
@@ -82,7 +84,7 @@ export function Stepper({
       <button
         type="button"
         aria-label="increase"
-        className="h-9 w-9 text-md text-text hover:text-accent"
+        className="h-11 w-11 text-md text-text hover:text-accent"
         onClick={() => onChange(clamp(value + step))}
       >
         +

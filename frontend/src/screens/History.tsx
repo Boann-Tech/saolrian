@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import type { DailyMetric, ExerciseEntry, Summary } from '../lib/types';
 import { dateFromOffset, formatInt, formatNumber, monthTitle, prettyDate, todayISO, weekdayLabel } from '../lib/format';
 import { getClient } from '../lib/pb';
+import { deleteEntryWithUndo, restoreEntry } from '../lib/diary';
 import { normalizeSummary } from '../lib/normalize';
 import { MealGroup } from '../components/MealGroup';
 import { Calendar, Card, Empty, Sheet, Spinner, StatTile, useToast } from '../components/ui';
@@ -23,21 +24,41 @@ const EXERCISE_LIMIT = 10;
 export default function History() {
   const { endpoint } = useApp();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // Logging from a past day returns here with ?date=, so the user lands back
+  // on the day they were filling in rather than on today.
+  const initialDate = params.get('date') || todayISO();
   const [days, setDays] = useState<DaySummary[]>([]);
   const [metrics, setMetrics] = useState<Record<string, DailyMetric>>({});
   const [exercise, setExercise] = useState<ExerciseEntry[]>([]);
-  const [selected, setSelected] = useState<string>(todayISO());
-  const [anchor, setAnchor] = useState<string>(todayISO());
+  const [selected, setSelected] = useState<string>(initialDate);
+  const [anchor, setAnchor] = useState<string>(initialDate);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
+  // Deleting a diary entry is frequent and low-stakes, so it gets an undo
+  // rather than a confirmation dialog in front of every single tap.
   const destroyEntry = async (entryId: string) => {
     const pb = getClient(endpoint);
     try {
-      await pb.collection('diary_entries').delete(entryId);
+      const snapshot = await deleteEntryWithUndo(pb, entryId);
       await load();
-      toast('Entry deleted');
+      toast('Entry deleted', {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            void (async () => {
+              try {
+                await restoreEntry(pb, snapshot);
+                await load();
+              } catch (ex) {
+                toast(ex instanceof Error ? ex.message : 'Could not restore that entry', 'err');
+              }
+            })();
+          },
+        },
+      });
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Could not delete entry', 'err');
     }
@@ -142,12 +163,13 @@ export default function History() {
       ) : (
         <>
           {/* Week strip — day pills with an adherence dot */}
-          <div className="flex gap-1.5 px-6 pb-3">
+          <div className="flex gap-1.5 px-6 pb-3" data-testid="week-strip">
             {days.map((d) => {
               const over = d.budget != null && d.totals.kcal > d.budget;
               return (
                 <button
                   key={d.date}
+                  data-date={d.date}
                   className={cn(
                     'flex-1 min-w-0 cursor-pointer rounded-lg border bg-raised py-2 text-center transition',
                     d.date === selected
@@ -269,6 +291,7 @@ export default function History() {
                     <MealGroup
                       key={g.slot_id}
                       group={g}
+                      date={sel.date}
                       addLabel="Add food"
                       onDelete={(id) => void destroyEntry(id)}
                       onEdit={(id) => navigate(`/edit/${id}`)}
