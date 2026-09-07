@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { useOverlay } from './useOverlay';
 
 export function Sheet({
   open,
@@ -12,14 +12,7 @@ export function Sheet({
   title?: string;
   children: ReactNode;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  const ref = useOverlay(open, onClose);
 
   return (
     <>
@@ -29,8 +22,11 @@ export function Sheet({
         onClick={onClose}
       />
       <div
-        className={`sheet${open ? ' open' : ''}`}
+        ref={ref}
+        tabIndex={-1}
+        className={`sheet${open ? ' open' : ''} outline-none`}
         role="dialog"
+        aria-modal="true"
         aria-label={title}
         aria-hidden={!open}
         inert={!open ? true : undefined}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import type { SummaryGroup } from '../lib/types';
@@ -18,7 +18,7 @@ const IC_CHIP =
 
 /* Popover action buttons — 15px line-icon SVGs. */
 const POP_BTN =
-  'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left text-sm font-semibold ' +
+  'flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left text-sm font-semibold ' +
   '[&_svg]:h-[15px] [&_svg]:w-[15px] [&_svg]:flex-none [&_svg]:fill-none [&_svg]:stroke-current ' +
   '[&_svg]:[stroke-width:1.8] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]';
 
@@ -100,6 +100,33 @@ export function MealGroup({
   const [open, setOpen] = useState(group.entries.length > 0);
   const [menuEntry, setMenuEntry] = useState<string | null>(null);
   const groupKcal = group.entries.reduce((s, e) => s + e.kcal, 0);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // A popover that only closes by re-tapping its own trigger reads as broken,
+  // and leaves itself overlapping the row beneath it.
+  useEffect(() => {
+    if (!menuEntry) return;
+    const closeAndRestore = () => {
+      triggerRefs.current[menuEntry]?.focus();
+      setMenuEntry(null);
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if (triggerRefs.current[menuEntry]?.contains(target)) return;
+      setMenuEntry(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeAndRestore();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuEntry]);
   const addHref = `/add?date=${date ?? todayISO()}&slot=${group.slot_id}`;
 
   const body = (
@@ -129,8 +156,13 @@ export function MealGroup({
             </div>
             {(onDelete || onEdit) && (
               <button
-                className="ml-1.5 flex flex-none rounded-md px-1 py-1.5 leading-none text-text-faint hover:bg-surface hover:text-text-muted [&_svg]:h-4 [&_svg]:w-4 [&_svg]:fill-current"
+                ref={(el) => {
+                  triggerRefs.current[e.id] = el;
+                }}
+                className="ml-1.5 flex h-11 w-11 flex-none items-center justify-center rounded-md leading-none text-text-faint hover:bg-surface hover:text-text-muted [&_svg]:h-4 [&_svg]:w-4 [&_svg]:fill-current"
                 aria-label={`Actions for ${e.name}`}
+                aria-haspopup="menu"
+                aria-expanded={menuEntry === e.id}
                 onClick={() => setMenuEntry(menuEntry === e.id ? null : e.id)}
               >
                 <svg viewBox="0 0 24 24" aria-hidden>
@@ -141,9 +173,15 @@ export function MealGroup({
               </button>
             )}
             {menuEntry === e.id && (
-              <div className="absolute right-1 top-[calc(100%-8px)] z-20 flex min-w-[132px] flex-col gap-0.5 rounded-lg border border-border bg-raised p-1.5 shadow-[0_8px_24px_rgba(10,37,64,.12)]">
+              <div
+                ref={menuRef}
+                role="menu"
+                aria-label={`Actions for ${e.name}`}
+                className="absolute right-1 top-[calc(100%-8px)] z-20 flex min-w-[132px] flex-col gap-0.5 rounded-lg border border-border bg-raised p-1.5 shadow-[0_8px_24px_rgba(10,37,64,.12)]"
+              >
                 {onEdit && (
                   <button
+                    role="menuitem"
                     className={`${POP_BTN} text-text hover:bg-surface`}
                     onClick={() => {
                       setMenuEntry(null);
@@ -158,6 +196,7 @@ export function MealGroup({
                 )}
                 {onDelete && (
                   <button
+                    role="menuitem"
                     className={`${POP_BTN} text-danger hover:bg-[#fdf0f0]`}
                     onClick={() => {
                       setMenuEntry(null);
@@ -197,7 +236,7 @@ export function MealGroup({
         </button>
         {onDeleteSlot && (
           <button
-            className="flex-none rounded-md p-1.5 text-text-faint hover:bg-[#fdf0f0] hover:text-danger [&_svg]:h-4 [&_svg]:w-4 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:[stroke-width:1.8] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]"
+            className="flex h-11 w-11 flex-none items-center justify-center rounded-md text-text-faint hover:bg-[#fdf0f0] hover:text-danger [&_svg]:h-4 [&_svg]:w-4 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:[stroke-width:1.8] [&_svg]:[stroke-linecap:round] [&_svg]:[stroke-linejoin:round]"
             onClick={onDeleteSlot}
             aria-label={`Delete ${group.slot_name}`}
           >

@@ -108,8 +108,52 @@ describe('Segmented', () => {
         ]}
       />,
     );
-    expect(screen.getByRole('tab', { name: 'Lose' })).toHaveAttribute('aria-selected', 'true');
-    await user.click(screen.getByRole('tab', { name: 'Maintain' }));
+    expect(screen.getByRole('radio', { name: 'Lose' })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: 'Maintain' }));
     expect(onChange).toHaveBeenCalledWith('maintain');
+  });
+});
+
+
+describe('Segmented — semantics', () => {
+  it('is a radio group, not a tab list', async () => {
+    render(
+      <Segmented
+        aria-label="Goal"
+        value="lose"
+        onChange={() => {}}
+        options={[
+          { value: 'lose', label: 'Lose' },
+          { value: 'maintain', label: 'Maintain' },
+        ]}
+      />,
+    );
+
+    // Tabs promise arrow-key navigation and a tabpanel; this is a
+    // single-select option group.
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: 'Goal' })).toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+  });
+
+  it('moves the selection with arrow keys once focused', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Segmented
+        aria-label="Goal"
+        value="lose"
+        onChange={onChange}
+        options={[
+          { value: 'lose', label: 'Lose' },
+          { value: 'maintain', label: 'Maintain' },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('radio', { name: 'Lose' }));
+    await user.keyboard('{ArrowRight}');
+
+    expect(onChange).toHaveBeenLastCalledWith('maintain');
   });
 });

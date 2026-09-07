@@ -79,7 +79,7 @@ describe('Welcome — the goal rate drives the previewed target', () => {
     const user = userEvent.setup();
     await toGoalStep(user);
 
-    await user.click(screen.getByRole('tab', { name: 'Lose' }));
+    await user.click(screen.getByRole('radio', { name: 'Lose' }));
     await user.click(await screen.findByRole('radio', { name: '1 kg/wk' }));
 
     // TDEE 2712.5 - (1 kg/wk => 1100/day) = 1612.5 -> 1,613
@@ -90,7 +90,7 @@ describe('Welcome — the goal rate drives the previewed target', () => {
     const user = userEvent.setup();
     await toGoalStep(user);
 
-    await user.click(screen.getByRole('tab', { name: 'Maintain' }));
+    await user.click(screen.getByRole('radio', { name: 'Maintain' }));
     await waitFor(() => expect(targetText()).toMatch(/2,713/));
   });
 
@@ -98,7 +98,7 @@ describe('Welcome — the goal rate drives the previewed target', () => {
     const user = userEvent.setup();
     await toGoalStep(user);
 
-    await user.click(screen.getByRole('tab', { name: 'Lose' }));
+    await user.click(screen.getByRole('radio', { name: 'Lose' }));
     await user.click(await screen.findByRole('radio', { name: '0.25 kg/wk' }));
     await user.click(screen.getByRole('button', { name: /start tracking/i }));
 

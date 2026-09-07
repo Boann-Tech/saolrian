@@ -39,10 +39,10 @@ const THEME_PRESETS = [
 
 const HINT = 'text-sm leading-normal text-text-muted';
 const ICON_BTN =
-  'flex h-7 w-7 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
+  'flex h-11 w-11 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
   'disabled:opacity-35 disabled:cursor-default hover:border-accent-line hover:text-accent-ink';
 const ICON_BTN_DANGER =
-  'flex h-7 w-7 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
+  'flex h-11 w-11 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
   'disabled:opacity-35 disabled:cursor-default hover:border-danger hover:text-danger';
 
 interface ProfileForm {

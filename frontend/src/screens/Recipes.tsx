@@ -39,7 +39,7 @@ export default function Recipes() {
     <div className="pb-6">
       <div className="flex items-center justify-between px-6 pb-3 pt-4">
         <button
-          className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
+          className="flex h-11 w-11 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
           onClick={() => navigate(-1)}
           aria-label="Back"
         >

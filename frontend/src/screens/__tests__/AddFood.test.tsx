@@ -185,3 +185,32 @@ describe('AddFood — food source attribution', () => {
     expect(screen.queryByText(/↗/)).not.toBeInTheDocument();
   });
 });
+
+
+describe('AddFood — search results are real controls', () => {
+  it('exposes each result as a button, not a div playing one', async () => {
+    searchResults = {
+      local: [],
+      remote: [
+        {
+          name: 'Hummus', brand: 'Acme', kcal_per_100g: 300,
+          protein_per_100g: 8, carbs_per_100g: 12, fat_per_100g: 24,
+          default_serving_g: 100, local: false,
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+
+    const row = await screen.findByRole('button', { name: /hummus/i });
+    // A native button gets Enter *and* Space from the browser, without the
+    // page scrolling on Space the way a role="button" div does.
+    expect(row.tagName).toBe('BUTTON');
+
+    row.focus();
+    await user.keyboard(' ');
+    expect(await screen.findByText(/Add to meal/i)).toBeInTheDocument();
+  });
+});

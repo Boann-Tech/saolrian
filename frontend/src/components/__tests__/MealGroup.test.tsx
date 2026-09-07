@@ -4,7 +4,7 @@
  * into whichever slot happened to be first.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { MealGroup } from '../MealGroup';
@@ -69,5 +69,49 @@ describe('MealGroup — the add link carries its day and slot', () => {
 
     const links = screen.getAllByRole('link');
     expect(links.some((l) => l.getAttribute('href') === '/add?date=2026-09-01&slot=slot-7')).toBe(true);
+  });
+});
+
+
+describe('MealGroup — the entry actions menu', () => {
+  it('is announced as a menu', async () => {
+    const user = userEvent.setup();
+    renderGroup({ onEdit: () => {}, onDelete: () => {} });
+
+    const trigger = screen.getByRole('button', { name: /actions for soup/i });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(trigger);
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(screen.getAllByRole('menuitem')).toHaveLength(2);
+  });
+
+  it('closes when the user clicks elsewhere', async () => {
+    const user = userEvent.setup();
+    renderGroup({ onEdit: () => {}, onDelete: () => {} });
+
+    await user.click(screen.getByRole('button', { name: /actions for soup/i }));
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    await user.click(document.body);
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+
+  it('closes on Escape and hands focus back to the trigger', async () => {
+    const user = userEvent.setup();
+    renderGroup({ onEdit: () => {}, onDelete: () => {} });
+
+    const trigger = screen.getByRole('button', { name: /actions for soup/i });
+    await user.click(trigger);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(trigger);
   });
 });

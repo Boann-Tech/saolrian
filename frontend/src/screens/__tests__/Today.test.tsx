@@ -192,8 +192,7 @@ describe('Today — deleting an entry is reversible', () => {
     summaryResponse = baseSummary({ groups: [groupWithEntry] });
     renderToday();
     await user.click(await screen.findByRole('button', { name: /actions for soup/i }));
-    // Exact: the slot header also has a "Delete Lunch" control.
-    await user.click(await screen.findByRole('button', { name: 'Delete' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
   }
 
   it('offers an undo instead of a confirmation', async () => {

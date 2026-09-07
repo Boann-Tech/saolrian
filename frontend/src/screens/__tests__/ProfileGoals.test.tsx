@@ -147,7 +147,7 @@ describe('ProfileGoals — unsaved edits survive background profile refreshes', 
 
     // Toggling Goal triggers saveGoalMacros() -> profiles.update() -> refreshProfile(),
     // which replaces the `profile` object reference in AppContext.
-    await user.click(screen.getByRole('tab', { name: 'Lose' }));
+    await user.click(screen.getByRole('radio', { name: 'Lose' }));
     await waitFor(() => expect(profileRecord.goal).toBe('lose'));
 
     // The weight the user just typed (not yet saved via the main Save button)
@@ -164,7 +164,7 @@ describe('ProfileGoals — unsaved edits survive background profile refreshes', 
     await user.selectOptions(formulaSelect, 'katch');
     expect(formulaSelect).toHaveValue('katch');
 
-    await user.click(screen.getByRole('tab', { name: 'Lose' }));
+    await user.click(screen.getByRole('radio', { name: 'Lose' }));
     await waitFor(() => expect(profileRecord.goal).toBe('lose'));
 
     expect(formulaSelect).toHaveValue('katch');

@@ -100,81 +100,93 @@ export default function Onboarding() {
         Calories, training, and everything in between — in one calm place.
       </p>
 
-      <div
-        className="mt-8 cursor-pointer rounded-lg border border-border bg-raised p-4 transition hover:border-accent-line"
-        role="button"
-        tabIndex={0}
-        onClick={chooseHosted}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') chooseHosted();
-        }}
-      >
-        <div className="flex items-start gap-3">
-          <span
-            className={cn(
-              'mt-0.5 flex h-[18px] w-[18px] flex-none items-center justify-center rounded-full border-[1.5px]',
-              mode === 'hosted' ? 'border-accent' : 'border-border',
-            )}
-          >
-            {mode === 'hosted' && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}
-          </span>
-          <div>
-            <div className="text-base font-semibold text-text">Hosted — saolrian.com</div>
-            <div className="mt-0.5 text-sm text-text-faint">We host it. Works everywhere. Export anytime.</div>
+      <div role="radiogroup" aria-label="Where your data lives">
+        <label
+          className={cn(
+            'mt-8 block cursor-pointer rounded-lg border p-4 transition',
+            'focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent/40',
+            mode === 'hosted' ? 'border-accent bg-accent-soft' : 'border-border bg-raised hover:border-accent-line',
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <input
+              type="radio"
+              name="endpoint-mode"
+              className="sr-only"
+              checked={mode === 'hosted'}
+              onChange={chooseHosted}
+            />
+            <span
+              aria-hidden
+              className={cn(
+                'mt-0.5 flex h-[18px] w-[18px] flex-none items-center justify-center rounded-full border-[1.5px]',
+                mode === 'hosted' ? 'border-accent' : 'border-border',
+              )}
+            >
+              {mode === 'hosted' && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}
+            </span>
+            <div>
+              <div className="text-base font-semibold text-text">Hosted — saolrian.com</div>
+              <div className="mt-0.5 text-sm text-text-faint">We host it. Works everywhere. Export anytime.</div>
+            </div>
           </div>
-        </div>
+        </label>
+
+        <label
+          className={cn(
+            'mt-3.5 block cursor-pointer rounded-lg border p-4 transition',
+            'focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent/40',
+            mode === 'self' ? 'border-accent bg-accent-soft' : 'border-border bg-raised hover:border-accent-line',
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <input
+              type="radio"
+              name="endpoint-mode"
+              className="sr-only"
+              checked={mode === 'self'}
+              onChange={chooseSelf}
+            />
+            <span
+              aria-hidden
+              className={cn(
+                'mt-0.5 flex h-[18px] w-[18px] flex-none items-center justify-center rounded-full border-[1.5px]',
+                mode === 'self' ? 'border-accent' : 'border-border',
+              )}
+            >
+              {mode === 'self' && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}
+            </span>
+            <div>
+              <div className="text-base font-semibold text-text">Self-hosted — your own server</div>
+              <div className="mt-0.5 text-sm text-text-faint">Your data, your hardware. Same app, full control.</div>
+            </div>
+          </div>
+        </label>
       </div>
 
-      <div
-        className={cn(
-          'mt-3.5 cursor-pointer rounded-lg border p-4 transition',
-          mode === 'self' ? 'border-accent bg-accent-soft' : 'border-border bg-raised hover:border-accent-line',
-        )}
-        role="button"
-        tabIndex={0}
-        onClick={chooseSelf}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') chooseSelf();
-        }}
-      >
-        <div className="flex items-start gap-3">
-          <span
-            className={cn(
-              'mt-0.5 flex h-[18px] w-[18px] flex-none items-center justify-center rounded-full border-[1.5px]',
-              mode === 'self' ? 'border-accent' : 'border-border',
-            )}
+      {mode === 'self' && (
+        <div className="mt-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitSelf();
+            }}
           >
-            {mode === 'self' && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}
-          </span>
-          <div>
-            <div className="text-base font-semibold text-text">Self-hosted — your own server</div>
-            <div className="mt-0.5 text-sm text-text-faint">Your data, your hardware. Same app, full control.</div>
-          </div>
+            <TextInput
+              type="url"
+              placeholder="https://saolrian.example.com"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            <div className="mt-2 text-xs text-text-faint">
+              Point me at your instance — everything stays on your server.
+            </div>
+            <Button type="submit" loading={connecting} block className="mt-3">
+              Continue
+            </Button>
+          </form>
         </div>
-        {mode === 'self' && (
-          <div className="mt-3">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                submitSelf();
-              }}
-            >
-              <TextInput
-                type="url"
-                placeholder="https://saolrian.example.com"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-              />
-              <div className="mt-2 text-xs text-text-faint">
-                Point me at your instance — everything stays on your server.
-              </div>
-              <Button type="submit" loading={connecting} block className="mt-3">
-                Continue
-              </Button>
-            </form>
-          </div>
-        )}
-      </div>
+      )}
 
       {(mode === 'hosted' || connecting) && (
         <div className="mt-4 flex items-center gap-2 text-sm text-text-muted">

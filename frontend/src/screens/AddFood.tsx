@@ -360,7 +360,7 @@ export default function AddFood() {
     <div className="pb-6">
       <div className="flex items-center justify-between px-6 pb-3 pt-4">
         <button
-          className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
+          className="flex h-11 w-11 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
           onClick={() => navigate('/today')}
           aria-label="Back"
         >
@@ -464,15 +464,11 @@ export default function AddFood() {
                 </div>
                 <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised shadow-card">
                   {results.map((f, i) => (
-                    <div
+                    <button
                       key={`${f.name}-${f.brand ?? ''}-${i}`}
-                      className="flex items-center gap-3 p-3.5"
-                      role="button"
-                      tabIndex={0}
+                      type="button"
+                      className="flex w-full items-center gap-3 p-3.5 text-left"
                       onClick={() => openDetail(f)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') openDetail(f);
-                      }}
                     >
                       <div className={IC_CHIP}>
                         <svg viewBox="0 0 24 24" aria-hidden>
@@ -489,7 +485,7 @@ export default function AddFood() {
                       <div className="whitespace-nowrap text-base font-bold tracking-[-.01em]">
                         {formatInt(f.kcal_per_100g)} <small className="text-2xs font-medium text-text-faint">kcal/100g</small>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>

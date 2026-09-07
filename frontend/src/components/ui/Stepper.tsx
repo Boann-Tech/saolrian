@@ -62,7 +62,7 @@ export function Stepper({
       <button
         type="button"
         aria-label="decrease"
-        className="h-9 w-9 text-md text-text hover:text-accent"
+        className="h-11 w-11 text-md text-text hover:text-accent"
         onClick={() => onChange(clamp(value - step))}
       >
         −
@@ -85,7 +85,7 @@ export function Stepper({
       <button
         type="button"
         aria-label="increase"
-        className="h-9 w-9 text-md text-text hover:text-accent"
+        className="h-11 w-11 text-md text-text hover:text-accent"
         onClick={() => onChange(clamp(value + step))}
       >
         +
