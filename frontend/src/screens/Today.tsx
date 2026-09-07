@@ -8,6 +8,7 @@ import { deleteEntryWithUndo, restoreEntry } from '../lib/diary';
 import { normalizeSummary } from '../lib/normalize';
 import { DEFAULT_STEPS_GOAL, DEFAULT_WATER_GOAL_ML } from '../lib/nutrition';
 import { MealGroup } from '../components/MealGroup';
+import { EditableMetric } from '../components/EditableMetric';
 import { DeleteSlotDialog, useSlotDeletion } from '../components/DeleteSlotDialog';
 import {
   Button,
@@ -38,8 +39,6 @@ export default function Today() {
   const [waterMl, setWaterMl] = useState<number>(0);
   const [steps, setSteps] = useState<number>(0);
   const [savingMetric, setSavingMetric] = useState(false);
-  const [editingWater, setEditingWater] = useState(false);
-  const [waterInput, setWaterInput] = useState('');
 
   const load = useCallback(async () => {
     if (!endpoint) return;
@@ -138,11 +137,6 @@ export default function Today() {
     }
   };
 
-  const commitWater = async () => {
-    const next = Math.max(0, Math.round(Number(waterInput)) || 0);
-    setEditingWater(false);
-    if (next !== waterMl) await upsertMetric({ water_ml: next });
-  };
 
   const slotDeletion = useSlotDeletion(
     () => getClient(endpoint),
@@ -343,35 +337,13 @@ export default function Today() {
             <Card>
               <CardTitle>Hydration</CardTitle>
               <div className="flex items-baseline justify-between">
-                <span className="flex items-baseline gap-1 text-xl font-bold">
-                  {editingWater ? (
-                    <input
-                      type="number"
-                      min={0}
-                      autoFocus
-                      className="w-20 rounded-md border-[1.5px] border-accent-line bg-raised px-1.5 py-0.5 text-xl font-bold text-text outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
-                      value={waterInput}
-                      onChange={(e) => setWaterInput(e.target.value)}
-                      onBlur={() => void commitWater()}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void commitWater();
-                        if (e.key === 'Escape') setEditingWater(false);
-                      }}
-                    />
-                  ) : (
-                    <button
-                      className="rounded-md underline decoration-dotted decoration-text-faint underline-offset-4 hover:decoration-accent"
-                      onClick={() => {
-                        setWaterInput(String(waterMl));
-                        setEditingWater(true);
-                      }}
-                      aria-label="Edit water amount"
-                    >
-                      {formatInt(waterMl)}
-                    </button>
-                  )}
-                  <small className="text-sm font-medium text-text-faint">/ {formatInt(waterGoal)} ml</small>
-                </span>
+                <EditableMetric
+                  value={waterMl}
+                  goal={waterGoal}
+                  unit="ml"
+                  label="water amount"
+                  onCommit={(next) => void upsertMetric({ water_ml: next })}
+                />
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
                   <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
                   water
@@ -401,9 +373,13 @@ export default function Today() {
             <Card className="mt-4">
               <CardTitle>Steps</CardTitle>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold">
-                  {formatInt(steps)} <small className="text-sm font-medium text-text-faint">/ {formatInt(stepsGoal)} steps</small>
-                </span>
+                <EditableMetric
+                  value={steps}
+                  goal={stepsGoal}
+                  unit="steps"
+                  label="step count"
+                  onCommit={(next) => void upsertMetric({ steps: next })}
+                />
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
                   <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
                   manual

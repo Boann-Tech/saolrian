@@ -14,6 +14,7 @@ const authRecord = { id: 'user-1' };
 let summaryResponse: Record<string, unknown> = {};
 let metricRows: Record<string, unknown>[] = [];
 const deleted: string[] = [];
+const metricWrites: Record<string, unknown>[] = [];
 const restored: Record<string, unknown>[] = [];
 let storedEntry: Record<string, unknown> = {};
 
@@ -27,8 +28,14 @@ const fakePb = {
     if (name === 'daily_metrics') {
       return {
         getFullList: async () => metricRows,
-        create: async (d: Record<string, unknown>) => d,
-        update: async (_id: string, d: Record<string, unknown>) => d,
+        create: async (d: Record<string, unknown>) => {
+          metricWrites.push(d);
+          return { id: 'm1', ...d };
+        },
+        update: async (_id: string, d: Record<string, unknown>) => {
+          metricWrites.push(d);
+          return d;
+        },
       };
     }
     if (name === 'diary_entries') {
@@ -88,6 +95,7 @@ beforeEach(() => {
   summaryResponse = baseSummary();
   metricRows = [];
   deleted.length = 0;
+  metricWrites.length = 0;
   restored.length = 0;
   storedEntry = {
     id: 'e1',
@@ -212,5 +220,36 @@ describe('Today — deleting an entry is reversible', () => {
       fat: 9,
       logged_at: '2026-09-07T12:00:00Z',
     });
+  });
+});
+
+
+describe('Today — correcting the daily metrics', () => {
+  it('lets steps be set to an exact figure, not just incremented', async () => {
+    metricRows = [{ id: 'm1', water_ml: 500, steps: 12000 }];
+    const user = userEvent.setup();
+    renderToday();
+
+    await user.click(await screen.findByRole('button', { name: /edit step count/i }));
+    const field = screen.getByLabelText(/step count/i);
+    await user.clear(field);
+    await user.type(field, '7432');
+    await user.tab();
+
+    await waitFor(() => expect(metricWrites.some((w) => w['steps'] === 7432)).toBe(true));
+  });
+
+  it('lets water be corrected downward after a mis-tap', async () => {
+    metricRows = [{ id: 'm1', water_ml: 2500, steps: 0 }];
+    const user = userEvent.setup();
+    renderToday();
+
+    await user.click(await screen.findByRole('button', { name: /edit water amount/i }));
+    const field = screen.getByLabelText(/water amount/i);
+    await user.clear(field);
+    await user.type(field, '2000');
+    await user.tab();
+
+    await waitFor(() => expect(metricWrites.some((w) => w['water_ml'] === 2000)).toBe(true));
   });
 });

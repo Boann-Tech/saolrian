@@ -72,7 +72,10 @@ export function Stepper({
           type="text"
           inputMode={inputMode}
           aria-label={ariaLabel}
-          className="w-[3ch] min-w-0 flex-none bg-transparent text-center text-sm font-semibold text-text outline-none"
+          // Grows with the value: a 3ch box clipped any quantity of 1,000+
+          // while it was being typed.
+          style={{ width: `${Math.max(3, draft.length)}ch` }}
+          className="min-w-0 flex-none bg-transparent text-center text-sm font-semibold text-text outline-none"
           value={draft}
           onChange={(e) => handleChange(e.target.value)}
           onBlur={commit}

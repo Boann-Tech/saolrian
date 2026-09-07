@@ -568,3 +568,15 @@ describe('MealsCard', () => {
     expect(within(section).queryByRole('img')).toBeNull();
   });
 });
+
+
+describe('Trends — no cards selected', () => {
+  it('explains how to get cards back instead of rendering nothing', async () => {
+    profileRecord = { ...freshProfileRecord(), trend_cards: [] };
+    fetchTrendsMock.mockResolvedValue(makePayload(90));
+    renderTrends();
+
+    expect(await screen.findByText(/no cards/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /customise/i })).toBeInTheDocument();
+  });
+});

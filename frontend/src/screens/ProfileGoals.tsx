@@ -532,7 +532,6 @@ export default function ProfileGoals() {
                 key={s.id}
                 className="flex items-center gap-2.5 border-b border-border py-3.5 text-base last:border-0"
               >
-                <span className="text-text-faint">⋮⋮</span>
                 <span className="flex-1">{s.name}</span>
                 <input
                   className="w-[54px] rounded-md border-[1.5px] border-border px-1.5 py-1 text-right text-sm font-semibold"

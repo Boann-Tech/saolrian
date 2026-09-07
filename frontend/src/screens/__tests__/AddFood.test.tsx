@@ -34,9 +34,11 @@ const fakePb = {
   },
 };
 
+let searchResults: Record<string, unknown> = { local: [], remote: [] };
+
 vi.mock('../../lib/pb', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/pb')>();
-  return { ...actual, getClient: () => fakePb, saolrianSend: vi.fn().mockResolvedValue({ local: [], remote: [] }) };
+  return { ...actual, getClient: () => fakePb, saolrianSend: async () => searchResults };
 });
 
 vi.mock('../../lib/recipes', () => ({
@@ -60,6 +62,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   created.length = 0;
+  searchResults = { local: [], remote: [] };
 });
 afterEach(() => cleanup());
 
@@ -146,5 +149,39 @@ describe('AddFood — logging to a chosen day', () => {
     renderAddFood('/add');
     await screen.findByRole('button', { name: /quick add/i });
     expect(screen.queryByTestId('logging-to')).not.toBeInTheDocument();
+  });
+});
+
+
+describe('AddFood — food source attribution', () => {
+  const food = {
+    name: 'Hummus', brand: 'Acme', kcal_per_100g: 300,
+    protein_per_100g: 8, carbs_per_100g: 12, fat_per_100g: 24,
+    default_serving_g: 100, barcode: '3017620422003', local: false,
+  };
+
+  it('links the Open Food Facts credit to the product it came from', async () => {
+    searchResults = { local: [], remote: [food] };
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+    await user.click(await screen.findByText('Hummus'));
+
+    const credit = await screen.findByRole('link', { name: /open food facts/i });
+    expect(credit).toHaveAttribute('href', 'https://world.openfoodfacts.org/product/3017620422003');
+  });
+
+  it('does not dress the credit as a link when there is nothing to link to', async () => {
+    searchResults = { local: [], remote: [{ ...food, barcode: undefined }] };
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+    await user.click(await screen.findByText('Hummus'));
+
+    await screen.findByText(/Add to meal/i);
+    expect(screen.queryByRole('link', { name: /open food facts/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/↗/)).not.toBeInTheDocument();
   });
 });

@@ -19,6 +19,9 @@ import ScanSheet from '../components/ScanSheet';
 
 type Stage = 'search' | 'detail' | 'recipes' | 'recipeDetail';
 
+/** Shared so the two entry points can't drift apart again. */
+export const BARCODE_HINT = 'Enter a numeric barcode (at least 6 digits).';
+
 /* barcode scan glyph, from the prototype */
 const scanGlyph = (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
@@ -126,7 +129,7 @@ export default function AddFood() {
   const lookupBarcode = async (codeArg?: string) => {
     const code = (codeArg ?? barcodeVal).trim();
     if (!/^\d{6,}$/.test(code)) {
-      toast('Enter a numeric barcode (at least 6 digits.', 'err');
+      toast(BARCODE_HINT, 'err');
       return;
     }
     try {
@@ -543,7 +546,18 @@ export default function AddFood() {
                 inputMode="numeric"
                 aria-label="Serving size in grams"
               />
-              <span className="ml-auto text-2xs text-text-faint">Source: Open Food Facts ↗</span>
+              {selected.barcode ? (
+                <a
+                  className="ml-auto text-2xs text-text-faint underline underline-offset-2"
+                  href={`https://world.openfoodfacts.org/product/${selected.barcode}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  Source: Open Food Facts ↗
+                </a>
+              ) : (
+                <span className="ml-auto text-2xs text-text-faint">Source: Open Food Facts</span>
+              )}
             </div>
 
             <div className="mb-1.5 mt-3.5 text-xs font-semibold uppercase tracking-[.05em] text-text-faint">
