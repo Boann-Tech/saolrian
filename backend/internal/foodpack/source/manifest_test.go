@@ -11,6 +11,7 @@ const goodManifest = `source,url,sha256,archive_kind,extract_to
 usda_sr,https://example.test/sr.zip,unpinned,zip,usda_sr
 cnf,https://example.test/cnf.zip,0000000000000000000000000000000000000000000000000000000000000000,zip,cnf
 cofid,https://example.test/cofid.xlsx,unpinned,xlsx,cofid
+ciqual,https://example.test/ciqual.7z,unpinned,7z,ciqual
 `
 
 func TestParseManifest(t *testing.T) {
@@ -18,11 +19,16 @@ func TestParseManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseManifest: %v", err)
 	}
-	if len(entries) != 3 {
-		t.Fatalf("got %d entries, want 3", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("got %d entries, want 4", len(entries))
 	}
 	if entries[0].Source != "usda_sr" || entries[0].SHA256 != Unpinned || entries[0].ArchiveKind != "zip" {
 		t.Errorf("first entry = %+v", entries[0])
+	}
+	// 7z is CIQUAL's only published XML archive; a manifest that cannot
+	// name it cannot pin the French dataset at all.
+	if entries[3].Source != "ciqual" || entries[3].ArchiveKind != "7z" {
+		t.Errorf("entries[3] = %+v; 7z must be an accepted archive kind", entries[3])
 	}
 	if entries[2].ExtractTo != "cofid" || entries[2].ArchiveKind != "xlsx" {
 		t.Errorf("third entry = %+v", entries[2])

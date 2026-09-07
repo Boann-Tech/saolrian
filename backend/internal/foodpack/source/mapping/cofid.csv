@@ -3,13 +3,13 @@ energy (kcal) (kcal),energy_kcal,1,Proximates: energy in kcal
 protein (g),protein,1,Proximates
 fat (g),fat,1,Proximates
 carbohydrate (g),carbohydrate,1,"Proximates: available carbohydrate, monosaccharide equivalents"
-englyst fibre (g),fibre,1,Proximates
+nsp (g),fibre,1,"Proximates: non-starch polysaccharide, the Englyst method. This row used to read ""englyst fibre (g)"", which is what the method is called but not what the column is called. CoFID carries both fibre conventions and they are not interchangeable: NSP excludes resistant starch and lignin and so runs below an AOAC figure for the same food. NSP is kept because it is the convention this table already chose and because CoFID populates it for 2433 of 2889 foods against 1473 for AOAC -- but note that USDA, CIQUAL and AFCD all report AOAC-style total dietary fibre, so fibre is the one canonical key whose denominator differs by source"
 total sugars (g),sugars,1,Proximates
 starch (g),starch,1,Proximates
-satd fa /100g fd (g),fat_saturated,1,"Proximates. The ""fd"" (food, as opposed to ""fa"" = fatty acids) spelling rests on documentation, not an observed workbook: no CoFID archive is reachable in this environment (see manifest/sources.csv), so this header has not been confirmed against a real file. Whoever downloads CoFID first should confirm the exact header text with --report-unmapped before trusting this row"
-mono fa /100g fd (g),fat_monounsaturated,1,Proximates: unverified against a real workbook, see the satd fa row above
-poly fa /100g fd (g),fat_polyunsaturated,1,Proximates: unverified against a real workbook, see the satd fa row above
-trans fa /100g fd (g),fat_trans,1,Proximates: unverified against a real workbook, see the satd fa row above
+satd fa /100g fd (g),fat_saturated,1,"Proximates: grams per 100g of FOOD. Confirmed against the 2021 workbook, whose row-3 gloss for this column reads ""Saturated fatty acids per 100g food"". Saturated fat is the only one of the four that abbreviates food to ""fd""; the other three spell it out, which is why the three rows below do not match this one's shape"
+mono fa /100g food (g),fat_monounsaturated,1,"Proximates: per 100g of food; row-3 gloss ""Monounsaturated fatty acids per 100g food"""
+poly fa /100g food (g),fat_polyunsaturated,1,"Proximates: per 100g of food; row-3 gloss ""Polyunsaturated fatty acids per 100g food"""
+trans fas /100g food (g),fat_trans,1,"Proximates: per 100g of food; row-3 gloss ""Total Trans fatty acids per 100g food"". Note the plural ""FAs"", which only the trans columns use"
 cholesterol (mg),cholesterol,1,Proximates
 alcohol (g),alcohol,1,Proximates
 water (g),water,1,Proximates
@@ -26,7 +26,7 @@ selenium (µg),selenium,1,Inorganics
 iodine (µg),iodine,1,Inorganics
 retinol (µg),retinol,1,Vitamins
 carotene (µg),carotene_beta,1,Vitamins
-vitamin a (µg),-,1,"Vitamins: this column is retinol equivalents (RE), not retinol activity equivalents (RAE) -- they are different quantities that can differ by up to 2x for carotene-rich foods (RE historically used a 1:6 beta-carotene:retinol ratio; RAE uses 1:12). The aggregate RE figure alone cannot be converted to RAE without the underlying carotene breakdown, which this column does not carry, so it is dropped rather than stored under vitamin_a_rae. The canonical vocabulary has no separate RE key; retinol and carotene_beta are mapped individually below instead"
+retinol equivalent (µg),-,1,"Vitamins: this column is retinol equivalents (RE), not retinol activity equivalents (RAE) -- they are different quantities that can differ by up to 2x for carotene-rich foods (RE historically used a 1:6 beta-carotene:retinol ratio; RAE uses 1:12). The aggregate RE figure alone cannot be converted to RAE without the underlying carotene breakdown, which this column does not carry, so it is dropped rather than stored under vitamin_a_rae. The canonical vocabulary has no separate RE key; retinol and carotene_beta are mapped individually below instead"
 vitamin d (µg),vitamin_d,1,Vitamins
 vitamin e (mg),vitamin_e,1,Vitamins
 vitamin k1 (µg),vitamin_k,1,Vitamins
@@ -41,9 +41,22 @@ pantothenate (mg),pantothenate,1,Vitamins
 biotin (µg),biotin,1,Vitamins
 energy (kj) (kj),-,1,Proximates: energy in kJ; superseded by kcal
 chloride (mg),-,1,Inorganics: outside the canonical vocabulary
-tryptophan/60 (g),-,1,Proximates: a protein component
+tryptophan/60 (mg),-,1,Proximates: a protein component
 niacin equivalent (mg),-,1,Vitamins: superseded by preformed niacin
+aoac fibre (g),-,1,"Proximates: the other fibre convention. AOAC total dietary fibre counts resistant starch and lignin, which NSP does not, so the two are different numbers for the same food and only one can hold the fibre key. See the nsp (g) row above for why NSP won"
 satd fa /100g fa (g),-,1,"Proximates: this is grams per 100g of FATTY ACIDS (a composition percentage of the fat fraction), not per 100g of food. fat_saturated means per 100g food; use the /100g fd column for that. Mapping this column here previously stored ~65g saturated fat against 0.1g of total fat for skimmed milk -- do not repeat that mistake"
-mono fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_monounsaturated, use the /100g fd column"
-poly fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_polyunsaturated, use the /100g fd column"
-trans fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_trans, use the /100g fd column"
+mono fa/ 100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_monounsaturated, use the /100g food column. The stray space after the slash is the workbook's, not a typo here -- normaliseHeader collapses runs of whitespace but does not move one"
+poly fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_polyunsaturated, use the /100g food column"
+trans fas /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_trans, use the /100g food column"
+cis-mono fa /100g food (g),-,1,"Proximates: the cis-only subset of monounsaturated fat, which excludes the trans monoenes counted in fat_monounsaturated. A near-twin of the mapped column and lower for the same food; kept out on purpose"
+cis-poly fa /100g food (g),-,1,Proximates: the cis-only subset of polyunsaturated fat; see cis-mono above
+sat fa excl br /100g food (g),-,1,Proximates: saturated fat excluding branched-chain acids; a near-twin of fat_saturated and lower for the same food
+branched chain fa /100g food (g),-,1,Proximates: the branched-chain fraction alone; outside the canonical vocabulary
+n-3 poly /100g food (g),-,1,Proximates: an omega-3 subset of polyunsaturated fat; outside the canonical vocabulary
+n-6 poly /100g food (g),-,1,Proximates: an omega-6 subset of polyunsaturated fat; outside the canonical vocabulary
+cis-mono fa /100g fa (g),-,1,Proximates: /100g FA denominator and a cis-only subset; wrong on both counts
+cis-polyu fa /100g fa (g),-,1,Proximates: /100g FA denominator and a cis-only subset; wrong on both counts
+sat fa excl br /100g fa (g),-,1,Proximates: /100g FA denominator and a saturated subset; wrong on both counts
+branched chain fa /100g fa (g),-,1,Proximates: /100g FA denominator; outside the canonical vocabulary
+n-3 poly /100g fa (g),-,1,Proximates: /100g FA denominator; outside the canonical vocabulary
+n-6 poly /100g fa (g),-,1,Proximates: /100g FA denominator; outside the canonical vocabulary

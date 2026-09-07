@@ -600,3 +600,77 @@ func TestCheckPortionsPassesWhenNoPortionsExist(t *testing.T) {
 		t.Fatalf("a food with no portions at all must pass: %s", got.Detail)
 	}
 }
+
+// packFromSource builds a one-food pack attributed to a named source, so a
+// check that treats sources differently can be exercised on each of them.
+func packFromSource(source string, prof food.Profile) format.Pack {
+	p := format.Pack{Version: "test", NutrientKeys: food.Keys()}
+	p.Foods = append(p.Foods, format.RefFood{
+		Source: source, SourceID: "x", Name: "Test food", Nutrients: food.Encode(prof),
+	})
+	p.Sources = []format.SourceInfo{{Source: source, Rows: 1}}
+	return p
+}
+
+// CoFID declares energy that excludes fibre entirely and carbohydrate that
+// excludes it too. Dried kombu is where that combination bites: 58.7 g of
+// non-starch polysaccharide, no available carbohydrate to speak of, and a
+// published 43 kcal. Charging its fibre 2 kcal/g -- correct for a source
+// that states carbohydrate by difference -- puts the estimate at 160 and
+// fails the pack outright on the hard gate.
+func TestAtwaterAcceptsFibreUnenergisedEnergy(t *testing.T) {
+	kombu := food.Profile{
+		"energy_kcal": 43, "protein": 7.1, "fat": 1.6, "carbohydrate": 0, "fibre": 58.7,
+	}
+	r := result(t, packFromSource("cofid", kombu), "atwater")
+	if !r.Pass {
+		t.Errorf("atwater failed on a source that gives fibre no energy: %s", r.Detail)
+	}
+}
+
+// The other direction of the same band: EU 1169/2011 gives fibre 2 kcal/g
+// on top of available carbohydrate, so a French food's declared energy is
+// higher than the CoFID convention would predict for the identical
+// composition.
+func TestAtwaterAcceptsAvailableCarbohydratePlusFibreEnergy(t *testing.T) {
+	spinach := food.Profile{
+		"energy_kcal": 33.3, "protein": 2.68, "fat": 0.39, "carbohydrate": 3.06, "fibre": 2.6,
+	}
+	r := result(t, packFromSource("ciqual", spinach), "atwater")
+	if !r.Pass {
+		t.Errorf("atwater failed on a source that gives fibre 2 kcal/g: %s", r.Detail)
+	}
+}
+
+// Widening the estimate into a band must not cost the check the thing it
+// exists for. Kilojoules shipped as kilocalories is 4.184x, and no
+// convention in the band comes close to excusing it.
+func TestAtwaterStillCatchesKilojoulesAsKilocalories(t *testing.T) {
+	banana := food.Profile{
+		"energy_kcal": 371, "protein": 1.1, "fat": 0.3, "carbohydrate": 20, "fibre": 2.6,
+	}
+	if result(t, packFromSource("ciqual", banana), "atwater").Pass {
+		t.Error("atwater passed a food carrying its kilojoule figure as kilocalories")
+	}
+}
+
+// fibre <= carbohydrate is a fact about carbohydrate-by-difference, not
+// about food. AFCD's uncooked psyllium is 88.7 g of fibre against 1.0 g of
+// available carbohydrate and is entirely correct.
+func TestSubNutrientsFibreRelationIsUSDAOnly(t *testing.T) {
+	psyllium := food.Profile{"carbohydrate": 1.0, "fibre": 88.7}
+
+	if r := result(t, packFromSource("afcd", psyllium), "sub_nutrients"); !r.Pass {
+		t.Errorf("sub_nutrients failed on an available-carbohydrate source: %s", r.Detail)
+	}
+	for _, src := range []string{"cofid", "ciqual"} {
+		if r := result(t, packFromSource(src, psyllium), "sub_nutrients"); !r.Pass {
+			t.Errorf("sub_nutrients failed on %s, which also states available carbohydrate: %s", src, r.Detail)
+		}
+	}
+	// The relation must still hold where it is true, or restricting it
+	// would have quietly deleted a working guard.
+	if result(t, packFromSource("usda_sr", psyllium), "sub_nutrients").Pass {
+		t.Error("sub_nutrients passed fibre exceeding carbohydrate-by-difference in USDA data")
+	}
+}

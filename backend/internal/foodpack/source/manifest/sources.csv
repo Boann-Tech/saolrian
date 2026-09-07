@@ -1,7 +1,7 @@
 source,url,sha256,archive_kind,extract_to
 usda_foundation,https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_csv_2025-04-24.zip,56a169d02b6db1fdad7887f10bc01001cbb06393f0fae722c4afec20d3741a2d,zip,usda_foundation
 usda_sr,https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_csv_2018-04.zip,b80817294b8850530aaedf2e515c02593b1824f763a0ff356e5c2081643e6fd0,zip,usda_sr
-cnf,https://food-nutrition.canada.ca/hn-vsan/assets/cnf-fce_2015_csv.zip,unpinned,zip,cnf
-ciqual,https://ciqual.anses.fr/cms/sites/default/files/inline-files/CIQUAL2020_XML_2020_07_07.zip,unpinned,zip,ciqual
-cofid,https://assets.publishing.service.gov.uk/media/5eb6296486650c2ce2ba0d24/McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2019.xlsx,unpinned,xlsx,cofid
-afcd,https://www.foodstandards.gov.au/sites/default/files/2023-11/Release%202%20-%20Food%20nutrient%20database.xlsx,unpinned,xlsx,afcd
+cnf,https://www.canada.ca/content/dam/hc-sc/migration/hc-sc/fn-an/alt_formats/zip/nutrition/fiche-nutri-data/cnf-fcen-csv.zip,fb77503d88186844cc2c27b39432d755505f97a789c97fc5973a30d0cd4b0367,zip,cnf
+ciqual,https://ciqual.anses.fr/cms/sites/default/files/inline-files/2025_11_03.7z,b3b34e58890263d0c5959a157de4470f1638271a73235b77750941d96979ae27,7z,ciqual
+cofid,https://assets.publishing.service.gov.uk/media/60538b91e90e07527df82ae4/McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2021..xlsx,436e9445ef2adb2a75f3d7edd51302de3adad25385f9795fc94ba58bd030e97d,xlsx,cofid
+afcd,https://www.foodstandards.gov.au/sites/default/files/2025-12/AFCD%20Release%203%20-%20Nutrient%20profiles.xlsx,14cb3e73dbf58987b440e6299624c0fefd7a4e61591fc1f753995d9534e0efc9,xlsx,afcd

@@ -6,10 +6,10 @@ protein (g),protein,1,Protein
 total dietary fibre (g),fibre,1,Total dietary fibre
 total sugars (g),sugars,1,Total sugars
 starch (g),starch,1,Starch
-"total saturated fatty acids, equated (mg)",fat_saturated,0.001,AFCD reports fatty acids in mg; canonical is g
-"total monounsaturated fatty acids, equated (mg)",fat_monounsaturated,0.001,mg to g
-"total polyunsaturated fatty acids, equated (mg)",fat_polyunsaturated,0.001,mg to g
-"total trans fatty acids, imputed (mg)",fat_trans,0.001,mg to g
+"total saturated fatty acids, equated (g)",fat_saturated,1,"Release 3 reports the three main fatty acid totals in g, already the canonical unit. Trans is the exception and is still mg -- see the row below"
+"total monounsaturated fatty acids, equated (g)",fat_monounsaturated,1,Release 3 reports this in g
+"total polyunsaturated fatty acids, equated (g)",fat_polyunsaturated,1,Release 3 reports this in g
+"total trans fatty acids, imputed (mg)",fat_trans,0.001,"mg to g. Trans really is mg where the other three are g, so this factor is not a copy-paste slip"
 cholesterol (mg),cholesterol,1,Cholesterol
 alcohol (g),alcohol,1,Alcohol
 moisture (water) (g),water,1,Moisture
@@ -23,23 +23,43 @@ iron (fe) (mg),iron,1,Iron
 zinc (zn) (mg),zinc,1,Zinc
 copper (cu) (mg),copper,1,Copper
 manganese (mn) (mg),manganese,1,Manganese
-selenium (se) (µg),selenium,1,Selenium
-iodine (i) (µg),iodine,1,Iodine
-"vitamin a retinol equivalents (µg)",-,1,"This column is retinol equivalents (RE), not retinol activity equivalents (RAE) -- they are different quantities that can differ by up to 2x for carotene-rich foods (RE historically used a 1:6 beta-carotene:retinol ratio; RAE uses 1:12). The aggregate RE figure alone cannot be converted to RAE without the underlying carotene breakdown, which this column does not carry, so it is dropped rather than stored under vitamin_a_rae. The canonical vocabulary has no separate RE key; retinol and carotene_beta are mapped individually below instead"
-retinol (µg),retinol,1,Retinol
-beta-carotene (µg),carotene_beta,1,Beta-carotene
-vitamin d3 equivalents (µg),vitamin_d,1,Vitamin D
+selenium (se) (ug),selenium,1,Selenium
+iodine (i) (ug),iodine,1,Iodine
+"vitamin a retinol equivalents (ug)",-,1,"This column is retinol equivalents (RE), not retinol activity equivalents (RAE) -- they are different quantities that can differ by up to 2x for carotene-rich foods (RE historically used a 1:6 beta-carotene:retinol ratio; RAE uses 1:12). The aggregate RE figure alone cannot be converted to RAE without the underlying carotene breakdown, which this column does not carry, so it is dropped rather than stored under vitamin_a_rae. The canonical vocabulary has no separate RE key; retinol and carotene_beta are mapped individually below instead"
+"retinol (preformed vitamin a) (ug)",retinol,1,Retinol
+beta-carotene (ug),carotene_beta,1,Beta-carotene
+vitamin d3 equivalents (ug),vitamin_d,1,Vitamin D
 vitamin e (mg),vitamin_e,1,Vitamin E
 vitamin c (mg),vitamin_c,1,Vitamin C
 thiamin (b1) (mg),thiamin,1,Thiamin
 riboflavin (b2) (mg),riboflavin,1,Riboflavin
 niacin (b3) (mg),niacin,1,Niacin
 pyridoxine (b6) (mg),vitamin_b6,1,Vitamin B6
-"total folates (µg)",folate,1,Total folates
-cobalamin (b12) (µg),vitamin_b12,1,Vitamin B12
+"total folates (ug)",folate,1,Total folates
+cobalamin (b12) (ug),vitamin_b12,1,Vitamin B12
 pantothenic acid (b5) (mg),pantothenate,1,Pantothenic acid
-biotin (b7) (µg),biotin,1,Biotin
+biotin (b7) (ug),biotin,1,Biotin
 "energy, without dietary fibre, equated (kj)",-,1,a second energy convention; superseded by the with-fibre figure
 caffeine (mg),-,1,outside the canonical vocabulary
 "niacin derived equivalents (mg)",-,1,superseded by preformed niacin
-"dietary folate equivalents (µg)",-,1,superseded by total folates
+"dietary folate equivalents (ug)",-,1,superseded by total folates
+"niacin derived from tryptophan (mg)",-,1,the tryptophan-derived half of niacin equivalents; niacin holds preformed niacin only
+"folate, natural (ug)",-,1,"a component of total folates, which is mapped above"
+folic acid (ug),-,1,"the synthetic fortification component of total folates, which is mapped above"
+cholecalciferol (d3) (ug),-,1,"a component of vitamin d3 equivalents, which is mapped above"
+ergocalciferol (d2) (ug),-,1,the D2 form; vitamin_d holds AFCD's D3 equivalents figure
+"25-hydroxy cholecalciferol (25-oh d3) (ug)",-,1,"a hydroxylated metabolite weighted into vitamin d3 equivalents, not a second vitamin D figure"
+"25-hydroxy ergocalciferol (25-oh d2) (ug)",-,1,see the 25-OH D3 row above
+alpha tocopherol (mg),-,1,"the dominant component of vitamin E, but not the total; vitamin e (mg) is mapped above"
+"beta-carotene equivalents (provitamin a) (ug)",-,1,"beta-carotene plus half the alpha-carotene and cryptoxanthin; carotene_beta means beta-carotene alone, which AFCD reports separately and is mapped above"
+alpha-carotene (ug),-,1,outside the canonical vocabulary
+nitrogen (g),-,1,the protein precursor; protein is mapped above
+"available carbohydrate, with sugar alcohols (g)",-,1,"a second carbohydrate convention; carbohydrate holds the without-sugar-alcohols figure, matching the other sources"
+"total saturated fatty acids, equated (%t)",-,1,"percent of TOTAL FATTY ACIDS, not grams per 100g of food. This is AFCD's spelling of the trap CoFID sets with its /100g FA columns: mapping it to fat_saturated would store a composition percentage as a mass. Every fatty acid in the sheet ships in both denominators; the (%t) half is never what a profile wants"
+"total monounsaturated fatty acids, equated (%t)",-,1,"%t denominator (see the saturated row above); use the (g) column"
+"total polyunsaturated fatty acids, equated (%t)",-,1,"%t denominator (see the saturated row above); use the (g) column"
+"total trans fatty acids, imputed (%t)",-,1,"%t denominator (see the saturated row above); use the (mg) column"
+"total long chain omega 3 fatty acids, equated (mg)",-,1,an omega-3 subset of polyunsaturated fat; outside the canonical vocabulary
+"total long chain omega 3 fatty acids, equated (%t)",-,1,%t denominator and an omega-3 subset; wrong on both counts
+"total undifferentiated fatty acids, mass basis (mg)",-,1,"the fatty acids that could not be assigned to a class, not a fat total; fat holds total fat"
+total undifferentiated fatty acids (%t),-,1,%t denominator; see the mass-basis row above

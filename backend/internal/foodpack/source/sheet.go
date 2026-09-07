@@ -40,7 +40,15 @@ func readSheet(f *excelize.File, sheet string, headerRow int) (*sheetTable, erro
 	if idx, err := f.GetSheetIndex(sheet); err != nil || idx < 0 {
 		return nil, fmt.Errorf("workbook has no sheet %q (has %v)", sheet, f.GetSheetList())
 	}
-	rows, err := f.GetRows(sheet)
+	// RawCellValue: the stored number, not the string Excel would paint in
+	// the cell. AFCD Release 3 formats its kilojoule column with a
+	// thousands separator, so the default rendering hands back "1,236" for
+	// a cell holding 1236 -- which is not a number to any parser and, in a
+	// dataset that used the comma as a decimal point, would not even be
+	// wrong in the same direction. A number format is a display choice
+	// that varies by release and by the locale of whoever last saved the
+	// file; the value underneath it is the data.
+	rows, err := f.GetRows(sheet, excelize.Options{RawCellValue: true})
 	if err != nil {
 		return nil, fmt.Errorf("read sheet %q: %w", sheet, err)
 	}
@@ -84,6 +92,32 @@ func isBlankRow(r []string) bool {
 func (t *sheetTable) Has(header string) bool {
 	_, ok := t.index[header]
 	return ok
+}
+
+// NameFirstColumn labels column A with header when the workbook left that
+// heading blank, and reports whether it could.
+//
+// CoFID 2021 needs this and nothing else does. Its "1.4 Inorganics" sheet
+// has two spaces in A1 where "1.3 Proximates" and "1.5 Vitamins" both say
+// "Food Code" -- a typo in the published file, sitting above a column of
+// perfectly good food codes. Without a way to name it, a third of CoFID's
+// nutrients (every mineral) drop out of the pack over a whitespace cell.
+//
+// It is deliberately narrow: it will not rename a column that has a
+// heading, will not touch anything but column A, and will not create a
+// second column under a name the sheet already uses. A sheet that is
+// genuinely missing its key still fails, because its column A is missing
+// rather than blank.
+func (t *sheetTable) NameFirstColumn(header string) bool {
+	if len(t.Header) == 0 || t.Header[0] != "" || header == "" {
+		return false
+	}
+	if _, taken := t.index[header]; taken {
+		return false
+	}
+	t.Header[0] = header
+	t.index[header] = 0
+	return true
 }
 
 // Cell returns one cell of a row. ok distinguishes "this sheet has no such

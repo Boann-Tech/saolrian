@@ -23,11 +23,11 @@ type ManifestEntry struct {
 	Source      string // matches the pack's source value, e.g. "cnf"
 	URL         string
 	SHA256      string // 64 lowercase hex chars, or Unpinned
-	ArchiveKind string // zip | xlsx | xml | csv
+	ArchiveKind string // zip | 7z | xlsx | xml | csv
 	ExtractTo   string // single directory name under the work dir
 }
 
-var archiveKinds = map[string]bool{"zip": true, "xlsx": true, "xml": true, "csv": true}
+var archiveKinds = map[string]bool{"zip": true, "7z": true, "xlsx": true, "xml": true, "csv": true}
 
 // LoadManifest reads the checked-in manifest.
 func LoadManifest() ([]ManifestEntry, error) {

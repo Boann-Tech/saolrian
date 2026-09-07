@@ -21,20 +21,24 @@ const (
 	afcdURL     = "https://www.foodstandards.gov.au/science-data/food-composition-databases"
 )
 
-// afcdValues: a blank cell and "N" both mean "not measured", and "-" is
-// accepted as an alternative spelling of the same thing. "Tr" is a measured
-// trace and parses to a real 0.0. These are handled defensively, in the
-// same shape as CoFID's sentinels; they have not yet been confirmed against
-// the real AFCD codebook, so treat "N" and "-" as provisional until a real
-// download is checked against them.
+// afcdValues: a blank cell means "not measured". Release 3 writes nothing
+// else -- every cell in the per-100g sheet is either a number or empty, with
+// no sentinel text anywhere -- so in practice only the blank case fires.
+// "N", "-" and "Tr" are kept because earlier releases and the sibling
+// workbooks do spell missing data out, and because a sentinel this file does
+// not declare is fatal rather than silently zero; carrying them costs
+// nothing and turns a future release's "N" into data instead of an abort.
 var afcdValues = ValueSyntax{
 	Absent: []string{"N", "-"},
 	Trace:  []string{"Tr"},
 }
 
 const (
-	afcdDefaultSheet      = "All solids & liquids per 100g"
-	afcdDefaultHeaderRow  = 1
+	// Defaults for Release 3's "Nutrient profiles" workbook. The sheet name
+	// gained a space before the "g" in Release 3, and the header sits on row
+	// 3 under two merged title rows.
+	afcdDefaultSheet      = "All solids & liquids per 100 g"
+	afcdDefaultHeaderRow  = 3
 	afcdDefaultCodeColumn = "public food key"
 	afcdDefaultNameColumn = "food name"
 )

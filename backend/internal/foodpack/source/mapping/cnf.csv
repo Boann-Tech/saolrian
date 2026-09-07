@@ -5,7 +5,7 @@ source_code,canonical_key,factor,note
 205,carbohydrate,1,"CARBOHYDRATE, TOTAL (BY DIFFERENCE)"
 291,fibre,1,"FIBRE, TOTAL DIETARY"
 269,sugars,1,"SUGARS, TOTAL"
-209,starch,1,STARCH
+810,starch,1,"STARCH. The previous table used 209, which is USDA's number for starch; CNF numbers it 810. Most of this file was written against USDA's nutrient numbers and the ones that differ are called out row by row"
 606,fat_saturated,1,"FATTY ACIDS, SATURATED, TOTAL"
 645,fat_monounsaturated,1,"FATTY ACIDS, MONOUNSATURATED, TOTAL"
 646,fat_polyunsaturated,1,"FATTY ACIDS, POLYUNSATURATED, TOTAL"
@@ -24,10 +24,10 @@ source_code,canonical_key,factor,note
 312,copper,1,COPPER (mg)
 315,manganese,1,MANGANESE (mg)
 317,selenium,1,SELENIUM (ug)
-320,vitamin_a_rae,1,"VITAMIN A, RAE (ug)"
+814,vitamin_a_rae,1,"RETINOL ACTIVITY EQUIVALENTS (ug). The previous table used 320, USDA's number; CNF numbers RAE 814 and defines no 320 at all"
 319,retinol,1,RETINOL (ug)
 321,carotene_beta,1,"BETA CAROTENE (ug)"
-328,vitamin_d,1,VITAMIN D (ug)
+339,vitamin_d,1,"VITAMIN D (D2 + D3) (ug). The previous table used 328, USDA's number for the same quantity; in CNF 328 does not exist"
 323,vitamin_e,1,"VITAMIN E (ALPHA-TOCOPHEROL) (mg)"
 430,vitamin_k,1,VITAMIN K (ug)
 401,vitamin_c,1,VITAMIN C (mg)
@@ -39,9 +39,20 @@ source_code,canonical_key,factor,note
 418,vitamin_b12,1,VITAMIN B-12 (ug)
 410,pantothenate,1,PANTOTHENIC ACID (mg)
 268,-,1,ENERGY (KILOJOULES); superseded by 208 kcal
-318,-,1,VITAMIN A (IU); superseded by 320 RAE
-324,-,1,VITAMIN D (IU); superseded by 328 ug
+324,-,1,VITAMIN D (INTERNATIONAL UNITS); superseded by 339 ug
 409,-,1,NIACIN EQUIVALENT; superseded by 406 preformed
-435,-,1,"FOLATE, DFE; superseded by 417 total"
+815,-,1,"DIETARY FOLATE EQUIVALENTS; superseded by 417 total. The previous table used 435, USDA's number"
 431,-,1,FOLIC ACID; a component of 417
-432,-,1,"FOLATE, FOOD; a component of 417"
+806,-,1,"NATURALLY OCCURRING FOLATE; a component of 417. The previous table used 432, USDA's number"
+416,biotin,1,BIOTIN (ug)
+876,-,1,"VITAMIN D2, ERGOCALCIFEROL; a component of 339, which is mapped above"
+811,-,1,BETA-TOCOPHEROL; vitamin_e holds alpha-tocopherol
+812,-,1,GAMMA-TOCOPHEROL; vitamin_e holds alpha-tocopherol
+813,-,1,DELTA-TOCOPHEROL; vitamin_e holds alpha-tocopherol
+875,-,1,"ALPHA-TOCOPHEROL, ADDED; the fortification component, already inside 323"
+874,-,1,"VITAMIN B12, ADDED; the fortification component, already inside 418"
+834,-,1,ALPHA CAROTENE; carotene_beta means beta-carotene alone
+829,-,1,"FATTY ACIDS, TOTAL TRANS-MONOENOIC; a component of 605, which is mapped above"
+859,-,1,"FATTY ACIDS, TOTAL TRANS-POLYENOIC; a component of 605, which is mapped above"
+802,-,1,TOTAL MONOSACCARIDES; a component of 269 sugars
+803,-,1,TOTAL DISACCHARIDES; a component of 269 sugars

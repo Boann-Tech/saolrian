@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/text/encoding/ianaindex"
+
 	"github.com/boanntech/saolrian/backend/internal/food"
 	"github.com/boanntech/saolrian/backend/internal/foodpack/format"
 )
@@ -163,6 +165,25 @@ func ciqualLabel(c ciqualConst) string {
 	return strings.TrimSpace(c.NomFR)
 }
 
+// ciqualCharsetReader decodes an XML file whose declared encoding is not
+// UTF-8. The 2020 release ships every file as windows-1252 and encoding/xml
+// refuses a non-UTF-8 declaration outright unless a reader is supplied, so
+// without this the whole French dataset fails to open on its first token.
+// The 2025 files are UTF-8, which encoding/xml handles on its own, so this
+// runs only for the releases that need it -- and there is no telling which
+// of the two conventions the next release picks.
+//
+// ianaindex rather than a hard-coded windows-1252 branch: it costs one line
+// and resolves whatever a future release declares, including the
+// iso-8859-1 that French public data still emits.
+func ciqualCharsetReader(charset string, input io.Reader) (io.Reader, error) {
+	enc, err := ianaindex.IANA.Encoding(charset)
+	if err != nil || enc == nil {
+		return nil, fmt.Errorf("unsupported XML encoding %q", charset)
+	}
+	return enc.NewDecoder().Reader(input), nil
+}
+
 // readCIQUALDir streams every *.xml in dir. Releases have shipped both as
 // one combined file with COMPO nested inside ALIM and as three sibling
 // files, so the adapter takes elements wherever they turn up rather than
@@ -194,6 +215,7 @@ func readCIQUALFile(path string, doc *ciqualDoc) error {
 	defer f.Close()
 
 	dec := xml.NewDecoder(f)
+	dec.CharsetReader = ciqualCharsetReader
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {

@@ -1,42 +1,56 @@
 source_code,canonical_key,factor,note
-328,energy_kcal,1,"Energy, Regulation EU No 1169/2011 (kcal/100 g)"
-25000,water,1,Water (g/100 g)
-25001,protein,1,"Protein, crude, N x 6.25 (g/100 g)"
-40000,fat,1,Fat (g/100 g)
-31000,carbohydrate,1,Carbohydrate (g/100 g)
-34000,fibre,1,"Fibre, dietary (g/100 g)"
-32000,sugars,1,Sugars (g/100 g)
-31200,starch,1,Starch (g/100 g)
-34100,ash,1,Ash (g/100 g)
-10110,salt,1,Salt (g/100 g)
-40302,fat_saturated,1,FA saturated (g/100 g)
-40303,fat_monounsaturated,1,FA monounsaturated (g/100 g)
-40304,fat_polyunsaturated,1,FA polyunsaturated (g/100 g)
-40400,cholesterol,1,Cholesterol (mg/100 g)
-10120,calcium,1,Calcium (mg/100 g)
-10190,copper,1,Copper (mg/100 g)
-10200,iron,1,Iron (mg/100 g)
-10230,iodine,1,Iodine (ug/100 g)
-10250,magnesium,1,Magnesium (mg/100 g)
-10260,manganese,1,Manganese (mg/100 g)
-10300,phosphorus,1,Phosphorus (mg/100 g)
-10310,potassium,1,Potassium (mg/100 g)
-10340,selenium,1,Selenium (ug/100 g)
-10400,sodium,1,Sodium (mg/100 g)
-10410,zinc,1,Zinc (mg/100 g)
-51330,retinol,1,Retinol (ug/100 g)
-51340,carotene_beta,1,Beta-carotene (ug/100 g)
-52100,vitamin_d,1,Vitamin D (ug/100 g)
-53100,vitamin_e,1,Vitamin E (mg/100 g)
-54100,vitamin_k,1,Vitamin K1 (ug/100 g)
-55100,vitamin_c,1,Vitamin C (mg/100 g)
-56100,thiamin,1,Thiamin (mg/100 g)
-56200,riboflavin,1,Riboflavin (mg/100 g)
-56300,niacin,1,Niacin (mg/100 g)
-56400,pantothenate,1,Pantothenic acid (mg/100 g)
-56500,vitamin_b6,1,Vitamin B6 (mg/100 g)
-56600,biotin,1,Biotin (ug/100 g)
-56700,folate,1,"Folate, total (ug/100 g)"
-56800,vitamin_b12,1,Vitamin B12 (ug/100 g)
-327,-,1,"Energy, Regulation EU (kJ/100 g); superseded by 328 kcal"
-10004,-,1,Energy N.G.M.; a second energy convention
+328,energy_kcal,1,"Energy, Regulation EU No 1169/2011 (kcal/100g)"
+400,water,1,"Water (g/100g). The previous table had water on 25001, a code CIQUAL does not define at all; that miss is what exposed the rest of this file"
+25000,protein,1,"Protein (g/100g) -- nitrogen times the food's own Jones factor, which CIQUAL carries per food in alim. The previous table read 25000 as water"
+40000,fat,1,Fat (g/100g)
+31000,carbohydrate,1,Carbohydrate (g/100g)
+34100,fibre,1,"Fibres (g/100g). The previous table read 34100 as ash and put fibre on 34000, which is polyols -- two nutrients swapped onto a third"
+32000,sugars,1,Sugars (g/100g)
+33110,starch,1,"Starch (g/100g). The previous table used 31200, which CIQUAL does not define"
+10000,ash,1,Ash (g/100g)
+10004,salt,1,"Salt (g/100g). The previous table used 10110 for salt (that is sodium) and listed 10004 as an energy convention to ignore"
+40302,fat_saturated,1,FA saturated (g/100g)
+40303,fat_monounsaturated,1,FA mono (g/100g)
+40304,fat_polyunsaturated,1,FA poly (g/100g)
+75100,cholesterol,1,"Cholesterol (mg/100g). The previous table used 40400, which is butyric acid (FA 4:0) -- a valid code, so nothing would have failed; every French food would simply have carried its butyric acid as cholesterol"
+10110,sodium,1,Sodium (mg/100g)
+10120,magnesium,1,Magnesium (mg/100g)
+10150,phosphorus,1,Phosphorus (mg/100g)
+10190,potassium,1,Potassium (mg/100g)
+10200,calcium,1,Calcium (mg/100g)
+10251,manganese,1,Manganese (mg/100g)
+10260,iron,1,Iron (mg/100g)
+10290,copper,1,Copper (mg/100g)
+10300,zinc,1,Zinc (mg/100g)
+10340,selenium,1,Selenium (µg/100g)
+10530,iodine,1,Iodine (µg/100g)
+51200,retinol,1,"Retinol (µg/100g). The previous table used 51330, which is beta-carotene"
+51330,carotene_beta,1,"Beta-carotene (µg/100g). The previous table used 51340, which CIQUAL does not define"
+52100,vitamin_d,1,Vitamin D (µg/100g)
+53100,vitamin_e,1,Vitamin E (mg/100g)
+54101,vitamin_k,1,"Vitamin K1 (µg/100g). The previous table used 54100, which CIQUAL does not define"
+55100,vitamin_c,1,Vitamin C (mg/100g)
+56100,thiamin,1,Vitamin B1 or Thiamin (mg/100g)
+56200,riboflavin,1,Vitamin B2 or Riboflavin (mg/100g)
+56310,niacin,1,"Vitamin B3 or Niacin (mg/100g). The previous table used 56300, which CIQUAL does not define"
+56400,pantothenate,1,Vitamin B5 or Pantothenic acid (mg/100g)
+56500,vitamin_b6,1,Vitamin B6 (mg/100g)
+56600,vitamin_b12,1,"Vitamin B12 (µg/100g). The previous table read 56600 as biotin and put B12 on 56800, which CIQUAL does not define"
+56700,folate,1,Vitamin B9 or total folates (µg/100g)
+60000,alcohol,1,Alcohol (g/100g)
+327,-,1,"Energy, Regulation EU No 1169/2011 (kJ/100g); superseded by 328 kcal"
+332,-,1,"Energy, N x Jones' factor, with fibres (kJ/100g); a second energy convention"
+333,-,1,"Energy, N x Jones' factor, with fibres (kcal/100g); a second energy convention, superseded by the EU 1169/2011 figure so that every source's energy_kcal means the same thing"
+25003,-,1,"Protein, crude, N x 6.25 (g/100g); protein holds CIQUAL's headline figure, which uses the food's own Jones factor instead of a flat 6.25"
+34000,-,1,"Polyols (g/100g). Outside the canonical vocabulary, and one code away from fibre (34100) -- the previous table mapped this one to fibre"
+10170,-,1,Chloride (mg/100g); outside the canonical vocabulary
+51104,-,1,"Vitamin A activity, retinol equivalent (µg). This is retinol equivalents (RE), not retinol activity equivalents (RAE) -- different quantities that can differ by up to 2x for carotene-rich foods (RE historically used a 1:6 beta-carotene:retinol ratio; RAE uses 1:12). The aggregate RE figure cannot be converted to RAE without the underlying carotene breakdown, so it is dropped rather than stored under vitamin_a_rae; retinol and carotene_beta are mapped individually instead. CIQUAL's own label misstates the unit as µg/100mg"
+52200,-,1,"Vitamin D2 (ergocalciferol) (µg/100g); a component of 52100, which is mapped above"
+52300,-,1,"Vitamin D3 (cholecalciferol) (µg/100g); a component of 52100, which is mapped above"
+54104,-,1,Vitamin K2 (µg/100g); vitamin_k holds K1
+71010,-,1,"Alpha-tocopherol (µg/100g); the dominant component of vitamin E but not the total, which is 53100"
+56702,-,1,"Vitamin B9, dietary folate equivalents (µg/100g); superseded by total folates"
+56704,-,1,"Intrinsic folate (µg/100 g); a component of total folates"
+56708,-,1,"Folic acid, enrichment (µg/100g); the fortification component of total folates"
+40400,-,1,"FA 4:0 (g/100g), butyric acid. Named here rather than left unmapped because the previous table had cholesterol pointed at this code"
+65000,-,1,Organic acids (g/100g); outside the canonical vocabulary

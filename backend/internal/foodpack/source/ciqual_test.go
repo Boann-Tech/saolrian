@@ -3,6 +3,8 @@ package source
 import (
 	"errors"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -227,5 +229,65 @@ func TestLoadCIQUALRejectsUnknownToken(t *testing.T) {
 	_, _, err = LoadCIQUAL(CIQUALOptions{Dir: dir, Mapping: m})
 	if !errors.Is(err, ErrUnknownToken) {
 		t.Fatalf("err = %v, want ErrUnknownToken", err)
+	}
+}
+
+// The 2020 release declares every one of its XML files windows-1252, and
+// encoding/xml refuses a non-UTF-8 declaration outright unless the decoder
+// is given a reader for it -- the whole French dataset fails on its first
+// token. The 2025 files are UTF-8, so both have to work.
+func TestLoadCIQUALReadsALegacyEncodedFile(t *testing.T) {
+	dir := t.TempDir()
+	// "Panaché" in windows-1252: é is a single 0xE9 byte, which is not
+	// valid UTF-8 on its own, so a decoder that ignored the declaration
+	// would mangle the name rather than merely mis-decode it. The food is
+	// given no English name on purpose, so the accented French one becomes
+	// the displayed Name and reaches this test unfolded -- SearchText
+	// strips accents and would report a pass either way.
+	body := "<?xml version=\"1.0\" encoding=\"windows-1252\" ?>\n" +
+		"<TABLE>\n" +
+		"  <ALIM><alim_code>1</alim_code><alim_nom_fr>Panach\xe9</alim_nom_fr></ALIM>\n" +
+		"  <CONST><const_code>328</const_code><const_nom_eng>Energy (kcal/100 g)</const_nom_eng></CONST>\n" +
+		"  <COMPO><alim_code>1</alim_code><const_code>328</const_code><teneur>45</teneur></COMPO>\n" +
+		"</TABLE>\n"
+	if err := os.WriteFile(filepath.Join(dir, "alim.xml"), []byte(body), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n328,energy_kcal,1,Energy kcal\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	foods, _, err := LoadCIQUAL(CIQUALOptions{Dir: dir, Mapping: m})
+	if err != nil {
+		t.Fatalf("LoadCIQUAL: %v", err)
+	}
+	if len(foods) != 1 {
+		t.Fatalf("got %d foods, want 1", len(foods))
+	}
+	if got := food.Decode(foods[0].Nutrients)["energy_kcal"]; got != 45 {
+		t.Errorf("energy_kcal = %v, want 45", got)
+	}
+	if foods[0].Name != "Panaché" {
+		t.Errorf("Name = %q, want %q; the windows-1252 é did not decode", foods[0].Name, "Panaché")
+	}
+}
+
+// An encoding no decoder is available for must fail loudly. Reading such a
+// file as if it were UTF-8 would silently corrupt every accented name in
+// it.
+func TestLoadCIQUALRejectsAnUnknownEncoding(t *testing.T) {
+	dir := t.TempDir()
+	body := "<?xml version=\"1.0\" encoding=\"not-a-charset\" ?>\n<TABLE></TABLE>\n"
+	if err := os.WriteFile(filepath.Join(dir, "alim.xml"), []byte(body), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n328,energy_kcal,1,Energy kcal\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	_, _, err = LoadCIQUAL(CIQUALOptions{Dir: dir, Mapping: m})
+	if err == nil || !strings.Contains(err.Error(), "not-a-charset") {
+		t.Fatalf("err = %v, want an error naming the unsupported encoding", err)
 	}
 }

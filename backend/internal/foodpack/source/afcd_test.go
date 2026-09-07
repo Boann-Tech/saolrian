@@ -12,6 +12,12 @@ import (
 
 // AFCD reports energy in kilojoules only, so the mapping converts. 0.239006
 // is 1/4.184, the thermochemical kJ-per-kcal.
+//
+// The fatty acid rows mirror Release 3's units exactly: saturated, mono- and
+// polyunsaturated are reported in grams and pass straight through, while
+// trans alone is milligrams and carries a conversion. That asymmetry looks
+// like a mistake and is not, so the fixture reproduces it rather than
+// tidying it into four matching rows.
 const afcdTestMapping = `source_code,canonical_key,factor,note
 "energy with dietary fibre, equated (kj)",energy_kcal,0.239006,kJ to kcal
 protein (g),protein,1,Protein
@@ -21,20 +27,34 @@ total dietary fibre (g),fibre,1,Fibre
 sodium (na) (mg),sodium,1,Sodium
 iron (fe) (mg),iron,1,Iron
 vitamin c (mg),vitamin_c,1,Vitamin C
-"total saturated fatty acids, equated (mg)",fat_saturated,0.001,mg to g
-"total monounsaturated fatty acids, equated (mg)",fat_monounsaturated,0.001,mg to g
-"total polyunsaturated fatty acids, equated (mg)",fat_polyunsaturated,0.001,mg to g
+"total saturated fatty acids, equated (g)",fat_saturated,1,already grams
+"total monounsaturated fatty acids, equated (g)",fat_monounsaturated,1,already grams
+"total polyunsaturated fatty acids, equated (g)",fat_polyunsaturated,1,already grams
 "total trans fatty acids, imputed (mg)",fat_trans,0.001,mg to g
 "energy, without dietary fibre, equated (kj)",-,1,superseded by the with-fibre figure
 `
+
+// afcdTestSheet is the sheet Release 3 carries the per-100g profiles on, and
+// the adapter's default. Fixtures use the real name and leave Sheet unset so
+// a default that drifts away from the shipped workbook fails here.
+const afcdTestSheet = "All solids & liquids per 100 g"
+
+// afcdSheetRows puts the two title rows Release 3 prints above its column
+// headings back on a fixture, so the header lands on row 3 where the adapter
+// expects it. Without them a fixture would only ever prove the adapter can
+// read a tidier file than the one the manifest points at.
+func afcdSheetRows(rows ...[]string) [][]string {
+	out := [][]string{{"Release 3 - Nutrient profiles (per 100 g)"}, {}}
+	return append(out, rows...)
+}
 
 // afcdFixture mirrors the real workbook, including the line breaks AFCD
 // puts inside its column headings.
 func afcdFixture(t *testing.T) string {
 	t.Helper()
 	return writeWorkbook(t, map[string][][]string{
-		"All solids & liquids per 100g": {
-			{
+		afcdTestSheet: afcdSheetRows(
+			[]string{
 				"Public Food Key", "Classification", "Food Name",
 				"Energy with dietary fibre, equated \n(kJ)",
 				"Energy, without dietary fibre, equated \n(kJ)",
@@ -42,15 +62,15 @@ func afcdFixture(t *testing.T) string {
 				"Available carbohydrate, without sugar alcohols \n(g)",
 				"Total dietary fibre \n(g)", "Sodium (Na) \n(mg)",
 				"Iron (Fe) \n(mg)", "Vitamin C \n(mg)", "Caffeine \n(mg)",
-				"Total saturated fatty acids, equated \n(mg)",
-				"Total monounsaturated fatty acids, equated \n(mg)",
-				"Total polyunsaturated fatty acids, equated \n(mg)",
+				"Total saturated fatty acids, equated \n(g)",
+				"Total monounsaturated fatty acids, equated \n(g)",
+				"Total polyunsaturated fatty acids, equated \n(g)",
 				"Total trans fatty acids, imputed \n(mg)",
 			},
-			{"F009784", "24101", "Banana, cavendish, peeled, raw", "395", "372", "1.4", "0.2", "20.3", "2.4", "1", "0.3", "9", "0", "1000", "500", "300", "10"},
-			{"F000885", "19101", "Milk, cow, fluid, whole", "268", "268", "3.3", "3.4", "4.6", "0", "43", "0.1", "1", "0", "2200", "900", "100", "100"},
-			{"F999999", "99999", "Food with no data", "", "", "", "", "", "", "", "", "", "", "", "", "", ""},
-		},
+			[]string{"F009784", "24101", "Banana, cavendish, peeled, raw", "395", "372", "1.4", "0.2", "20.3", "2.4", "1", "0.3", "9", "0", "1", "0.5", "0.3", "10"},
+			[]string{"F000885", "19101", "Milk, cow, fluid, whole", "268", "268", "3.3", "3.4", "4.6", "0", "43", "0.1", "1", "0", "2.2", "0.9", "0.1", "100"},
+			[]string{"F999999", "99999", "Food with no data", "", "", "", "", "", "", "", "", "", "", "", "", "", ""},
+		),
 	})
 }
 
@@ -62,7 +82,6 @@ func loadAFCDFixture(t *testing.T, mappingCSV string) ([]format.RefFood, []forma
 	}
 	return LoadAFCD(AFCDOptions{
 		File:    afcdFixture(t),
-		Sheet:   "All solids & liquids per 100g",
 		Mapping: m,
 	})
 }
@@ -108,38 +127,44 @@ func TestLoadAFCDConvertsKilojoulesToKilocalories(t *testing.T) {
 	}
 }
 
-// AFCD reports every fatty-acid family in milligrams against a canonical
-// unit of grams, so all four rows carry a deliberate 0.001 factor that
-// headerMappingCheck's unit guard cannot verify (it exempts any row whose
+// AFCD splits its fatty acid totals across two units: Release 3 reports
+// saturated, mono- and polyunsaturated in grams, already canonical, but
+// trans in milligrams. Only the trans row carries a factor, and
+// headerMappingCheck's unit guard cannot verify it (it exempts any row whose
 // factor is not 1, because such a row is asserting its own conversion).
-// That leaves this test as the only thing standing between a typo in
-// mapping/afcd.csv and every Australian food shipping its saturated,
-// mono-, poly- and trans fat at 1000x its real value. The fixture uses a
-// different milligram figure per nutrient so a mapping row copied onto the
-// wrong canonical key is also caught, not just a wrong factor.
-func TestLoadAFCDConvertsFattyAcidMilligramsToGrams(t *testing.T) {
+//
+// That leaves this test standing between a typo in mapping/afcd.csv and
+// every Australian food shipping its trans fat at 1000x its real value --
+// and, in the other direction, between a factor copied onto the three gram
+// rows and all three shipping at 1/1000th. The fixture uses a different
+// figure per nutrient so a mapping row pointed at the wrong canonical key is
+// caught too, not just a wrong factor.
+func TestLoadAFCDConvertsFattyAcidsToGrams(t *testing.T) {
 	foods, _, err := loadAFCDFixture(t, afcdTestMapping)
 	if err != nil {
 		t.Fatalf("LoadAFCD: %v", err)
 	}
 	banana := findByName(t, foods, "Banana")
 	prof := food.Decode(banana.Nutrients)
-	for key, want := range map[string]float64{
-		"fat_saturated":       1.0,  // 1000 mg
-		"fat_monounsaturated": 0.5,  // 500 mg
-		"fat_polyunsaturated": 0.3,  // 300 mg
-		"fat_trans":           0.01, // 10 mg
+	for _, tc := range []struct {
+		key, source string
+		want        float64
+	}{
+		{"fat_saturated", "1 g", 1.0},
+		{"fat_monounsaturated", "0.5 g", 0.5},
+		{"fat_polyunsaturated", "0.3 g", 0.3},
+		{"fat_trans", "10 mg", 0.01},
 	} {
-		got, ok := prof[key]
+		got, ok := prof[tc.key]
 		if !ok {
-			t.Errorf("%s is missing; the mapping row did not match its fixture column", key)
+			t.Errorf("%s is missing; the mapping row did not match its fixture column", tc.key)
 			continue
 		}
-		if !float32Eq(got, want) {
-			t.Errorf("%s = %v, want %v (source was %v mg); a value ~1000x too high means the mg-to-g factor was dropped, "+
-				"~10x too high or too low means it was mis-scaled (e.g. 0.01 instead of 0.001), "+
-				"and a value matching a different row means the mapping keys were swapped",
-				key, got, want, want*1000)
+		if !float32Eq(got, tc.want) {
+			t.Errorf("%s = %v, want %v (source was %s); a value ~1000x out means a factor was dropped or "+
+				"applied to a column that was already in grams, and a value matching a different row "+
+				"means the mapping keys were swapped",
+				tc.key, got, tc.want, tc.source)
 		}
 	}
 }
@@ -148,18 +173,23 @@ func TestLoadAFCDConvertsFattyAcidMilligramsToGrams(t *testing.T) {
 // fixture exercised any of the three: the design's sentinel rule
 // (Absent -> no key at all, Trace -> a real, present 0.0) went untested in
 // this adapter even though CoFID and CIQUAL both cover it for theirs.
+//
+// Release 3 turns out to write none of them -- every cell is a number or
+// empty -- so this fixture is deliberately ahead of the shipped file. The
+// sentinels stay declared because an undeclared one is fatal, and this test
+// is what keeps them working for the release that reintroduces them.
 func TestLoadAFCDSentinels(t *testing.T) {
 	path := writeWorkbook(t, map[string][][]string{
-		"All solids & liquids per 100g": {
-			{
+		afcdTestSheet: afcdSheetRows(
+			[]string{
 				"Public Food Key", "Food Name",
 				"Energy with dietary fibre, equated \n(kJ)",
 				"Protein \n(g)", "Fat, total \n(g)",
 				"Available carbohydrate, without sugar alcohols \n(g)",
 				"Sodium (Na) \n(mg)", "Iron (Fe) \n(mg)", "Vitamin C \n(mg)",
 			},
-			{"F000001", "Sentinel test food", "395", "1.4", "0.2", "20.3", "Tr", "N", "-"},
-		},
+			[]string{"F000001", "Sentinel test food", "395", "1.4", "0.2", "20.3", "Tr", "N", "-"},
+		),
 	})
 	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
 		"\"energy with dietary fibre, equated (kj)\",energy_kcal,0.239006,kJ to kcal\n" +
@@ -174,7 +204,6 @@ func TestLoadAFCDSentinels(t *testing.T) {
 	}
 	foods, _, err := LoadAFCD(AFCDOptions{
 		File:    path,
-		Sheet:   "All solids & liquids per 100g",
 		Mapping: m,
 	})
 	if err != nil {
@@ -213,7 +242,7 @@ func TestLoadAFCDMatchesHeadersAcrossLineBreaks(t *testing.T) {
 }
 
 func TestLoadAFCDRejectsMissingColumn(t *testing.T) {
-	_, _, err := loadAFCDFixture(t, afcdTestMapping+"selenium (se) (µg),selenium,1,not in this fixture\n")
+	_, _, err := loadAFCDFixture(t, afcdTestMapping+"selenium (se) (ug),selenium,1,not in this fixture\n")
 	if !errors.Is(err, ErrMappingNotInSource) {
 		t.Fatalf("err = %v, want ErrMappingNotInSource", err)
 	}
@@ -227,7 +256,6 @@ func TestLoadAFCDReportsUnmappedColumns(t *testing.T) {
 	c := NewUnmappedCollector()
 	if _, _, err := LoadAFCD(AFCDOptions{
 		File:     afcdFixture(t),
-		Sheet:    "All solids & liquids per 100g",
 		Mapping:  m,
 		Unmapped: c.Note,
 	}); err != nil {
@@ -245,10 +273,10 @@ func TestLoadAFCDReportsUnmappedColumns(t *testing.T) {
 // row; a column absent from the mapping table must never reach Parse.
 func TestLoadAFCDIgnoresUnmappedFreeTextColumn(t *testing.T) {
 	path := writeWorkbook(t, map[string][][]string{
-		"All solids & liquids per 100g": {
-			{"Public Food Key", "Food Name", "Energy with dietary fibre, equated \n(kJ)", "Classification description"},
-			{"F009784", "Banana, cavendish, peeled, raw", "395", "Cereals and cereal products"},
-		},
+		afcdTestSheet: afcdSheetRows(
+			[]string{"Public Food Key", "Food Name", "Energy with dietary fibre, equated \n(kJ)", "Classification description"},
+			[]string{"F009784", "Banana, cavendish, peeled, raw", "395", "Cereals and cereal products"},
+		),
 	})
 	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
 		"\"energy with dietary fibre, equated (kj)\",energy_kcal,0.239006,kJ to kcal\n"))
@@ -257,7 +285,6 @@ func TestLoadAFCDIgnoresUnmappedFreeTextColumn(t *testing.T) {
 	}
 	foods, _, err := LoadAFCD(AFCDOptions{
 		File:    path,
-		Sheet:   "All solids & liquids per 100g",
 		Mapping: m,
 	})
 	if err != nil {
@@ -276,10 +303,10 @@ func TestLoadAFCDIgnoresUnmappedFreeTextColumn(t *testing.T) {
 // are never inspected.
 func TestLoadAFCDNeverParsesAnExplicitlyIgnoredColumn(t *testing.T) {
 	path := writeWorkbook(t, map[string][][]string{
-		"All solids & liquids per 100g": {
-			{"Public Food Key", "Food Name", "Energy with dietary fibre, equated \n(kJ)", "Footnote"},
-			{"F009784", "Banana, cavendish, peeled, raw", "395", "not a number, not a sentinel either"},
-		},
+		afcdTestSheet: afcdSheetRows(
+			[]string{"Public Food Key", "Food Name", "Energy with dietary fibre, equated \n(kJ)", "Footnote"},
+			[]string{"F009784", "Banana, cavendish, peeled, raw", "395", "not a number, not a sentinel either"},
+		),
 	})
 	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
 		"\"energy with dietary fibre, equated (kj)\",energy_kcal,0.239006,kJ to kcal\n" +
@@ -289,7 +316,6 @@ func TestLoadAFCDNeverParsesAnExplicitlyIgnoredColumn(t *testing.T) {
 	}
 	if _, _, err := LoadAFCD(AFCDOptions{
 		File:    path,
-		Sheet:   "All solids & liquids per 100g",
 		Mapping: m,
 	}); err != nil {
 		t.Fatalf("LoadAFCD: %v (an explicitly ignored column must never reach Parse)", err)

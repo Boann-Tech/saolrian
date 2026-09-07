@@ -45,9 +45,23 @@ var Nutrients = []Nutrient{
 
 	{"protein", "Protein", UnitG, GroupMacro, 100},
 	{"fat", "Fat", UnitG, GroupMacro, 100},
-	{"carbohydrate", "Carbohydrate", UnitG, GroupMacro, 100},
+	// 110, where every other macro stops at 100: CoFID states carbohydrate
+	// as monosaccharide equivalents, which adds back the water a
+	// disaccharide takes up on hydrolysis and so runs about 5% above the
+	// food's actual mass of carbohydrate. Pure sucrose lands at 105g/100g
+	// (white sugar, food code 17-063) and Demerara and icing sugar are
+	// just behind it. The figures are right for the convention they are
+	// stated in; the convention is simply not mass-conserving. USDA and
+	// CIQUAL both report available carbohydrate instead and stay under
+	// 100, so this ceiling is really CoFID's alone.
+	{"carbohydrate", "Carbohydrate", UnitG, GroupMacro, 110},
 	{"fibre", "Fibre", UnitG, GroupMacro, 100},
-	{"sugars", "Sugars", UnitG, GroupMacro, 100},
+	// 110 for the same reason as carbohydrate above: CoFID's total sugars
+	// are monosaccharide equivalents too, so white sugar is 105g/100g here
+	// as well. Starch keeps its 100 -- CoFID states it in the same
+	// convention, but no food in the 2021 release actually crosses the
+	// line, and a ceiling is only worth moving on evidence.
+	{"sugars", "Sugars", UnitG, GroupMacro, 110},
 	{"starch", "Starch", UnitG, GroupMacro, 100},
 	{"fat_saturated", "Saturated fat", UnitG, GroupMacro, 100},
 	{"fat_monounsaturated", "Monounsaturated fat", UnitG, GroupMacro, 100},
@@ -64,8 +78,21 @@ var Nutrients = []Nutrient{
 	{"salt", "Salt", UnitG, GroupMacro, 100},
 
 	{"sodium", "Sodium", UnitMg, GroupMineral, 40000},
-	{"potassium", "Potassium", UnitMg, GroupMineral, 20000},
-	{"calcium", "Calcium", UnitMg, GroupMineral, 20000},
+	// 55000, by the same reasoning that already puts sodium at 40000:
+	// where a food is essentially one salt, its ceiling is that salt's
+	// stoichiometry. AFCD publishes 50009mg/100g for potassium chloride
+	// salt substitute (F007870) and potassium is 39.1 of KCl's 74.6 g/mol,
+	// so pure KCl is 52.4% potassium -- the figure is the compound at
+	// about 95% purity. CoFID's cream of tartar (17-358) lands at
+	// 20780mg/100g on the same arithmetic: potassium bitartrate, KC4H5O6,
+	// is 20.8% potassium.
+	{"potassium", "Potassium", UnitMg, GroupMineral, 55000},
+	// 40000: CIQUAL publishes 30400mg/100g for dried lithothamnion
+	// (alim_code 20989), a calcareous red alga that is roughly a third
+	// calcium carbonate by weight and is sold as a calcium supplement on
+	// exactly that basis. CIQUAL grades the figure confiance A -- its own
+	// highest, analytically determined. Real food, real number.
+	{"calcium", "Calcium", UnitMg, GroupMineral, 40000},
 	{"magnesium", "Magnesium", UnitMg, GroupMineral, 5000},
 	// 10000: USDA SR Legacy's "Leavening agents, baking powder, double-acting,
 	// straight phosphate" (fdc_id 172804) publishes 9918mg/100g. Baking
@@ -91,11 +118,24 @@ var Nutrients = []Nutrient{
 	// raised for here.
 	{"manganese", "Manganese", UnitMg, GroupMineral, 150},
 	{"selenium", "Selenium", UnitUg, GroupMineral, 6000},
-	{"iodine", "Iodine", UnitUg, GroupMineral, 10000},
+	// 600000: dried brown seaweeds are in a class of their own for iodine.
+	// CIQUAL publishes 459000ug/100g for dried tangle (Laminaria digitata,
+	// alim_code 20991) and 233000 for kombu, both confiance A; the food
+	// science literature puts dried kelp at 2000-8000 mg/kg, which is the
+	// same range. Nine CIQUAL seaweeds sit above the old 10000 ceiling, so
+	// this is a whole food category rather than a stray row -- excluding
+	// them would lose the foods most worth warning someone about. The
+	// ceiling stays finite: iodine reported in mg and read as ug would
+	// still have to clear 0.6% of the food's mass to slip through.
+	{"iodine", "Iodine", UnitUg, GroupMineral, 600000},
 
 	{"vitamin_a_rae", "Vitamin A (RAE)", UnitUg, GroupVitamin, 40000},
 	{"retinol", "Retinol", UnitUg, GroupVitamin, 40000},
-	{"carotene_beta", "Beta-carotene", UnitUg, GroupVitamin, 100000},
+	// 200000: CIQUAL publishes 155000ug/100g of beta-carotene for dried
+	// spirulina (alim_code 11086), confiance A. Dried microalgae are
+	// roughly 0.1-0.2% carotenoid by weight, so this is what the food is,
+	// not a factor slip.
+	{"carotene_beta", "Beta-carotene", UnitUg, GroupVitamin, 200000},
 	{"vitamin_d", "Vitamin D", UnitUg, GroupVitamin, 500},
 	{"vitamin_e", "Vitamin E", UnitMg, GroupVitamin, 500},
 	{"vitamin_k", "Vitamin K", UnitUg, GroupVitamin, 5000},
@@ -106,7 +146,15 @@ var Nutrients = []Nutrient{
 	{"vitamin_b6", "Vitamin B6", UnitMg, GroupVitamin, 100},
 	{"folate", "Folate", UnitUg, GroupVitamin, 5000},
 	{"vitamin_b12", "Vitamin B12", UnitUg, GroupVitamin, 500},
-	{"pantothenate", "Pantothenic acid (B5)", UnitMg, GroupVitamin, 100},
+	// 200: royal jelly (CIQUAL alim_code 31108) publishes 133mg/100g, and
+	// the rest of its B vitamins are just as extreme (105mg niacin, 150ug
+	// B12) -- royal jelly is the richest known dietary source of
+	// pantothenic acid and the literature agrees on 100-200mg/100g. The
+	// same archive's energy drink (18354) publishes 135mg against ordinary
+	// fortification levels for every other B vitamin in the same food,
+	// which is why this ceiling was raised to admit royal jelly rather
+	// than to cover that row too; that one food is excluded by id instead.
+	{"pantothenate", "Pantothenic acid (B5)", UnitMg, GroupVitamin, 200},
 	{"biotin", "Biotin (B7)", UnitUg, GroupVitamin, 1000},
 }
 

@@ -22,37 +22,48 @@ vitamin c (mg),vitamin_c,1,Vitamin C
 energy (kj),-,1,Energy kJ; superseded by kcal
 `
 
-// cofidFixture is the shape of the real workbook: a title block above the
-// header row, nutrients split across sheets and joined on food code, and
-// every sentinel CoFID uses.
+// cofidFixture is the shape of the real 2021 workbook: column titles on row
+// 1, two further heading bands beneath them, nutrients split across sheets
+// and joined on food code, and every sentinel CoFID uses.
+//
+// The two bands under the header are the fixture's whole point. CoFID prints
+// a short field code (KCALS) and a long gloss ("Energy in kilocalories")
+// below each title, and both are ordinary text sitting in a numeric column.
+// Neither carries a food code, so the adapter's blank-code skip is the only
+// thing keeping "KCALS" out of Parse -- and Parse would call it
+// ErrUnknownToken and kill the build on its first row. Fixtures that start
+// data immediately under the header never test that.
 func cofidFixture(t *testing.T) string {
 	t.Helper()
 	return writeWorkbook(t, map[string][][]string{
 		"1.3 Proximates": {
-			{"McCance and Widdowson's Composition of Foods Integrated Dataset"},
-			{"Values per 100 g edible portion"},
 			{"Food Code", "Food Name", "Energy (kcal)", "Energy (kJ)", "Protein (g)", "Fat (g)", "Carbohydrate (g)"},
+			{"", "", "KCALS", "KJ", "PROT", "FAT", "CHO"},
+			{"", "", "Energy in kilocalories", "Energy in kilojoules", "Protein", "Fat", "Carbohydrate"},
 			{"13-100", "Bananas, raw, flesh only", "95", "403", "1.2", "0.3", "23.2"},
 			{"12-200", "Milk, whole, pasteurised", "66", "275", "3.4", "3.9", "4.5"},
 			{"99-999", "Food with no data", "N", "N", "N", "N", "N"},
 		},
 		"1.4 Inorganics": {
-			{"McCance and Widdowson's Composition of Foods Integrated Dataset"},
-			{"Values per 100 g edible portion"},
 			{"Food Code", "Food Name", "Sodium (mg)", "Iron (mg)", "Selenium (µg)", "Chloride (mg)"},
+			{"", "", "NA", "FE", "SE", "CL"},
+			{"", "", "Sodium", "Iron", "Selenium", "Chloride"},
 			{"13-100", "Bananas, raw, flesh only", "Tr", "0.3", "N", "79"},
 			{"12-200", "Milk, whole, pasteurised", "42", "[0.1]", "1", "95"},
 		},
 		"1.5 Vitamins": {
-			{"McCance and Widdowson's Composition of Foods Integrated Dataset"},
-			{"Values per 100 g edible portion"},
 			{"Food Code", "Food Name", "Vitamin C (mg)"},
+			{"", "", "VITC"},
+			{"", "", "Vitamin C"},
 			{"13-100", "Bananas, raw, flesh only", "11"},
 			{"12-200", "Milk, whole, pasteurised", "<1"},
 		},
 	})
 }
 
+// loadCoFIDFixture leaves Sheets and HeaderRow unset so every test here runs
+// through the adapter's defaults, which is where a release's layout change
+// shows up first.
 func loadCoFIDFixture(t *testing.T, mappingCSV string) ([]format.RefFood, []format.SourceInfo, error) {
 	t.Helper()
 	m, err := LoadMapping(strings.NewReader(mappingCSV))
@@ -61,7 +72,6 @@ func loadCoFIDFixture(t *testing.T, mappingCSV string) ([]format.RefFood, []form
 	}
 	return LoadCoFID(CoFIDOptions{
 		File:    cofidFixture(t),
-		Sheets:  []string{"1.3 Proximates", "1.4 Inorganics", "1.5 Vitamins"},
 		Mapping: m,
 	})
 }
@@ -355,5 +365,67 @@ func TestLoadCoFIDNeverParsesAnExplicitlyIgnoredColumn(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("LoadCoFID: %v (an explicitly ignored column must never reach Parse)", err)
+	}
+}
+
+// CoFID 2021 ships "1.4 Inorganics" with two spaces in A1 where the other
+// sheets say "Food Code" -- a typo in the published workbook sitting above
+// a column of perfectly good food codes. Every mineral CoFID publishes
+// hangs on recovering from it.
+func TestLoadCoFIDRecoversABlankCodeColumnHeading(t *testing.T) {
+	path := writeWorkbook(t, map[string][][]string{
+		"1.3 Proximates": {
+			{"Food Code", "Food Name", "Energy (kcal)"},
+			{"13-100", "Bananas, flesh only", "81"},
+		},
+		"1.4 Inorganics": {
+			{"  ", "Food Name", "Sodium (mg)"}, // the 2021 typo, verbatim
+			{"13-100", "Bananas, flesh only", "1"},
+		},
+	})
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\n" +
+		"energy (kcal),energy_kcal,1,Energy\n" +
+		"sodium (mg),sodium,1,Sodium\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	foods, _, err := LoadCoFID(CoFIDOptions{
+		File:      path,
+		Sheets:    []string{"1.3 Proximates", "1.4 Inorganics"},
+		HeaderRow: 1,
+		Mapping:   m,
+	})
+	if err != nil {
+		t.Fatalf("LoadCoFID: %v", err)
+	}
+	if len(foods) != 1 {
+		t.Fatalf("got %d foods, want 1", len(foods))
+	}
+	prof := food.Decode(foods[0].Nutrients)
+	if v, ok := prof["sodium"]; !ok || !float32Eq(v, 1) {
+		t.Errorf("sodium = %v, ok=%v; the nameless code column did not join to the other sheet", v, ok)
+	}
+}
+
+// The recovery above must not turn into "assume column A is the key". A
+// sheet whose first column is a real, differently-named column has to fail
+// as loudly as it did before, or a layout change would silently join foods
+// on whatever happened to be leftmost.
+func TestLoadCoFIDStillRejectsASheetWithNoCodeColumn(t *testing.T) {
+	path := writeWorkbook(t, map[string][][]string{
+		"1.3 Proximates": {
+			{"Description", "Food Name", "Energy (kcal)"},
+			{"8 cans", "Bananas, flesh only", "81"},
+		},
+	})
+	m, err := LoadMapping(strings.NewReader("source_code,canonical_key,factor,note\nenergy (kcal),energy_kcal,1,Energy\n"))
+	if err != nil {
+		t.Fatalf("LoadMapping: %v", err)
+	}
+	_, _, err = LoadCoFID(CoFIDOptions{
+		File: path, Sheets: []string{"1.3 Proximates"}, HeaderRow: 1, Mapping: m,
+	})
+	if err == nil || !strings.Contains(err.Error(), "food code") {
+		t.Fatalf("err = %v, want an error naming the missing code column", err)
 	}
 }

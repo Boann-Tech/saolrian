@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bodgit/sevenzip"
+
 	"github.com/boanntech/saolrian/backend/internal/foodpack/source"
 )
 
@@ -113,6 +115,10 @@ func fetchOne(ctx context.Context, client *http.Client, e source.ManifestEntry, 
 		if err := extractZip(archive, dest); err != nil {
 			return fmt.Errorf("%s: %w", e.Source, err)
 		}
+	case "7z":
+		if err := extract7z(archive, dest); err != nil {
+			return fmt.Errorf("%s: %w", e.Source, err)
+		}
 	default: // xlsx, xml, csv — the download is the file
 		if err := copyFile(archive, filepath.Join(dest, name)); err != nil {
 			return fmt.Errorf("%s: %w", e.Source, err)
@@ -179,6 +185,17 @@ func hashFile(p string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// archiveEntry is one file inside a downloaded archive, reduced to what
+// unpacking needs. zip and 7z expose the same shape, so the guards below
+// are written once against this rather than twice against two libraries --
+// these are traversal checks on archives fetched over the network, and a
+// second copy of them is a second copy to keep correct.
+type archiveEntry struct {
+	name  string
+	isDir bool
+	open  func() (io.ReadCloser, error)
+}
+
 // extractZip unpacks archive into dest, flattening the release-named
 // wrapper directory every dataset zip carries. Adapters take a flat
 // directory, and the wrapper's name changes with every release.
@@ -189,31 +206,68 @@ func extractZip(archive, dest string) error {
 	}
 	defer zr.Close()
 
+	entries := make([]archiveEntry, 0, len(zr.File))
+	for _, f := range zr.File {
+		entries = append(entries, archiveEntry{
+			name:  f.Name,
+			isDir: f.FileInfo().IsDir(),
+			open:  func() (io.ReadCloser, error) { return f.Open() },
+		})
+	}
+	return extractEntries("zip", archive, dest, entries)
+}
+
+// extract7z is extractZip for CIQUAL, which is the one dataset that
+// publishes its XML as a .7z and offers no zip alongside it. Its own
+// site's only other option is a per-file download and the mirrors that do
+// serve a zip generate it per request, so its bytes -- and its hash --
+// differ on every fetch. A 7z reader is what it costs to pin CIQUAL at
+// all. This binary is a build-time tool and is never linked into the
+// server, so the dependency stops here.
+func extract7z(archive, dest string) error {
+	r, err := sevenzip.OpenReader(archive)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	entries := make([]archiveEntry, 0, len(r.File))
+	for _, f := range r.File {
+		entries = append(entries, archiveEntry{
+			name:  f.Name,
+			isDir: f.FileInfo().IsDir(),
+			open:  func() (io.ReadCloser, error) { return f.Open() },
+		})
+	}
+	return extractEntries("7z", archive, dest, entries)
+}
+
+func extractEntries(kind, archive, dest string, entries []archiveEntry) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
 	written := map[string]string{}
-	for _, f := range zr.File {
-		if f.FileInfo().IsDir() {
+	for _, e := range entries {
+		if e.isDir {
 			continue
 		}
 		// These archives come off the network. Flattening to the base name
 		// already defuses an entry named ../../x, but a traversal attempt
 		// means the archive is not what it claims to be, so refuse the
 		// whole thing rather than quietly unpacking the rest of it.
-		if hasDotDot(f.Name) {
-			return fmt.Errorf("zip entry %q escapes the target directory", f.Name)
+		if hasDotDot(e.name) {
+			return fmt.Errorf("%s entry %q escapes the target directory", kind, e.name)
 		}
-		base := filepath.Base(filepath.FromSlash(f.Name))
+		base := filepath.Base(filepath.FromSlash(e.name))
 		if base == "." || base == ".." || base == "" {
-			return fmt.Errorf("zip entry %q has no usable file name", f.Name)
+			return fmt.Errorf("%s entry %q has no usable file name", kind, e.name)
 		}
 		if prev, dup := written[base]; dup {
-			return fmt.Errorf("zip entries %q and %q both flatten to %q", prev, f.Name, base)
+			return fmt.Errorf("%s entries %q and %q both flatten to %q", kind, prev, e.name, base)
 		}
-		written[base] = f.Name
+		written[base] = e.name
 
-		if err := writeZipEntry(f, filepath.Join(dest, base)); err != nil {
+		if err := writeArchiveEntry(e, filepath.Join(dest, base)); err != nil {
 			return err
 		}
 	}
@@ -234,8 +288,8 @@ func hasDotDot(name string) bool {
 	return false
 }
 
-func writeZipEntry(f *zip.File, dst string) error {
-	rc, err := f.Open()
+func writeArchiveEntry(e archiveEntry, dst string) error {
+	rc, err := e.open()
 	if err != nil {
 		return err
 	}

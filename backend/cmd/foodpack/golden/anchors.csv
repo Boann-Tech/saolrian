@@ -1,21 +1,22 @@
 anchor,source,name_regex,note
 banana,usda_sr,"(?i)^bananas, raw$",SR Legacy NDB 09040
 banana,cnf,"(?i)^banana, raw$",CNF FoodID 2
-banana,ciqual,"(?i)^banana, pulp, raw$",CIQUAL alim_code 13000
-banana,cofid,"(?i)^bananas,.*raw",CoFID names the flesh-only preparation
+banana,ciqual,"(?i)^banana, flesh without skin, raw$","CIQUAL alim_code 13005; the 2025 release renamed the food from the ""banana, pulp, raw"" this row used to name"
+banana,cofid,"(?i)^bananas, flesh only$","CoFID 14-318. The old loose pattern matched 14-347 ""Bananas, raw, flesh only, weighed with skin"" instead -- a food whose figures are diluted by the inedible skin it is weighed with, hence 51 kcal against the flesh's 81, which read as a source disagreement rather than the wrong food"
 banana,afcd,"(?i)^banana, cavendish, peeled, raw$",AFCD names the cultivar
 milk_whole,usda_foundation,"(?i)^milk, whole, 3\.25% milkfat",Foundation Foods
 milk_whole,usda_sr,"(?i)^milk, whole, 3\.25% milkfat, with added vitamin d$",SR Legacy fdc_id 171265; anchored so cross_source has an anchor food carried by two sources present in the USDA-only build rather than passing vacuously
-milk_whole,cnf,"(?i)^milk, fluid, whole, 3\.25%",CNF
+milk_whole,cnf,"(?i)^milk, fluid, whole, pasteurized, homogenized, 3\.25% m\.f\.$","CNF FoodID 113; CNF spells out the processing and abbreviates milk fat, so the shorter pattern matched nothing"
 milk_whole,ciqual,"(?i)^milk, whole, UHT",CIQUAL
-milk_whole,cofid,"(?i)^milk, whole, pasteurised",CoFID
-milk_whole,afcd,"(?i)^milk, cow, fluid, whole",AFCD
+milk_whole,cofid,"(?i)^milk, whole, pasteurised, average$","CoFID 12-596; anchored to the year-round average rather than the summer/autumn and winter/spring entries the looser pattern also matched"
+milk_whole,afcd,"(?i)^milk, cow, fluid, regular fat \(~3\.5%\)$","AFCD F005634. AFCD calls it regular fat rather than whole, and gives the fat percentage in the name"
 spinach_raw,usda_sr,"(?i)^spinach, raw$",SR Legacy NDB 11457
 spinach_raw,cnf,"(?i)^spinach, raw$",CNF
 spinach_raw,ciqual,"(?i)^spinach, raw$",CIQUAL
-spinach_raw,cofid,"(?i)^spinach, raw$",CoFID
-spinach_raw,afcd,"(?i)^spinach, raw$",AFCD
+spinach_raw,cofid,"(?i)^spinach, mature, raw$","CoFID 13-572; CoFID separates mature from baby spinach and carries no unqualified ""spinach, raw"""
+spinach_raw,afcd,"(?i)^spinach, mature english, fresh, raw$","AFCD F008761; AFCD separates mature English from baby and water spinach"
 chicken_breast_raw,usda_sr,"(?i)^chicken, broiler or fryers, breast, skinless, boneless, meat only, raw$",SR Legacy fdc_id 171077; real name is singular broiler with a skinless/boneless qualifier the old regex lacked
-chicken_breast_raw,cnf,"(?i)^chicken, broiler, breast, meat only, raw$",CNF
-chicken_breast_raw,cofid,"(?i)^chicken, breast, meat only, raw$",CoFID
+chicken_breast_raw,cnf,"(?i)^chicken, broiler, breast, skinless, boneless, meat, raw$","CNF FoodID 841; CNF says skinless, boneless, meat rather than meat only"
+chicken_breast_raw,ciqual,"(?i)^chicken, breast, without skin, raw$",CIQUAL alim_code 36017
+chicken_breast_raw,cofid,"(?i)^chicken, light meat, raw$","CoFID 18-290. The 2021 release publishes no raw breast at all -- every breast entry is casseroled, grilled or coated -- and light meat is the breast-and-wing fraction, which is the closest raw equivalent it has. Named explicitly rather than dropped so the anchor keeps a fourth source"
 chicken_breast_raw,afcd,"(?i)^chicken, breast, lean flesh, raw$",AFCD

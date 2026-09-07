@@ -6,9 +6,9 @@ usda_foundation,"(?i)^milk,\s*whole\b",calcium,113,10,"Foundation Foods ""Milk, 
 usda_foundation,"(?i)^milk,\s*whole\b",vitamin_d,1.0,15,"Foundation Foods ""Milk, whole, 3.25% milkfat, with added vitamin D"" fdc_id 322892; ug-unit anchor. Replaces the salmon anchor: neither salmon entry in this Foundation Foods release (fdc_id 2684440 wild caught, 2684441 farm raised) carries a vitamin_d value at all, so the golden check could never pass against it. US vitamin-D-fortified milk is federally standardized at ~100IU (2.5ug) per 244g cup, i.e. ~1.0ug/100g, matching the measured figure closely -- a tighter, more reliable anchor than diet-variable fish. Deliberate deviation from the design spec, which named salmon vitamin D as the anchor food: that food genuinely has no vitamin_d figure in this release, so the spec's named anchor could never have passed."
 cnf,"(?i)^banana, raw$",energy_kcal,89,15,"CNF ""Banana, raw""; anchor food"
 cnf,"(?i)^spinach, raw$",iron,2.7,30,"CNF ""Spinach, raw""; mg-unit anchor"
-ciqual,"(?i)^banana, pulp, raw$",energy_kcal,90,20,"CIQUAL alim_code 13000; kcal comes from const_code 328, not the kJ column"
-ciqual,"(?i)^banana, pulp, raw$",carbohydrate,20,25,"CIQUAL carbohydrate is available carbohydrate, so lower than USDA's by-difference figure"
-cofid,"(?i)^bananas,.*raw",energy_kcal,95,25,"CoFID flesh-only banana; kcal column, not kJ"
-cofid,"(?i)^bananas,.*raw",vitamin_c,11,50,"CoFID vitamin C; wide tolerance, ascorbic acid varies with storage"
+ciqual,"(?i)^banana, flesh without skin, raw$",energy_kcal,90,20,"CIQUAL alim_code 13005 (renamed from ""banana, pulp, raw"" in the 2025 release), which publishes 87.6; kcal comes from const_code 328, not the kJ column"
+ciqual,"(?i)^banana, flesh without skin, raw$",carbohydrate,20,25,"CIQUAL carbohydrate is available carbohydrate, so lower than USDA's by-difference figure; the 2025 release publishes 19.7"
+cofid,"(?i)^bananas, flesh only$",energy_kcal,95,25,"CoFID 14-318; kcal column, not kJ. The 2021 release publishes 81, comfortably inside the band: CoFID assigns carbohydrate 3.75 kcal/g rather than 4 (its figure is monosaccharide equivalents) and gives NSP no energy at all, so its kcal for a given food runs a little under everyone else's. The regex is an exact match because the looser one matched 14-347, the same flesh weighed with its skin"
+cofid,"(?i)^bananas, flesh only$",vitamin_c,11,50,"CoFID 14-318 vitamin C, published as 9; wide tolerance, ascorbic acid varies with storage"
 afcd,"(?i)^banana, cavendish, peeled, raw$",energy_kcal,94,25,"AFCD publishes kJ only; a value near 395 means the 0.239006 factor was not applied"
 afcd,"(?i)^banana, cavendish, peeled, raw$",protein,1.4,40,AFCD protein; g-unit anchor

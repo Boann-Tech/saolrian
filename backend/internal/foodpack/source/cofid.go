@@ -29,13 +29,19 @@ var cofidValues = ValueSyntax{
 	Trace:  []string{"Tr"},
 }
 
-// Defaults for the 2019 and 2021 releases. Every one of these has moved at
-// least once between releases, which is why they are options rather than
-// literals in the reading code.
+// Defaults for the 2021 release, read off the real workbook. Every one of
+// these has moved at least once between releases, which is why they are
+// options rather than literals in the reading code.
 var cofidDefaultSheets = []string{"1.3 Proximates", "1.4 Inorganics", "1.5 Vitamins"}
 
 const (
-	cofidDefaultHeaderRow  = 3
+	// cofidDefaultHeaderRow is 1: the 2021 workbook opens straight onto the
+	// column titles. Rows 2 and 3 are a second and third heading band --
+	// the short field code (SATFOD) and a long gloss ("Saturated fatty
+	// acids per 100g food") -- and data starts at row 4. Those two bands
+	// carry no food code, so the blank-code skip below drops them before
+	// their text ever reaches Parse.
+	cofidDefaultHeaderRow  = 1
 	cofidDefaultCodeColumn = "food code"
 	cofidDefaultNameColumn = "food name"
 )
@@ -98,7 +104,7 @@ func LoadCoFID(o CoFIDOptions) ([]format.RefFood, []format.SourceInfo, error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("cofid: %w", err)
 		}
-		if !t.Has(o.CodeColumn) {
+		if !t.Has(o.CodeColumn) && !t.NameFirstColumn(o.CodeColumn) {
 			return nil, nil, fmt.Errorf("cofid: sheet %q has no %q column (headers: %v)", name, o.CodeColumn, t.Header)
 		}
 		for _, h := range t.Header {

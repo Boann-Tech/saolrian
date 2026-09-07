@@ -30,12 +30,51 @@ var crossSourceKeys = []string{"energy_kcal", "protein", "fat", "carbohydrate"}
 
 // crossSourceFloor is the value below which a relative comparison stops
 // meaning anything: 0.1 g and 0.4 g of fat differ by 300% and both mean
-// "no fat". Anchors include lean meat, so this is load-bearing.
+// "no fat". Anchors include lean meat and leaf vegetables, so this is
+// load-bearing.
+//
+// Three of the four floors were raised when the non-USDA sources arrived,
+// and the reason is the same each time. These sources do not merely measure
+// the same quantity and get slightly different answers; for energy and
+// carbohydrate they publish a *differently defined* quantity. USDA states
+// carbohydrate by difference (fibre included), CoFID, CIQUAL and AFCD state
+// available carbohydrate (fibre excluded); CoFID assigns carbohydrate 3.75
+// kcal/g and fibre none, EU 1169/2011 assigns 4 and 2. On a banana those
+// definitions differ by a few percent. On raw spinach -- 2 g of
+// carbohydrate carrying 2 g of fibre -- they differ by 74%, which no
+// tolerance can separate from an error.
+//
+// Raising a floor costs this check nothing it was ever able to do. It is
+// looking for a whole column read in the wrong unit, and a whole column is
+// wrong for every anchor food, not just the low-value one: banana and milk
+// still carry the comparison. What the floors buy is that the check stops
+// reporting a definition as a defect.
 var crossSourceFloor = map[string]float64{
-	"energy_kcal":  20,
-	"protein":      1,
-	"fat":          1,
-	"carbohydrate": 1,
+	// 50, not 20: below it the energy conventions above diverge by more
+	// than the 25% tolerance. Raw spinach is 23 kcal to USDA, 25 to CoFID
+	// and 33 to CIQUAL, purely from what each counts.
+	"energy_kcal": 50,
+	// 3, for the same reason as fat below. A banana carries about 1.1 g of
+	// protein and the five sources put it at 1.06, 1.09, 1.09, 1.2 and 1.4
+	// -- a 0.3 g spread between cultivars and Kjeldahl factors that reads
+	// as 28% against the median. Whole milk (3.4 g) and chicken breast
+	// (24 g) stay in the comparison.
+	"protein": 3,
+	// 3, not 1: raw chicken breast is the anchor that sets this. USDA's
+	// "meat only" trim publishes 2.62 g of fat, CIQUAL's "without skin"
+	// 1.5, CoFID's light meat 1.1 and AFCD's "lean flesh" 0.8 -- a 3x
+	// spread that is entirely how closely each country's butcher trims,
+	// and no relative tolerance can tell that apart from an error. Nothing
+	// is lost: below 3 g the sources already agree the food is lean, which
+	// is itself proof that none of them read the column in the wrong unit,
+	// and a genuine mg-for-g slip would put the median in the hundreds.
+	"fat": 3,
+	// 10, not 1: this is where by-difference and available carbohydrate
+	// part company worst. Raw spinach runs 3.63 g (USDA, fibre included)
+	// down to 0.6 g (AFCD, fibre excluded) -- a 6x spread on a food that
+	// every source agrees has almost no carbohydrate. Above 10 g the fibre
+	// a source does or does not count is a small share of the total again.
+	"carbohydrate": 10,
 }
 
 // anchorEntry names one source's spelling of one anchor food.

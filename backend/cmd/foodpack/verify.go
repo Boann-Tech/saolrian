@@ -117,11 +117,21 @@ func checkVocabulary(p format.Pack) CheckResult {
 // food_nutrient.csv rather than a downstream defect -- a
 // "Salt, table, iodized" entry (0kcal is correct but apparently never
 // recorded) and roughly fifty specialty dry-bean cultivar samples that
-// read as a proximate-only research batch. 0.01 (1%) sits comfortably
-// above that confirmed gap (58 of 8,202 foods, ~0.7%) while still failing
-// loudly on a mapping regression that took out a meaningfully larger
-// slice.
-const energyPresentMaxMissingFraction = 0.01
+// read as a proximate-only research batch.
+//
+// CIQUAL brings 143 more (4.1% of its own rows) and CoFID 33 (1.1%),
+// taking a six-source pack to 234 of 21,834, about 1.1%. CIQUAL's gap
+// was checked for a recoverable second convention the way USDA's was, and
+// there is none: of the 143 foods with no const_code 328, not one carries
+// 332 or 333 either, so CIQUAL genuinely publishes no energy figure for
+// them rather than publishing one this adapter fails to read.
+//
+// 0.02 (2%) keeps roughly the same headroom over the confirmed gap that
+// 0.01 kept over the USDA-only one. It stays a real gate: the regression
+// this check is for is a source's energy column silently going missing,
+// and the smallest source here is AFCD at 1,588 rows -- 9.8% of the pack,
+// five times the ceiling.
+const energyPresentMaxMissingFraction = 0.02
 
 func checkEnergyPresent(p format.Pack) CheckResult {
 	missing := 0
@@ -159,10 +169,23 @@ func checkMacroSum(p format.Pack) CheckResult {
 	// sums to 106.5, "Fish, herring, Pacific, cooked, dry heat" (174233) to
 	// 105.33, and "Fish, yellowtail, mixed species, cooked, dry heat"
 	// (174248) to 105.12 -- all three confirmed independently-measured, not
-	// a column mapped onto the wrong canonical key. 107 still catches what
-	// this check is for: a mapping that double-counts fibre into
-	// carbohydrate lands well past 110.
-	const limit = 107.0
+	// a column mapped onto the wrong canonical key.
+	//
+	// 110 once CoFID and AFCD are in the pack, for a reason that is
+	// arithmetic rather than measurement: both state carbohydrate as
+	// monosaccharide equivalents, which adds back the water a disaccharide
+	// takes up on hydrolysis and so overstates the carbohydrate's own mass
+	// by about 5%. On a food that is nearly all carbohydrate that is
+	// several grams on its own -- CoFID's sago, tapioca, arrowroot and
+	// buckwheat groats all land at 106.7-107.7, and the highest food in a
+	// six-source build is cofid/16-428 "Cod, in batter, fried in sunflower
+	// oil, takeaway" at 108.3, with AFCD's glucose syrup at 108.0. 21 foods
+	// exceed 105 and none reach 109.
+	//
+	// 110 still catches what this check is for: a mapping that
+	// double-counts fibre into carbohydrate lands far past it, and a
+	// column read in the wrong unit is not close.
+	const limit = 110.0
 	for _, f := range p.Foods {
 		prof := food.Decode(f.Nutrients)
 		sum := 0.0
@@ -174,7 +197,7 @@ func checkMacroSum(p format.Pack) CheckResult {
 				fmt.Sprintf("%s/%s (%s): components sum to %.1f g per 100 g", f.Source, f.SourceID, f.Name, sum)}
 		}
 	}
-	return CheckResult{"macro_sum", true, "no food exceeds 107 g of components per 100 g"}
+	return CheckResult{"macro_sum", true, fmt.Sprintf("no food exceeds %.0f g of components per 100 g", limit)}
 }
 
 func checkAtwater(p format.Pack) CheckResult {
@@ -195,25 +218,47 @@ func checkAtwater(p format.Pack) CheckResult {
 		}
 		checked++
 
-		// USDA (and every other source's) carbohydrate is "by difference":
-		// total mass minus everything else measured, so it includes fibre.
-		// Fibre contributes roughly 2 kcal/g, not the 4 kcal/g of digestible
-		// carbohydrate, and treating it as digestible turns ordinary
-		// high-fibre foods (wheat bran, ground cinnamon) into false
-		// suspects — on real data wheat bran deviates 66% and ground
-		// cinnamon 41% under the naive formula. Net the fibre out of
-		// carbohydrate when it is present; fall back to the plain formula
-		// when it is absent, since then there is nothing to correct for.
-		est := 4*pro + 4*carb + 9*fat + 7*prof["alcohol"]
-		if fibre, ok := prof["fibre"]; ok {
-			netCarb := carb - fibre
-			if netCarb < 0 {
-				netCarb = 0 // a mapping error already caught elsewhere; don't let it go negative here too
-			}
-			est = 4*pro + 4*netCarb + 2*fibre + 9*fat + 7*prof["alcohol"]
+		// Sources do not agree on what "carbohydrate" counts or on what a
+		// gram of fibre is worth, and both disagreements move the estimate
+		// by more than this check's tolerance on a high-fibre food. USDA
+		// states carbohydrate "by difference" -- total mass minus
+		// everything else measured -- so its figure already contains the
+		// fibre, and charging that fibre 4 kcal/g instead of 2 turns wheat
+		// bran (66% out) and ground cinnamon (41%) into false suspects.
+		// CoFID and CIQUAL state available carbohydrate instead, which
+		// excludes fibre, so netting fibre back out of it subtracts
+		// something that was never in it. On top of that, CoFID's declared
+		// kcal gives non-starch polysaccharide no energy at all where EU
+		// 1169/2011 gives fibre 2 kcal/g -- on dried kombu, 58.7 g of NSP,
+		// that one convention is the difference between 43 kcal and 160.
+		//
+		// So the estimate is a band rather than a number: whichever
+		// convention the source used, one of these three is the formula it
+		// used, and the food is judged on the closest. That is not a
+		// loophole. This check exists to catch a column read in the wrong
+		// unit, and kilojoules read as kilocalories is 318% out -- every
+		// candidate below misses that by a mile. When a food carries no
+		// fibre figure all three collapse to the same plain formula.
+		alc := prof["alcohol"]
+		base := 4*pro + 9*fat + 7*alc
+		fibre, hasFibre := prof["fibre"]
+		netCarb := carb - fibre
+		if netCarb < 0 {
+			netCarb = 0 // a mapping error already caught elsewhere; don't let it go negative here too
 		}
-
-		dev := math.Abs(est-kcal) / kcal
+		ests := []float64{base + 4*carb} // available carbohydrate, fibre unenergised (CoFID)
+		if hasFibre {
+			ests = append(ests,
+				base+4*netCarb+2*fibre, // by difference, fibre at 2 kcal/g (USDA)
+				base+4*carb+2*fibre,    // available carbohydrate, fibre at 2 kcal/g (EU 1169/2011)
+			)
+		}
+		est, dev := ests[0], math.Abs(ests[0]-kcal)/kcal
+		for _, e := range ests[1:] {
+			if d := math.Abs(e-kcal) / kcal; d < dev {
+				est, dev = e, d
+			}
+		}
 		if dev > atwaterTolerance {
 			suspect++
 			if dev > worstDev {
@@ -361,6 +406,15 @@ type subNutrientRelation struct {
 	Denominator string
 	Floor       float64
 
+	// Sources restricts a relation to the sources it is actually true
+	// for; empty means every source. Not every relation between canonical
+	// keys is a fact about food -- some are facts about one dataset's
+	// conventions, and applying those to a source that uses a different
+	// convention reports the convention as a defect. See the fibre
+	// relation below, which is exact for carbohydrate-by-difference and
+	// false by construction for available carbohydrate.
+	Sources []string
+
 	SoftMult               float64 // 0 disables the fractional gate
 	SoftMaxSuspectFraction float64
 
@@ -401,11 +455,21 @@ var subNutrientRelations = []subNutrientRelation{
 		// bug that pushed most foods to even 1.2x would be enormous
 		// relative to reality but invisible to a hard-only gate. SoftMult
 		// 1.1x with a 0.5% suspect ceiling closes that: real data trips
-		// it at 0.18% (10/5,534), comfortably under the ceiling with
-		// ~2.8x headroom, while a systematic bug affecting more than a
-		// tiny fraction of foods fails outright. HardMult stays at 3.0 so
-		// the turkey — a single, explained outlier — still passes on its
-		// own without being excluded by name.
+		// it at 0.18% (10/5,534), comfortably under the ceiling, while a
+		// systematic bug affecting more than a tiny fraction of foods
+		// fails outright. HardMult stays at 3.0 so the turkey — a single,
+		// explained outlier — still passes on its own without being
+		// excluded by name.
+		//
+		// Re-measured over the six-source build: 55 of 14,100 (0.390%),
+		// still passing but with only 1.28x headroom rather than the 2.8x
+		// the USDA-only figure gave. The extra suspects are spread across
+		// CNF, CoFID and CIQUAL rather than concentrated in one of them,
+		// which is what a real convention difference would look like and
+		// not what a mapping bug would. The ceiling is left where it is
+		// deliberately: 0.5% is still the right question to ask, and the
+		// next source to arrive should be a decision someone makes with
+		// this number in front of them rather than one already made here.
 		Name:                   "fat_saturated + fat_monounsaturated + fat_polyunsaturated <= fat",
 		Numerators:             []string{"fat_saturated", "fat_monounsaturated", "fat_polyunsaturated"},
 		Denominator:            "fat",
@@ -425,34 +489,54 @@ var subNutrientRelations = []subNutrientRelation{
 		// methods.
 		//
 		// Same blind spot as the fat relation above, smaller stakes: a
-		// hard-only gate at 1.35x would admit a systematic bug that moved
-		// most foods to 1.2-1.3x. SoftMult 1.1x with a 1.0% suspect
-		// ceiling closes it: real data trips it at 0.29% (3/1,019), ~3.4x
-		// under the ceiling. HardMult stays at 1.35x so Hot Pockets still
-		// passes on its own.
+		// hard-only gate would admit a systematic bug that moved most
+		// foods to 1.2-1.3x. SoftMult 1.1x with a 1.0% suspect ceiling
+		// closes it.
+		//
+		// Re-measured over the six-source build (6,152 foods with
+		// carbohydrate >= 1g and both components present): 13 (0.211%)
+		// exceed 1.1x and none exceed 1.5x. The soft gate sits ~4.7x under
+		// its ceiling. HardMult moved 1.35 -> 1.5 for the
+		// two foods above the old bound, both composite dishes where the
+		// components and the total come from different methods:
+		// ciqual/30155 "Merguez sausage, beef and mutton, cooked" at
+		// 1.444x (2.6 g of sugars and starch against 1.8 g of
+		// carbohydrate -- 0.8 g, which is rounding at this magnitude) and
+		// cofid/15-889 "Tomatoes, stuffed with vegetables" at 1.393x.
 		Name:                   "sugars + starch <= carbohydrate",
 		Numerators:             []string{"sugars", "starch"},
 		Denominator:            "carbohydrate",
 		Floor:                  1.0,
 		SoftMult:               1.1,
 		SoftMaxSuspectFraction: 0.01,
-		HardMult:               1.35,
+		HardMult:               1.5,
 	},
 	{
 		// Fibre is a component of carbohydrate-by-difference by
 		// definition (it is not measured independently and subtracted
 		// out the way sugars/starch are), so this one holds exactly: 0
-		// violations across every one of the 7,403 real foods carrying
-		// both keys, and the single closest real food (usda_sr/167682
-		// "Pectin, liquid") sits at ratio 1.0000 -- fibre equal to
-		// carbohydrate, not exceeding it. No soft gate: with the relation
-		// already exact by definition, a fractional gate has no real
-		// distribution to distinguish from a systematic error and would
-		// add nothing but a second constant to maintain. No floor and no
-		// margin beyond the design's own 1.0 were needed.
+		// violations across every one of the 7,403 real USDA foods
+		// carrying both keys, and the single closest real food
+		// (usda_sr/167682 "Pectin, liquid") sits at ratio 1.0000 -- fibre
+		// equal to carbohydrate, not exceeding it. No soft gate: with the
+		// relation already exact by definition, a fractional gate has no
+		// real distribution to distinguish from a systematic error and
+		// would add nothing but a second constant to maintain. No floor
+		// and no margin beyond the design's own 1.0 were needed.
+		//
+		// Restricted to USDA because the definition it rests on is USDA's.
+		// CoFID, CIQUAL and AFCD all publish *available* carbohydrate,
+		// which excludes fibre, so for them the two figures are disjoint
+		// and fibre routinely exceeds carbohydrate with nothing wrong at
+		// all: AFCD's uncooked psyllium (F007502) is 88.7 g of fibre
+		// against 1.0 g of available carbohydrate, and dried curry powder
+		// is 53.2 against 2.6 in both AFCD and CIQUAL. Run pack-wide, this
+		// relation calls 296 foods (2.9%) defective and every one of them
+		// is correct. It is a fact about a convention, not about food.
 		Name:        "fibre <= carbohydrate",
 		Numerators:  []string{"fibre"},
 		Denominator: "carbohydrate",
+		Sources:     []string{"usda_foundation", "usda_sr"},
 		Floor:       0,
 		HardMult:    1.0,
 	},
@@ -494,6 +578,20 @@ var subNutrientRelations = []subNutrientRelation{
 // for one outlier food, a soft gate (where the relation has one — see
 // subNutrientRelation's doc comment) for a systematic error moving many
 // foods together.
+// appliesTo reports whether this relation is checked for a food from the
+// named source. A relation with no Sources applies to all of them.
+func (r subNutrientRelation) appliesTo(source string) bool {
+	if len(r.Sources) == 0 {
+		return true
+	}
+	for _, s := range r.Sources {
+		if s == source {
+			return true
+		}
+	}
+	return false
+}
+
 func checkSubNutrients(p format.Pack) CheckResult {
 	var details []string
 	for _, rel := range subNutrientRelations {
@@ -504,6 +602,9 @@ func checkSubNutrients(p format.Pack) CheckResult {
 		hardRatio := 0.0
 
 		for _, f := range p.Foods {
+			if !rel.appliesTo(f.Source) {
+				continue
+			}
 			prof := food.Decode(f.Nutrients)
 			denom, ok := prof[rel.Denominator]
 			if !ok || denom < rel.Floor {

@@ -205,3 +205,57 @@ func TestHeaderMappingCheckAcceptsDeliberateUnitConversion(t *testing.T) {
 		t.Fatalf("headerMappingCheck = %v, want nil: a factor that is not 1 is a deliberate conversion and must not trip the unit guard", err)
 	}
 }
+
+// AFCD Release 3 formats its kilojoule column with a thousands separator,
+// so the string Excel would paint in the cell holding 1236 is "1,236" --
+// not a number to any parser, and in a dataset that wrote the comma as a
+// decimal point, wrong by a factor of a thousand rather than merely
+// unparseable. readSheet must hand back the stored value, not the
+// rendering.
+func TestReadSheetReadsStoredValuesNotFormattedOnes(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	const sheet = "Sheet1"
+
+	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: strPtr("#,##0")})
+	if err != nil {
+		t.Fatalf("NewStyle: %v", err)
+	}
+	for cell, v := range map[string]any{"A1": "Public Food Key", "B1": "Energy (kJ)"} {
+		if err := f.SetCellValue(sheet, cell, v); err != nil {
+			t.Fatalf("SetCellValue %s: %v", cell, err)
+		}
+	}
+	if err := f.SetCellValue(sheet, "A2", "F002258"); err != nil {
+		t.Fatalf("SetCellValue A2: %v", err)
+	}
+	if err := f.SetCellValue(sheet, "B2", 1236); err != nil {
+		t.Fatalf("SetCellValue B2: %v", err)
+	}
+	if err := f.SetCellStyle(sheet, "B2", "B2", style); err != nil {
+		t.Fatalf("SetCellStyle: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "book.xlsx")
+	if err := f.SaveAs(path); err != nil {
+		t.Fatalf("SaveAs: %v", err)
+	}
+
+	wb, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("OpenFile: %v", err)
+	}
+	defer wb.Close()
+	tbl, err := readSheet(wb, sheet, 1)
+	if err != nil {
+		t.Fatalf("readSheet: %v", err)
+	}
+	got, ok := tbl.Cell(tbl.Rows[0], normaliseHeader("Energy (kJ)"))
+	if !ok {
+		t.Fatal("the energy column is missing")
+	}
+	if got != "1236" {
+		t.Errorf("cell = %q, want %q; the number format leaked into the value", got, "1236")
+	}
+}
+
+func strPtr(s string) *string { return &s }
