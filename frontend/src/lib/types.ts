@@ -20,6 +20,7 @@ export interface Profile {
   fat_pct: number | null;
   theme_accent: string | null;
   goal_rate: number | null;
+  units: 'metric' | 'imperial' | null;
   water_goal_ml: number | null;
   steps_goal: number | null;
   [key: string]: unknown;

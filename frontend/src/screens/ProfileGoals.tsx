@@ -19,6 +19,9 @@ import {
 import { RatePicker } from '../components/RatePicker';
 import { DeleteSlotDialog, useSlotDeletion } from '../components/DeleteSlotDialog';
 import { formatInt } from '../lib/format';
+import {
+  cmToFeetInches, defaultUnits, feetInchesToCm, kgToLb, lbToKg, weightUnit, type Units,
+} from '../lib/units';
 import { Button, Card, Field, Modal, Segmented, Select, Sheet, TextInput, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
 
@@ -46,6 +49,7 @@ const ICON_BTN_DANGER =
   'disabled:opacity-35 disabled:cursor-default hover:border-danger hover:text-danger';
 
 interface ProfileForm {
+  units: Units;
   height_cm: string;
   birth_year: string;
   sex: Sex | '';
@@ -59,6 +63,7 @@ interface ProfileForm {
 
 function fromProfile(p: Profile | null): ProfileForm {
   return {
+    units: p?.units ?? defaultUnits(typeof navigator !== 'undefined' ? navigator.language : undefined),
     height_cm: p?.height_cm != null ? String(p.height_cm) : '',
     birth_year: p?.birth_year != null ? String(p.birth_year) : '',
     sex: p?.sex ?? '',
@@ -159,6 +164,27 @@ export default function ProfileGoals() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
+  // Storage stays metric; these convert only at the input boundary.
+  const heightImperial = cmToFeetInches(parseFloat(form.height_cm) || 0);
+  const setHeightFromImperial = (feet: number, inches: number) =>
+    setForm((f) => ({ ...f, height_cm: String(Math.round(feetInchesToCm(feet, inches) * 100) / 100) }));
+
+  const displayWeight = (() => {
+    if (form.weight_kg === '') return '';
+    const kg = parseFloat(form.weight_kg);
+    if (!Number.isFinite(kg)) return form.weight_kg;
+    return form.units === 'imperial' ? String(Math.round(kgToLb(kg) * 10) / 10) : form.weight_kg;
+  })();
+  const setWeightFromDisplay = (raw: string) => {
+    if (raw === '') return setForm((f) => ({ ...f, weight_kg: '' }));
+    const n = parseFloat(raw);
+    if (!Number.isFinite(n)) return setForm((f) => ({ ...f, weight_kg: raw }));
+    setForm((f) => ({
+      ...f,
+      weight_kg: f.units === 'imperial' ? String(Math.round(lbToKg(n) * 100) / 100) : raw,
+    }));
+  };
+
   const num = (s: string): number | null => {
     const v = parseFloat(s);
     return Number.isFinite(v) ? v : null;
@@ -191,6 +217,7 @@ export default function ProfileGoals() {
         activity_level: form.activity_level || null,
         body_fat_pct: num(form.body_fat_pct),
         tdee_formula: form.tdee_formula,
+        units: form.units,
         water_goal_ml: num(form.water_goal_ml),
         steps_goal: num(form.steps_goal),
         goal,
@@ -333,14 +360,36 @@ export default function ProfileGoals() {
         </div>
         <Card className="p-4">
           <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
-            <Field label="Height (cm)">
-              <TextInput
-                type="number"
-                min={0}
-                value={form.height_cm}
-                onChange={(e) => setForm({ ...form, height_cm: e.target.value })}
-              />
-            </Field>
+            {form.units === 'imperial' ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Height (feet)">
+                  <TextInput
+                    type="number"
+                    min={0}
+                    value={String(heightImperial.feet)}
+                    onChange={(e) => setHeightFromImperial(Number(e.target.value) || 0, heightImperial.inches)}
+                  />
+                </Field>
+                <Field label="Height (inches)">
+                  <TextInput
+                    type="number"
+                    min={0}
+                    max={11}
+                    value={String(heightImperial.inches)}
+                    onChange={(e) => setHeightFromImperial(heightImperial.feet, Number(e.target.value) || 0)}
+                  />
+                </Field>
+              </div>
+            ) : (
+              <Field label="Height (cm)">
+                <TextInput
+                  type="number"
+                  min={0}
+                  value={form.height_cm}
+                  onChange={(e) => setForm({ ...form, height_cm: e.target.value })}
+                />
+              </Field>
+            )}
             <Field label="Birth year">
               <TextInput
                 type="number"
@@ -384,13 +433,13 @@ export default function ProfileGoals() {
                 onChange={(e) => setForm({ ...form, body_fat_pct: e.target.value })}
               />
             </Field>
-            <Field label="Weight (kg)" hint="Saved as a weights record">
+            <Field label={`Weight (${weightUnit(form.units)})`} hint="Saved as a weights record">
               <TextInput
                 type="number"
                 min={0}
                 step={0.1}
-                value={form.weight_kg}
-                onChange={(e) => setForm({ ...form, weight_kg: e.target.value })}
+                value={displayWeight}
+                onChange={(e) => setWeightFromDisplay(e.target.value)}
               />
             </Field>
             <Field label="Water goal (ml)" hint="Shown on the Today dashboard">
@@ -409,6 +458,17 @@ export default function ProfileGoals() {
                 step={500}
                 value={form.steps_goal}
                 onChange={(e) => setForm({ ...form, steps_goal: e.target.value })}
+              />
+            </Field>
+            <Field label="Units" hint="Display only — your data is stored in metric">
+              <Segmented
+                aria-label="Units"
+                value={form.units}
+                onChange={(u) => setForm((f) => ({ ...f, units: u }))}
+                options={[
+                  { value: 'metric' as Units, label: 'Metric' },
+                  { value: 'imperial' as Units, label: 'Imperial' },
+                ]}
               />
             </Field>
             <Field label="Formula">

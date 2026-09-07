@@ -7,6 +7,7 @@ import { getClient } from '../lib/pb';
 import { deleteEntryWithUndo, restoreEntry } from '../lib/diary';
 import { normalizeSummary } from '../lib/normalize';
 import { DEFAULT_STEPS_GOAL, DEFAULT_WATER_GOAL_ML } from '../lib/nutrition';
+import { defaultUnits, flOzToMl, mlToFlOz, volumeUnit } from '../lib/units';
 import { MealGroup } from '../components/MealGroup';
 import { EditableMetric } from '../components/EditableMetric';
 import { DeleteSlotDialog, useSlotDeletion } from '../components/DeleteSlotDialog';
@@ -90,6 +91,12 @@ export default function Today() {
   const firstName = (profile?.['name'] as string | undefined) ?? '';
   const targets = summary?.targets;
   const waterGoal = targets?.water_ml || DEFAULT_WATER_GOAL_ML;
+  const units =
+    (profile?.['units'] as 'metric' | 'imperial' | undefined) ??
+    defaultUnits(typeof navigator !== 'undefined' ? navigator.language : undefined);
+  // Water is stored in ml; imperial users think in fl oz.
+  const toDisplayMl = (ml: number) => (units === 'imperial' ? Math.round(mlToFlOz(ml)) : ml);
+  const fromDisplayMl = (v: number) => (units === 'imperial' ? Math.round(flOzToMl(v)) : v);
   const stepsGoal = targets?.steps || DEFAULT_STEPS_GOAL;
 
   const loadMetrics = async (pb: ReturnType<typeof getClient>) => {
@@ -338,11 +345,11 @@ export default function Today() {
               <CardTitle>Hydration</CardTitle>
               <div className="flex items-baseline justify-between">
                 <EditableMetric
-                  value={waterMl}
-                  goal={waterGoal}
-                  unit="ml"
+                  value={toDisplayMl(waterMl)}
+                  goal={toDisplayMl(waterGoal)}
+                  unit={volumeUnit(units)}
                   label="water amount"
-                  onCommit={(next) => void upsertMetric({ water_ml: next })}
+                  onCommit={(next) => void upsertMetric({ water_ml: fromDisplayMl(next) })}
                 />
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
                   <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
@@ -357,7 +364,7 @@ export default function Today() {
                   disabled={savingMetric}
                   onClick={() => void upsertMetric({ water_ml: waterMl + 250 })}
                 >
-                  +250 ml
+                  +{units === 'imperial' ? '8 fl oz' : '250 ml'}
                 </Button>
                 <Button
                   variant="outline"
@@ -365,7 +372,7 @@ export default function Today() {
                   disabled={savingMetric}
                   onClick={() => void upsertMetric({ water_ml: waterMl + 500 })}
                 >
-                  +500 ml
+                  +{units === 'imperial' ? '16 fl oz' : '500 ml'}
                 </Button>
               </div>
             </Card>

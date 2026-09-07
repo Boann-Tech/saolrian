@@ -59,8 +59,11 @@ async function toGoalStep(user: ReturnType<typeof userEvent.setup>) {
 
   await user.selectOptions(screen.getByLabelText('Sex'), 'male');
   await user.type(screen.getByLabelText(/Birth year/i), '1990');
-  await user.type(screen.getByLabelText(/Height/i), '180');
-  await user.type(screen.getByLabelText(/Weight/i), '80');
+  // Pin the unit system: the default follows the browser locale, which is
+  // en-US (imperial) under jsdom.
+  await user.click(screen.getByRole('radio', { name: 'Metric' }));
+  await user.type(screen.getByLabelText('Height (cm)'), '180');
+  await user.type(screen.getByLabelText('Weight (kg)'), '80');
   await user.click(screen.getByRole('button', { name: /continue/i }));
 }
 

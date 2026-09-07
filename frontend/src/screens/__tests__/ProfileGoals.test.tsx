@@ -26,6 +26,7 @@ function makeProfile(overrides: Record<string, unknown> = {}) {
     tdee_formula: 'mifflin',
     goal: 'maintain',
     goal_rate: 0,
+    units: 'metric',
     water_goal_ml: 0,
     steps_goal: 0,
     protein_pct: 30,
@@ -379,6 +380,74 @@ describe('ProfileGoals — removing a meal slot', () => {
 
     await waitFor(() => expect(slotDeletes).toEqual(['slot-2']));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+describe('ProfileGoals — units', () => {
+  it('labels body metrics in the chosen system', async () => {
+    profileRecord = makeProfile({ units: 'imperial' });
+    weightItems = [{ kg: 80 }];
+    renderProfile();
+
+    // 80 kg is 176.4 lb; 180 cm is 5'11".
+    await waitFor(() => expect(screen.getByLabelText(/Weight \(lb\)/i)).toHaveValue(176.4));
+    expect(screen.getByLabelText('Height (feet)')).toHaveValue(5);
+    expect(screen.getByLabelText('Height (inches)')).toHaveValue(11);
+  });
+
+  it('stores what was typed in pounds as kilograms', async () => {
+    profileRecord = makeProfile({ units: 'imperial' });
+    weightItems = [{ kg: 80 }];
+    const user = userEvent.setup();
+    renderProfile();
+
+    const weight = await screen.findByLabelText(/Weight \(lb\)/i);
+    await waitFor(() => expect(weight).toHaveValue(176.4));
+    await user.clear(weight);
+    await user.type(weight, '170');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    // 170 lb is 77.1 kg — the record stays metric.
+    await waitFor(() => expect(weightCreates).toHaveLength(1));
+    expect(Number(weightCreates[0]['kg'])).toBeCloseTo(77.1, 1);
+  });
+
+  it('stores a foot/inch height as centimetres', async () => {
+    profileRecord = makeProfile({ units: 'imperial' });
+    weightItems = [{ kg: 80 }];
+    const user = userEvent.setup();
+    renderProfile();
+
+    const feet = await screen.findByLabelText('Height (feet)');
+    await waitFor(() => expect(feet).toHaveValue(5));
+    const inches = screen.getByLabelText('Height (inches)');
+    await user.clear(inches);
+    await user.type(inches, '9');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    // 5'9" is 175.26 cm.
+    await waitFor(() => expect(Number(profileRecord.height_cm)).toBeCloseTo(175.26, 1));
+  });
+
+  it('keeps metric labels for a metric profile', async () => {
+    profileRecord = makeProfile({ units: 'metric' });
+    weightItems = [{ kg: 80 }];
+    renderProfile();
+
+    await waitFor(() => expect(screen.getByLabelText(/Weight \(kg\)/i)).toHaveValue(80));
+    expect(screen.getByLabelText(/Height \(cm\)/i)).toHaveValue(180);
+  });
+
+  it('persists a switch of units', async () => {
+    profileRecord = makeProfile({ units: 'metric' });
+    weightItems = [{ kg: 80 }];
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('radio', { name: /imperial/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(profileRecord.units).toBe('imperial'));
   });
 });
 

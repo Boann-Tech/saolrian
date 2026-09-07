@@ -22,7 +22,9 @@ const fakePb = {
   baseUrl: 'http://localhost:8090',
   authStore: { isValid: true, record: authRecord, onChange: () => () => {} },
   collection: (name: string) => {
-    if (name === 'profiles') return { getFullList: async () => [] };
+    // Units default to the browser locale (en-US under jsdom), so pin them.
+    if (name === 'profiles')
+      return { getFullList: async () => [{ id: 'p1', user: 'user-1', units: 'metric' }] };
     if (name === 'weights') return { getList: async () => ({ items: [] }) };
     if (name === 'meal_slots') return { getFullList: async () => [] };
     if (name === 'daily_metrics') {
