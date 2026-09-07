@@ -135,39 +135,80 @@ afterEach(() => {
   cleanup();
 });
 
-describe('ProfileGoals — unsaved edits survive background profile refreshes', () => {
-  it('keeps an unsaved weight entry after toggling the goal (which autosaves + refreshes profile)', async () => {
+describe('ProfileGoals — one save model', () => {
+  it('does not persist a goal change until Save is pressed', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('radio', { name: 'Lose' }));
+
+    // Nothing written yet — the explicit Save button owns every field.
+    expect(profileUpdates).toHaveLength(0);
+    expect(profileRecord.goal).toBe('maintain');
+  });
+
+  it('does not persist a macro edit until Save is pressed', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    const protein = await screen.findByLabelText(/Protein %/i);
+    await user.clear(protein);
+    await user.type(protein, '35');
+
+    expect(profileUpdates).toHaveLength(0);
+  });
+
+  it('writes every pending change in one save', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('radio', { name: 'Lose' }));
+    const height = screen.getByLabelText(/Height/i);
+    await user.clear(height);
+    await user.type(height, '176');
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(profileRecord.goal).toBe('lose'));
+    expect(profileRecord.height_cm).toBe(176);
+  });
+
+  it('surfaces unsaved changes while they are pending', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    expect(screen.queryByText(/unsaved changes/i)).not.toBeInTheDocument();
+
+    await user.click(await screen.findByRole('radio', { name: 'Lose' }));
+
+    expect(await screen.findByText(/unsaved changes/i)).toBeInTheDocument();
+  });
+
+  it('clears the unsaved marker once saved', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('radio', { name: 'Lose' }));
+    await screen.findByText(/unsaved changes/i);
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(screen.queryByText(/unsaved changes/i)).not.toBeInTheDocument());
+  });
+
+  it('keeps an unsaved edit when the profile record is refreshed underneath it', async () => {
     const user = userEvent.setup();
     renderProfile();
 
     const weightInput = await screen.findByLabelText(/Weight \(kg\)/i);
     await user.clear(weightInput);
     await user.type(weightInput, '82.5');
+
+    // A save elsewhere on the screen refreshes `profile` in AppContext.
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(profileUpdates.length).toBeGreaterThan(0));
+
     expect(weightInput).toHaveValue(82.5);
-
-    // Toggling Goal triggers saveGoalMacros() -> profiles.update() -> refreshProfile(),
-    // which replaces the `profile` object reference in AppContext.
-    await user.click(screen.getByRole('radio', { name: 'Lose' }));
-    await waitFor(() => expect(profileRecord.goal).toBe('lose'));
-
-    // The weight the user just typed (not yet saved via the main Save button)
-    // must not be wiped out by that unrelated background refresh.
-    expect(weightInput).toHaveValue(82.5);
-  });
-
-  it('keeps an unsaved formula change after toggling the goal', async () => {
-    const user = userEvent.setup();
-    renderProfile();
-
-    const formulaSelect = await screen.findByLabelText('Formula');
-    expect(formulaSelect).toHaveValue('mifflin');
-    await user.selectOptions(formulaSelect, 'katch');
-    expect(formulaSelect).toHaveValue('katch');
-
-    await user.click(screen.getByRole('radio', { name: 'Lose' }));
-    await waitFor(() => expect(profileRecord.goal).toBe('lose'));
-
-    expect(formulaSelect).toHaveValue('katch');
   });
 });
 
@@ -237,7 +278,7 @@ describe('ProfileGoals — weekly rate drives the calorie target', () => {
     await waitFor(() => expect(targetText()).toMatch(/1,613/));
   });
 
-  it('persists the chosen rate as a signed value', async () => {
+  it('persists the chosen rate as a signed value when saved', async () => {
     profileRecord = makeProfile({ goal: 'lose', goal_rate: -0.5 });
     weightItems = [{ kg: 80 }];
     const user = userEvent.setup();
@@ -245,6 +286,8 @@ describe('ProfileGoals — weekly rate drives the calorie target', () => {
     await waitFor(() => expect(targetText()).toMatch(/2,163/));
 
     await user.click(screen.getByRole('radio', { name: '1 kg/wk' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
     await waitFor(() => expect(profileRecord.goal_rate).toBe(-1));
   });
 

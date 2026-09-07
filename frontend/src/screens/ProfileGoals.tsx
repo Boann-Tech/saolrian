@@ -93,6 +93,13 @@ export default function ProfileGoals() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
 
+  // Everything on this screen is saved by one button. The screen used to mix
+  // three models — macros per keystroke, goal and theme on tap, the rest only
+  // via Save — with nothing to tell the user which was which.
+  const baseline = useRef('');
+  const snapshot = JSON.stringify({ form, goal, rate, macros });
+  const dirty = baseline.current !== '' && baseline.current !== snapshot;
+
   /** Clears the session only. The endpoint stays put so the next sign-in
    *  targets the same server; Auth offers "Change server" for the rest. */
   const signOut = () => {
@@ -112,9 +119,19 @@ export default function ProfileGoals() {
     if (syncedProfileId.current === id) return;
     syncedProfileId.current = id;
     seededWeightId.current = undefined; // let the weight effect re-seed for this record
-    setForm(fromProfile(profile));
-    if (profile?.goal) setGoal(profile.goal);
-    setRate(signedRate(profile?.goal ?? 'maintain', profile?.goal_rate ?? -0.5));
+    const nextForm = fromProfile(profile);
+    const nextGoal = profile?.goal ?? 'maintain';
+    const nextRate = signedRate(nextGoal, profile?.goal_rate ?? -0.5);
+    const nextMacros = {
+      protein_pct: profile?.protein_pct ?? DEFAULT_MACROS.protein_pct,
+      carbs_pct: profile?.carbs_pct ?? DEFAULT_MACROS.carbs_pct,
+      fat_pct: profile?.fat_pct ?? DEFAULT_MACROS.fat_pct,
+    };
+    setForm(nextForm);
+    setGoal(nextGoal);
+    setRate(nextRate);
+    setMacros(nextMacros);
+    baseline.current = JSON.stringify({ form: nextForm, goal: nextGoal, rate: nextRate, macros: nextMacros });
   }, [profile]);
 
   // Seed the Weight field with the user's current weight. It comes from its
@@ -126,8 +143,21 @@ export default function ProfileGoals() {
     if (seededWeightId.current === id) return;
     if (latestWeight == null) return;
     seededWeightId.current = id;
-    setForm((f) => ({ ...f, weight_kg: String(latestWeight) }));
+    setForm((f) => {
+      const next = { ...f, weight_kg: String(latestWeight) };
+      // Seeding isn't an edit — move the baseline with it.
+      baseline.current = JSON.stringify({ form: next, goal, rate, macros });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, latestWeight]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   const num = (s: string): number | null => {
     const v = parseFloat(s);
@@ -187,30 +217,13 @@ export default function ProfileGoals() {
           source: 'manual',
         });
       }
+      baseline.current = JSON.stringify({ form, goal, rate, macros });
       await refreshProfile();
       toast('Profile saved');
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Could not save profile', 'err');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const saveGoalMacros = async (g: Goal, m: typeof macros, r: number = rate) => {
-    if (!profile) return;
-    const pb = getClient(endpoint);
-    const s = macroSplit(target ?? 0, m.protein_pct, m.fat_pct);
-    try {
-      await pb.collection('profiles').update(profile.id, {
-        goal: g,
-        goal_rate: signedRate(g, r),
-        protein_pct: m.protein_pct,
-        carbs_pct: s.carbsPct,
-        fat_pct: m.fat_pct,
-      });
-      await refreshProfile();
-    } catch {
-      /* silent — the main Save button also persists these */
     }
   };
 
@@ -441,10 +454,8 @@ export default function ProfileGoals() {
             aria-label="Goal"
             value={goal}
             onChange={(g) => {
-              const next = signedRate(g, rate);
               setGoal(g);
-              setRate(next);
-              void saveGoalMacros(g, macros, next);
+              setRate(signedRate(g, rate));
             }}
             options={[
               { value: 'lose', label: 'Lose' },
@@ -456,10 +467,7 @@ export default function ProfileGoals() {
             <RatePicker
               goal={goal}
               value={rate}
-              onChange={(r) => {
-                setRate(r);
-                void saveGoalMacros(goal, macros, r);
-              }}
+              onChange={setRate}
             />
           </div>
           {targetDetail?.capped && (
@@ -498,11 +506,9 @@ export default function ProfileGoals() {
                   min={0}
                   max={100}
                   value={macros[key]}
-                  onChange={(e) => {
-                    const next = { ...macros, [key]: Math.max(0, Math.min(100, Number(e.target.value) || 0)) };
-                    setMacros(next);
-                    void saveGoalMacros(goal, next);
-                  }}
+                  onChange={(e) =>
+                    setMacros((m) => ({ ...m, [key]: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))
+                  }
                 />
               </Field>
             ))}
@@ -576,10 +582,22 @@ export default function ProfileGoals() {
 
       {/* Save + data */}
       <div className="px-6 pt-5">
-        <Button block loading={saving} onClick={() => void saveProfile()}>
+        <Button block loading={saving} disabled={!dirty && !saving} onClick={() => void saveProfile()}>
           {saving ? 'Saving…' : 'Save changes'}
         </Button>
       </div>
+
+      {dirty && (
+        <div
+          className="sticky bottom-0 z-20 mt-4 flex items-center justify-between gap-3 border-t border-border bg-raised/95 px-6 py-3 backdrop-blur"
+          role="status"
+        >
+          <span className="text-xs font-semibold text-warn">Unsaved changes</span>
+          <Button size="sm" loading={saving} onClick={() => void saveProfile()}>
+            Save
+          </Button>
+        </div>
+      )}
 
       <div className="px-6 pb-6 pt-5">
         <Card className="p-4">
