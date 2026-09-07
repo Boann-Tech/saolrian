@@ -113,7 +113,7 @@ export default function AddFood() {
   const lookupBarcode = async (codeArg?: string) => {
     const code = (codeArg ?? barcodeVal).trim();
     if (!/^\d{6,}$/.test(code)) {
-      toast('Enter a numeric barcode (at least 6 digits.', 'err');
+      toast('Enter a numeric barcode (at least 6 digits).', 'err');
       return;
     }
     try {
