@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import type { Summary } from '../lib/types';
 import { todayISO, greeting, formatInt } from '../lib/format';
 import { getClient } from '../lib/pb';
+import { deleteEntryWithUndo, restoreEntry } from '../lib/diary';
 import { normalizeSummary } from '../lib/normalize';
+import { DEFAULT_STEPS_GOAL, DEFAULT_WATER_GOAL_ML } from '../lib/nutrition';
+import { defaultUnits, flOzToMl, mlToFlOz, volumeUnit } from '../lib/units';
 import { MealGroup } from '../components/MealGroup';
+import { EditableMetric } from '../components/EditableMetric';
+import { DeleteSlotDialog, useSlotDeletion } from '../components/DeleteSlotDialog';
 import {
   Button,
   Card,
   CardTitle,
   Empty,
   Meter,
-  Modal,
   ProgressBar,
   Spinner,
   StatTile,
@@ -36,12 +40,6 @@ export default function Today() {
   const [waterMl, setWaterMl] = useState<number>(0);
   const [steps, setSteps] = useState<number>(0);
   const [savingMetric, setSavingMetric] = useState(false);
-  const [editingWater, setEditingWater] = useState(false);
-  const [waterInput, setWaterInput] = useState('');
-  const [confirmDeleteSlot, setConfirmDeleteSlot] = useState<{ id: string; name: string; count: number } | null>(
-    null,
-  );
-  const [deletingSlot, setDeletingSlot] = useState(false);
 
   const load = useCallback(async () => {
     if (!endpoint) return;
@@ -91,6 +89,15 @@ export default function Today() {
   const remaining = budget != null ? budget - eaten : null;
   const over = remaining != null && remaining < 0;
   const firstName = (profile?.['name'] as string | undefined) ?? '';
+  const targets = summary?.targets;
+  const waterGoal = targets?.water_ml || DEFAULT_WATER_GOAL_ML;
+  const units =
+    (profile?.['units'] as 'metric' | 'imperial' | undefined) ??
+    defaultUnits(typeof navigator !== 'undefined' ? navigator.language : undefined);
+  // Water is stored in ml; imperial users think in fl oz.
+  const toDisplayMl = (ml: number) => (units === 'imperial' ? Math.round(mlToFlOz(ml)) : ml);
+  const fromDisplayMl = (v: number) => (units === 'imperial' ? Math.round(flOzToMl(v)) : v);
+  const stepsGoal = targets?.steps || DEFAULT_STEPS_GOAL;
 
   const loadMetrics = async (pb: ReturnType<typeof getClient>) => {
     try {
@@ -137,48 +144,37 @@ export default function Today() {
     }
   };
 
-  const commitWater = async () => {
-    const next = Math.max(0, Math.round(Number(waterInput)) || 0);
-    setEditingWater(false);
-    if (next !== waterMl) await upsertMetric({ water_ml: next });
-  };
 
-  const requestDeleteSlot = async (id: string, name: string) => {
-    const pb = getClient(endpoint);
-    try {
-      const res = await pb.collection('diary_entries').getList(1, 1, { filter: `meal_slot="${id}"` });
-      if (res.totalItems === 0) {
-        await doDeleteSlot(id, name);
-      } else {
-        setConfirmDeleteSlot({ id, name, count: res.totalItems });
-      }
-    } catch (ex) {
-      toast(ex instanceof Error ? ex.message : 'Could not check meal slot', 'err');
-    }
-  };
-
-  const doDeleteSlot = async (id: string, name: string) => {
-    const pb = getClient(endpoint);
-    setDeletingSlot(true);
-    try {
-      await pb.collection('meal_slots').delete(id);
+  const slotDeletion = useSlotDeletion(
+    () => getClient(endpoint),
+    async (name) => {
       await refreshSlots();
       await load();
       toast(`Deleted “${name}”`);
-    } catch (ex) {
-      toast(ex instanceof Error ? ex.message : 'Could not delete meal slot', 'err');
-    } finally {
-      setDeletingSlot(false);
-      setConfirmDeleteSlot(null);
-    }
-  };
+    },
+    (msg) => toast(msg, 'err'),
+  );
 
   const destroyEntry = async (entryId: string) => {
     const pb = getClient(endpoint);
     try {
-      await pb.collection('diary_entries').delete(entryId);
+      const snapshot = await deleteEntryWithUndo(pb, entryId);
       await load();
-      toast('Entry deleted');
+      toast('Entry deleted', {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            void (async () => {
+              try {
+                await restoreEntry(pb, snapshot);
+                await load();
+              } catch (ex) {
+                toast(ex instanceof Error ? ex.message : 'Could not restore that entry', 'err');
+              }
+            })();
+          },
+        },
+      });
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Could not delete entry', 'err');
     }
@@ -209,7 +205,7 @@ export default function Today() {
               </small>
             </div>
           </div>
-          {budget != null && (
+          {budget != null ? (
             <div
               className={cn(
                 'rounded-full px-3 py-1.5 text-right text-sm font-semibold',
@@ -221,6 +217,15 @@ export default function Today() {
                 {pct}% of budget{over ? ' — over' : ''}
               </small>
             </div>
+          ) : (
+            summary?.budget_message && (
+              <div className="max-w-[52%] text-right text-2xs leading-normal text-text-muted">
+                {summary.budget_message}
+                <Link to="/profile" className="mt-1 block font-semibold text-accent-ink">
+                  Update your profile →
+                </Link>
+              </div>
+            )
           )}
         </Card>
       </section>
@@ -269,12 +274,20 @@ export default function Today() {
             <div className="flex gap-2.5">
               {(
                 [
-                  ['Protein', summary.totals.protein],
-                  ['Carbs', summary.totals.carbs],
-                  ['Fat', summary.totals.fat],
+                  ['Protein', summary.totals.protein, targets?.protein_g],
+                  ['Carbs', summary.totals.carbs, targets?.carbs_g],
+                  ['Fat', summary.totals.fat, targets?.fat_g],
                 ] as const
-              ).map(([label, val]) => (
-                <StatTile key={label} label={label} value={`${formatInt(val)}g`} sub="/ 150" progress={(val / 150) * 100} />
+              ).map(([label, val, goal]) => (
+                <StatTile
+                  key={label}
+                  label={label}
+                  value={`${formatInt(val)}g`}
+                  // No goal without a budget to split — show the intake alone
+                  // rather than inventing a target to measure it against.
+                  sub={goal ? `/ ${formatInt(goal)}` : undefined}
+                  progress={goal ? (val / goal) * 100 : undefined}
+                />
               ))}
             </div>
           </section>
@@ -297,10 +310,10 @@ export default function Today() {
               <MealGroup
                 key={g.slot_id}
                 group={g}
-                onAddFood={() => navigate('/add')}
+                date={todayISO()}
                 onDelete={(id) => void destroyEntry(id)}
                 onEdit={(id) => navigate(`/edit/${id}`)}
-                onDeleteSlot={() => void requestDeleteSlot(g.slot_id, g.slot_name)}
+                onDeleteSlot={() => void slotDeletion.request(g.slot_id, g.slot_name)}
               />
             ))}
 
@@ -331,41 +344,19 @@ export default function Today() {
             <Card>
               <CardTitle>Hydration</CardTitle>
               <div className="flex items-baseline justify-between">
-                <span className="flex items-baseline gap-1 text-xl font-bold">
-                  {editingWater ? (
-                    <input
-                      type="number"
-                      min={0}
-                      autoFocus
-                      className="w-20 rounded-md border-[1.5px] border-accent-line bg-raised px-1.5 py-0.5 text-xl font-bold text-text outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
-                      value={waterInput}
-                      onChange={(e) => setWaterInput(e.target.value)}
-                      onBlur={() => void commitWater()}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void commitWater();
-                        if (e.key === 'Escape') setEditingWater(false);
-                      }}
-                    />
-                  ) : (
-                    <button
-                      className="rounded-md underline decoration-dotted decoration-text-faint underline-offset-4 hover:decoration-accent"
-                      onClick={() => {
-                        setWaterInput(String(waterMl));
-                        setEditingWater(true);
-                      }}
-                      aria-label="Edit water amount"
-                    >
-                      {formatInt(waterMl)}
-                    </button>
-                  )}
-                  <small className="text-sm font-medium text-text-faint">/ {formatInt(2000)} ml</small>
-                </span>
+                <EditableMetric
+                  value={toDisplayMl(waterMl)}
+                  goal={toDisplayMl(waterGoal)}
+                  unit={volumeUnit(units)}
+                  label="water amount"
+                  onCommit={(next) => void upsertMetric({ water_ml: fromDisplayMl(next) })}
+                />
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
                   <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
                   water
                 </span>
               </div>
-              <ProgressBar pct={(waterMl / 2000) * 100} tone="good" />
+              <ProgressBar pct={(waterMl / waterGoal) * 100} tone="good" />
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   variant="outline"
@@ -373,7 +364,7 @@ export default function Today() {
                   disabled={savingMetric}
                   onClick={() => void upsertMetric({ water_ml: waterMl + 250 })}
                 >
-                  +250 ml
+                  +{units === 'imperial' ? '8 fl oz' : '250 ml'}
                 </Button>
                 <Button
                   variant="outline"
@@ -381,7 +372,7 @@ export default function Today() {
                   disabled={savingMetric}
                   onClick={() => void upsertMetric({ water_ml: waterMl + 500 })}
                 >
-                  +500 ml
+                  +{units === 'imperial' ? '16 fl oz' : '500 ml'}
                 </Button>
               </div>
             </Card>
@@ -389,15 +380,19 @@ export default function Today() {
             <Card className="mt-4">
               <CardTitle>Steps</CardTitle>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold">
-                  {formatInt(steps)} <small className="text-sm font-medium text-text-faint">/ {formatInt(10000)} steps</small>
-                </span>
+                <EditableMetric
+                  value={steps}
+                  goal={stepsGoal}
+                  unit="steps"
+                  label="step count"
+                  onCommit={(next) => void upsertMetric({ steps: next })}
+                />
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
                   <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
                   manual
                 </span>
               </div>
-              <ProgressBar pct={(steps / 10000) * 100} tone="good" />
+              <ProgressBar pct={(steps / stepsGoal) * 100} tone="good" />
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   variant="outline"
@@ -421,29 +416,12 @@ export default function Today() {
         </>
       )}
 
-      <Modal
-        open={!!confirmDeleteSlot}
-        onClose={() => setConfirmDeleteSlot(null)}
-        title={`Delete “${confirmDeleteSlot?.name}”?`}
-      >
-        <p className="text-sm text-text-muted">
-          This removes the meal category and permanently deletes {confirmDeleteSlot?.count} logged item
-          {confirmDeleteSlot?.count === 1 ? '' : 's'} across all dates, not just today. This can’t be undone.
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => setConfirmDeleteSlot(null)}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            loading={deletingSlot}
-            onClick={() => confirmDeleteSlot && void doDeleteSlot(confirmDeleteSlot.id, confirmDeleteSlot.name)}
-          >
-            Delete
-          </Button>
-        </div>
-      </Modal>
+      <DeleteSlotDialog
+        pending={slotDeletion.pending}
+        deleting={slotDeletion.deleting}
+        onCancel={slotDeletion.cancel}
+        onConfirm={(p) => void slotDeletion.confirm(p.id, p.name)}
+      />
     </div>
   );
 }

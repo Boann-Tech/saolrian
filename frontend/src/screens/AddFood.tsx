@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import type { Food } from '../lib/types';
 import { getClient, UnreachableError } from '../lib/pb';
 import { createDiaryEntry } from '../lib/offline';
 import { foodMath, perServing } from '../lib/nutrition';
 import { listRecipes } from '../lib/recipes';
+import { defaultSlotForTime, type LoggedAt } from '../lib/slotDefault';
+import { recentFoods, type DiaryHistoryRow } from '../lib/recentFoods';
 import { normalizeSearch, normalizeBarcode } from '../lib/normalize';
 import type { Recipe } from '../lib/types';
-import { formatInt } from '../lib/format';
+import { formatInt, loggedAtISO, todayISO } from '../lib/format';
 import { Button, Card, Empty, Field, Sheet, Spinner, Stepper, TextInput, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
 import ScanSheet from '../components/ScanSheet';
@@ -18,6 +20,9 @@ import ScanSheet from '../components/ScanSheet';
  * kcal readout and pill meal-slot picker. */
 
 type Stage = 'search' | 'detail' | 'recipes' | 'recipeDetail';
+
+/** Shared so the two entry points can't drift apart again. */
+export const BARCODE_HINT = 'Enter a numeric barcode (at least 6 digits).';
 
 /* barcode scan glyph, from the prototype */
 const scanGlyph = (
@@ -35,16 +40,37 @@ const IC_CHIP =
 const NCELL = 'min-w-0 flex-1 rounded-md border px-2.5 py-2.5';
 const NLABEL = 'mt-1 text-2xs font-semibold uppercase tracking-[.04em] text-text-faint';
 
+/** Stages are URL state, not component state: each one is a history entry, so
+ *  the header back button and the browser/hardware back button both step back
+ *  through the flow instead of leaving it in one jump. */
 export default function AddFood() {
   const { endpoint, slots, refreshSlots, userId } = useApp();
   const navigate = useNavigate();
   const toast = useToast();
+  const [params, setParams] = useSearchParams();
+
+  // Which day this screen is logging to. History and the per-meal "add" links
+  // pass ?date= (and ?slot=) so a forgotten day can be filled in; with neither,
+  // this is the plain "log something now" case.
+  const targetDate = params.get('date') || todayISO();
+  const urlStage = (params.get('stage') as Stage | null) ?? 'search';
+  const setStage = (next: Stage) => {
+    const nextParams = new URLSearchParams(params);
+    if (next === 'search') nextParams.delete('stage');
+    else nextParams.set('stage', next);
+    setParams(nextParams);
+  };
+  const slotParam = params.get('slot');
+  const isToday = targetDate === todayISO();
+  const loggedAt = () => loggedAtISO(targetDate);
+  /** Where to return after logging — back to the day the entry landed on. */
+  const doneHref = isToday ? '/today' : `/history?date=${targetDate}`;
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Food[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchErr, setSearchErr] = useState('');
-  const [stage, setStage] = useState<Stage>('search');
+
   const [selected, setSelected] = useState<Food | null>(null);
   const [grams, setGrams] = useState(100);
   const [slotId, setSlotId] = useState<string>('');
@@ -59,6 +85,8 @@ export default function AddFood() {
   const [qaF, setQaF] = useState('');
   const [qaAdding, setQaAdding] = useState(false);
   const [qaErr, setQaErr] = useState('');
+  // One history fetch feeds both the slot inference and the recents list.
+  const [slotHistory, setSlotHistory] = useState<(LoggedAt & DiaryHistoryRow)[] | null>(null);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
@@ -100,9 +128,37 @@ export default function AddFood() {
     return () => window.clearTimeout(debounce.current);
   }, [query, endpoint]);
 
+  // When each slot is actually used, so the default can match the time of day
+  // instead of always landing on whichever slot sorts first.
   useEffect(() => {
-    if (!slotId && slots.length > 0) setSlotId(slots[0].id);
-  }, [slots, slotId]);
+    if (!endpoint || !userId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await getClient(endpoint)
+          .collection('diary_entries')
+          .getList(1, 200, { filter: `user="${userId}"`, sort: '-logged_at' });
+        if (!cancelled) setSlotHistory(res.items as unknown as (LoggedAt & DiaryHistoryRow)[]);
+      } catch {
+        if (!cancelled) setSlotHistory([]); // fall back to the even-day split
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [endpoint, userId]);
+
+  useEffect(() => {
+    if (slotId || slots.length === 0) return;
+    // An explicit ?slot= is a deliberate choice and always wins.
+    if (slotParam && slots.some((s) => s.id === slotParam)) {
+      setSlotId(slotParam);
+      return;
+    }
+    // Otherwise wait for the history before guessing, so the guess is informed.
+    if (slotHistory === null) return;
+    setSlotId(defaultSlotForTime(slots, slotHistory) ?? slots[0].id);
+  }, [slots, slotId, slotParam, slotHistory]);
 
   const openDetail = (food: Food) => {
     setSelected(food);
@@ -113,7 +169,7 @@ export default function AddFood() {
   const lookupBarcode = async (codeArg?: string) => {
     const code = (codeArg ?? barcodeVal).trim();
     if (!/^\d{6,}$/.test(code)) {
-      toast('Enter a numeric barcode (at least 6 digits.', 'err');
+      toast(BARCODE_HINT, 'err');
       return;
     }
     try {
@@ -170,7 +226,7 @@ export default function AddFood() {
       protein: num(qaP),
       carbs: num(qaC),
       fat: num(qaF),
-      logged_at: new Date().toISOString(),
+      logged_at: loggedAt(),
     });
     setQaAdding(false);
     if (result.queued) {
@@ -186,7 +242,7 @@ export default function AddFood() {
     setQaP('');
     setQaC('');
     setQaF('');
-    navigate('/today');
+    navigate(doneHref);
   };
 
   const addEntry = async () => {
@@ -208,7 +264,7 @@ export default function AddFood() {
       protein: m.protein,
       carbs: m.carbs,
       fat: m.fat,
-      logged_at: new Date().toISOString(),
+      logged_at: loggedAt(),
     });
     setAdding(false);
     if (result.queued) {
@@ -219,7 +275,7 @@ export default function AddFood() {
     } else {
       toast(`Added ${selected.name} · ${formatInt(m.kcal)} kcal`);
     }
-    navigate('/today');
+    navigate(doneHref);
   };
 
   const openRecipes = async () => {
@@ -278,7 +334,7 @@ export default function AddFood() {
         protein: recipeLogMath.protein,
         carbs: recipeLogMath.carbs,
         fat: recipeLogMath.fat,
-        logged_at: new Date().toISOString(),
+        logged_at: loggedAt(),
       },
       'recipe',
     );
@@ -291,8 +347,17 @@ export default function AddFood() {
     } else {
       toast(`Logged ${selectedRecipe.name}`);
     }
-    navigate('/today');
+    navigate(doneHref);
   };
+
+  const recents = recentFoods(slotHistory ?? []);
+
+  // Guard a stage whose payload lives in memory: a reload straight onto
+  // ?stage=detail has no food to show, so fall back to the search stage.
+  const stage: Stage =
+    (urlStage === 'detail' && !selected) || (urlStage === 'recipeDetail' && !selectedRecipe)
+      ? 'search'
+      : urlStage;
 
   const math = selected
     ? foodMath(
@@ -344,8 +409,8 @@ export default function AddFood() {
     <div className="pb-6">
       <div className="flex items-center justify-between px-6 pb-3 pt-4">
         <button
-          className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
-          onClick={() => navigate('/today')}
+          className="flex h-11 w-11 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
+          onClick={() => (stage === 'search' ? navigate(doneHref) : navigate(-1))}
           aria-label="Back"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -356,6 +421,21 @@ export default function AddFood() {
         <span className="w-9" />
       </div>
 
+      {!isToday && (
+        <div
+          data-testid="logging-to"
+          className="mx-6 mb-1 rounded-md border border-accent-line bg-accent-soft px-3 py-2 text-xs font-semibold text-accent-ink"
+        >
+          Logging to{' '}
+          {new Date(`${targetDate}T12:00:00`).toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
+        </div>
+      )}
+
+      {stage === 'search' && (
       <div className="relative mt-0.5 px-6">
         <TextInput
           type="text"
@@ -374,6 +454,7 @@ export default function AddFood() {
           {scanGlyph}
         </button>
       </div>
+      )}
 
       {stage === 'search' && (
         <div className="px-6">
@@ -412,6 +493,42 @@ export default function AddFood() {
             </span>
           </button>
 
+          {query.trim().length < 2 && recents.length > 0 && (
+            <div className="pt-4">
+              <div className="mb-3 flex items-baseline justify-between">
+                <h2 className="text-md font-bold tracking-[-.01em]">Recently logged</h2>
+                <span className="text-xs font-semibold text-text-faint">tap to log again</span>
+              </div>
+              <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised shadow-card">
+                {recents.map((f) => (
+                  <button
+                    key={`${f.name}-${f.brand ?? ''}`}
+                    type="button"
+                    className="flex w-full items-center gap-3 p-3.5 text-left"
+                    onClick={() => openDetail(f)}
+                  >
+                    <div className={IC_CHIP}>
+                      <svg viewBox="0 0 24 24" aria-hidden>
+                        <path d="M12 7v5l3 2" />
+                        <circle cx="12" cy="12" r="9" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-base font-semibold tracking-[-.01em]">{f.name}</div>
+                      <div className="mt-0.5 text-xs text-text-faint">
+                        {f.brand || 'Generic'} · {formatInt(f.default_serving_g ?? 0)} g
+                      </div>
+                    </div>
+                    <div className="whitespace-nowrap text-base font-bold tracking-[-.01em]">
+                      {formatInt(((f.kcal_per_100g ?? 0) * (f.default_serving_g ?? 0)) / 100)}{' '}
+                      <small className="text-2xs font-medium text-text-faint">kcal</small>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="pb-4">
             {searching && (
               <div className="flex items-center gap-2 pt-4 text-sm text-text-faint">
@@ -434,15 +551,11 @@ export default function AddFood() {
                 </div>
                 <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised shadow-card">
                   {results.map((f, i) => (
-                    <div
+                    <button
                       key={`${f.name}-${f.brand ?? ''}-${i}`}
-                      className="flex items-center gap-3 p-3.5"
-                      role="button"
-                      tabIndex={0}
+                      type="button"
+                      className="flex w-full items-center gap-3 p-3.5 text-left"
                       onClick={() => openDetail(f)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') openDetail(f);
-                      }}
                     >
                       <div className={IC_CHIP}>
                         <svg viewBox="0 0 24 24" aria-hidden>
@@ -459,12 +572,12 @@ export default function AddFood() {
                       <div className="whitespace-nowrap text-base font-bold tracking-[-.01em]">
                         {formatInt(f.kcal_per_100g)} <small className="text-2xs font-medium text-text-faint">kcal/100g</small>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
             )}
-            {query.trim().length < 2 && !searchErr && (
+            {query.trim().length < 2 && !searchErr && recents.length === 0 && (
               <Empty>Type at least 2 characters to search the food database.</Empty>
             )}
           </div>
@@ -516,7 +629,18 @@ export default function AddFood() {
                 inputMode="numeric"
                 aria-label="Serving size in grams"
               />
-              <span className="ml-auto text-2xs text-text-faint">Source: Open Food Facts ↗</span>
+              {selected.barcode ? (
+                <a
+                  className="ml-auto text-2xs text-text-faint underline underline-offset-2"
+                  href={`https://world.openfoodfacts.org/product/${selected.barcode}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  Source: Open Food Facts ↗
+                </a>
+              ) : (
+                <span className="ml-auto text-2xs text-text-faint">Source: Open Food Facts</span>
+              )}
             </div>
 
             <div className="mb-1.5 mt-3.5 text-xs font-semibold uppercase tracking-[.05em] text-text-faint">

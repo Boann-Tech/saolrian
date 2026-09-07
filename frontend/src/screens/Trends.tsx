@@ -94,7 +94,20 @@ export default function Trends() {
         ]}
       />
 
-      {loading && <Spinner />}
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-text-muted">
+          <Spinner /> Loading your trends…
+        </div>
+      )}
+
+      {!loading && data && cards.length === 0 && (
+        <Card>
+          <p className="text-sm text-text-muted">
+            No cards selected. Use <b className="font-semibold text-text">Customise</b> to choose what you want
+            to see here.
+          </p>
+        </Card>
+      )}
 
       {!loading && data && (
         <div className="flex flex-col gap-3">
@@ -134,6 +147,9 @@ export default function Trends() {
             </label>
           ))}
         </div>
+        <Button className="mt-4" block onClick={() => setCustomising(false)}>
+          Done
+        </Button>
       </Sheet>
     </div>
   );

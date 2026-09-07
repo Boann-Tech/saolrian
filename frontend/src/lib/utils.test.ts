@@ -3,6 +3,8 @@ import {
   computeBmr,
   computeTdee,
   computeCalorieTarget,
+  computeCalorieTargetDetail,
+  CALORIE_FLOOR,
   macroSplit,
   foodMath,
   sumIngredients,
@@ -23,6 +25,14 @@ const adult = {
   tdee_formula: 'mifflin' as const,
 };
 
+const petite = {
+  ...adult,
+  sex: 'female' as const,
+  weight_kg: 50,
+  height_cm: 155,
+  activity_level: 'sedentary' as const,
+};
+
 describe('nutrition math (must mirror the Go backend)', () => {
   it('computes Mifflin-St Jeor BMR', () => {
     // 10*80 + 6.25*180 - 5*36 + 5 = 800 + 1125 - 180 + 5 = 1750
@@ -40,11 +50,39 @@ describe('nutrition math (must mirror the Go backend)', () => {
     expect(computeTdee({ ...adult, weight_kg: null })).toBeNull();
   });
 
-  it('applies goal adjustments', () => {
+  it('derives the goal adjustment from the weekly rate, as the backend does', () => {
     const tdee = computeTdee(adult)!;
-    expect(computeCalorieTarget(adult, 'maintain')).toBe(tdee);
-    expect(computeCalorieTarget(adult, 'lose')).toBe(tdee - 500);
-    expect(computeCalorieTarget(adult, 'gain')).toBe(tdee + 350);
+    // 7700 kcal per kg of bodyweight, spread across 7 days.
+    expect(computeCalorieTarget(adult, 'lose', -1)).toBeCloseTo(tdee - 1100, 5);
+    expect(computeCalorieTarget(adult, 'lose', -0.5)).toBeCloseTo(tdee - 550, 5);
+    expect(computeCalorieTarget(adult, 'gain', 0.25)).toBeCloseTo(tdee + 275, 5);
+  });
+
+  it('ignores the rate when the goal is maintain', () => {
+    const tdee = computeTdee(adult)!;
+    expect(computeCalorieTarget(adult, 'maintain', -1)).toBe(tdee);
+  });
+
+  it('treats a missing rate as no adjustment', () => {
+    const tdee = computeTdee(adult)!;
+    expect(computeCalorieTarget(adult, 'lose')).toBe(tdee);
+  });
+
+  it('never returns a target below the calorie floor', () => {
+    // BMR = 10*50 + 6.25*155 - 5*36 - 161 = 1127.75; x1.2 sedentary = 1353.3.
+    // A 1 kg/wk deficit would ask for 253 kcal/day.
+    expect(computeCalorieTarget(petite, 'lose', -1)).toBe(CALORIE_FLOOR.female);
+  });
+
+  it('reports whether the floor capped the requested rate', () => {
+    const capped = computeCalorieTargetDetail(petite, 'lose', -1)!;
+    expect(capped.capped).toBe(true);
+    expect(capped.target).toBe(CALORIE_FLOOR.female);
+    expect(capped.uncapped).toBeLessThan(CALORIE_FLOOR.female);
+
+    const fine = computeCalorieTargetDetail(adult, 'lose', -0.5)!;
+    expect(fine.capped).toBe(false);
+    expect(fine.target).toBeCloseTo(fine.uncapped, 5);
   });
 
   it('clamps carbs to 0% when protein+fat exceed 100', () => {

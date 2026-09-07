@@ -2,19 +2,27 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import type { ActivityLevel, Goal, Profile, Sex, TdeeFormula } from '../lib/types';
-import { getClient } from '../lib/pb';
+import { getClient, HOSTED_ENDPOINT } from '../lib/pb';
 import {
   ACTIVITY_FACTORS,
   ACTIVITY_LEVEL_HINT,
   DEFAULT_MACROS,
+  DEFAULT_STEPS_GOAL,
+  DEFAULT_WATER_GOAL_ML,
   FORMULA_LABEL,
   computeBmr,
-  computeCalorieTarget,
+  computeCalorieTargetDetail,
   computeTdee,
   macroSplit,
+  signedRate,
 } from '../lib/nutrition';
+import { RatePicker } from '../components/RatePicker';
+import { DeleteSlotDialog, useSlotDeletion } from '../components/DeleteSlotDialog';
 import { formatInt } from '../lib/format';
-import { Button, Card, Field, Segmented, Select, Sheet, TextInput, useToast } from '../components/ui';
+import {
+  cmToFeetInches, defaultUnits, feetInchesToCm, kgToLb, lbToKg, weightUnit, type Units,
+} from '../lib/units';
+import { Button, Card, Field, Modal, Segmented, Select, Sheet, TextInput, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
 
 /** Profile & goals — prototype view: avatar card, sectioned hairline
@@ -34,13 +42,14 @@ const THEME_PRESETS = [
 
 const HINT = 'text-sm leading-normal text-text-muted';
 const ICON_BTN =
-  'flex h-7 w-7 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
+  'flex h-11 w-11 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
   'disabled:opacity-35 disabled:cursor-default hover:border-accent-line hover:text-accent-ink';
 const ICON_BTN_DANGER =
-  'flex h-7 w-7 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
+  'flex h-11 w-11 items-center justify-center rounded-md border border-border bg-raised text-xs text-text-muted ' +
   'disabled:opacity-35 disabled:cursor-default hover:border-danger hover:text-danger';
 
 interface ProfileForm {
+  units: Units;
   height_cm: string;
   birth_year: string;
   sex: Sex | '';
@@ -48,10 +57,13 @@ interface ProfileForm {
   body_fat_pct: string;
   weight_kg: string;
   tdee_formula: TdeeFormula;
+  water_goal_ml: string;
+  steps_goal: string;
 }
 
 function fromProfile(p: Profile | null): ProfileForm {
   return {
+    units: p?.units ?? defaultUnits(typeof navigator !== 'undefined' ? navigator.language : undefined),
     height_cm: p?.height_cm != null ? String(p.height_cm) : '',
     birth_year: p?.birth_year != null ? String(p.birth_year) : '',
     sex: p?.sex ?? '',
@@ -61,21 +73,44 @@ function fromProfile(p: Profile | null): ProfileForm {
     // effect below seeds it from `latestWeight` once that resolves.
     weight_kg: '',
     tdee_formula: p?.tdee_formula ?? 'mifflin',
+    // 0/absent means "use the default", matching the backend's fallback.
+    water_goal_ml: String(p?.water_goal_ml || DEFAULT_WATER_GOAL_ML),
+    steps_goal: String(p?.steps_goal || DEFAULT_STEPS_GOAL),
   };
 }
 
 export default function ProfileGoals() {
-  const { endpoint, profile, latestWeight, refreshProfile, slots, refreshSlots, theme, setTheme, mode, setMode } = useApp();
+  const { endpoint, pb, profile, latestWeight, refreshProfile, slots, refreshSlots, theme, setTheme, mode, setMode } = useApp();
   const toast = useToast();
   const [form, setForm] = useState<ProfileForm>(() => fromProfile(profile));
   const [saving, setSaving] = useState(false);
   const [goal, setGoal] = useState<Goal>(profile?.goal ?? 'maintain');
+  // Signed kg/week. The profile stores it signed already; fall back to a
+  // moderate 0.5 kg/wk in whichever direction the goal points.
+  const [rate, setRate] = useState<number>(() =>
+    signedRate(profile?.goal ?? 'maintain', profile?.goal_rate ?? -0.5),
+  );
   const [macros, setMacros] = useState({
     protein_pct: profile?.protein_pct ?? DEFAULT_MACROS.protein_pct,
     carbs_pct: profile?.carbs_pct ?? DEFAULT_MACROS.carbs_pct,
     fat_pct: profile?.fat_pct ?? DEFAULT_MACROS.fat_pct,
   });
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+
+  // Everything on this screen is saved by one button. The screen used to mix
+  // three models — macros per keystroke, goal and theme on tap, the rest only
+  // via Save — with nothing to tell the user which was which.
+  const baseline = useRef('');
+  const snapshot = JSON.stringify({ form, goal, rate, macros });
+  const dirty = baseline.current !== '' && baseline.current !== snapshot;
+
+  /** Clears the session only. The endpoint stays put so the next sign-in
+   *  targets the same server; Auth offers "Change server" for the rest. */
+  const signOut = () => {
+    setConfirmSignOut(false);
+    pb?.authStore.clear();
+  };
 
   // Re-seed the form only when the *record* changes (initial load, sign-in as
   // someone else) — not on every reference change, since background partial
@@ -89,8 +124,19 @@ export default function ProfileGoals() {
     if (syncedProfileId.current === id) return;
     syncedProfileId.current = id;
     seededWeightId.current = undefined; // let the weight effect re-seed for this record
-    setForm(fromProfile(profile));
-    if (profile?.goal) setGoal(profile.goal);
+    const nextForm = fromProfile(profile);
+    const nextGoal = profile?.goal ?? 'maintain';
+    const nextRate = signedRate(nextGoal, profile?.goal_rate ?? -0.5);
+    const nextMacros = {
+      protein_pct: profile?.protein_pct ?? DEFAULT_MACROS.protein_pct,
+      carbs_pct: profile?.carbs_pct ?? DEFAULT_MACROS.carbs_pct,
+      fat_pct: profile?.fat_pct ?? DEFAULT_MACROS.fat_pct,
+    };
+    setForm(nextForm);
+    setGoal(nextGoal);
+    setRate(nextRate);
+    setMacros(nextMacros);
+    baseline.current = JSON.stringify({ form: nextForm, goal: nextGoal, rate: nextRate, macros: nextMacros });
   }, [profile]);
 
   // Seed the Weight field with the user's current weight. It comes from its
@@ -102,8 +148,42 @@ export default function ProfileGoals() {
     if (seededWeightId.current === id) return;
     if (latestWeight == null) return;
     seededWeightId.current = id;
-    setForm((f) => ({ ...f, weight_kg: String(latestWeight) }));
+    setForm((f) => {
+      const next = { ...f, weight_kg: String(latestWeight) };
+      // Seeding isn't an edit — move the baseline with it.
+      baseline.current = JSON.stringify({ form: next, goal, rate, macros });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, latestWeight]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  // Storage stays metric; these convert only at the input boundary.
+  const heightImperial = cmToFeetInches(parseFloat(form.height_cm) || 0);
+  const setHeightFromImperial = (feet: number, inches: number) =>
+    setForm((f) => ({ ...f, height_cm: String(Math.round(feetInchesToCm(feet, inches) * 100) / 100) }));
+
+  const displayWeight = (() => {
+    if (form.weight_kg === '') return '';
+    const kg = parseFloat(form.weight_kg);
+    if (!Number.isFinite(kg)) return form.weight_kg;
+    return form.units === 'imperial' ? String(Math.round(kgToLb(kg) * 10) / 10) : form.weight_kg;
+  })();
+  const setWeightFromDisplay = (raw: string) => {
+    if (raw === '') return setForm((f) => ({ ...f, weight_kg: '' }));
+    const n = parseFloat(raw);
+    if (!Number.isFinite(n)) return setForm((f) => ({ ...f, weight_kg: raw }));
+    setForm((f) => ({
+      ...f,
+      weight_kg: f.units === 'imperial' ? String(Math.round(lbToKg(n) * 100) / 100) : raw,
+    }));
+  };
 
   const num = (s: string): number | null => {
     const v = parseFloat(s);
@@ -121,7 +201,8 @@ export default function ProfileGoals() {
   };
 
   const tdee = computeTdee(input);
-  const target = computeCalorieTarget(input, goal);
+  const targetDetail = computeCalorieTargetDetail(input, goal, rate);
+  const target = targetDetail?.target ?? null;
   const split = macroSplit(target ?? 0, macros.protein_pct, macros.fat_pct);
 
   const saveProfile = async () => {
@@ -136,7 +217,11 @@ export default function ProfileGoals() {
         activity_level: form.activity_level || null,
         body_fat_pct: num(form.body_fat_pct),
         tdee_formula: form.tdee_formula,
+        units: form.units,
+        water_goal_ml: num(form.water_goal_ml),
+        steps_goal: num(form.steps_goal),
         goal,
+        goal_rate: signedRate(goal, rate),
         protein_pct: macros.protein_pct,
         carbs_pct: split.carbsPct,
         fat_pct: macros.fat_pct,
@@ -159,29 +244,13 @@ export default function ProfileGoals() {
           source: 'manual',
         });
       }
+      baseline.current = JSON.stringify({ form, goal, rate, macros });
       await refreshProfile();
       toast('Profile saved');
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Could not save profile', 'err');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const saveGoalMacros = async (g: Goal, m: typeof macros) => {
-    if (!profile) return;
-    const pb = getClient(endpoint);
-    const s = macroSplit(target ?? 0, m.protein_pct, m.fat_pct);
-    try {
-      await pb.collection('profiles').update(profile.id, {
-        goal: g,
-        protein_pct: m.protein_pct,
-        carbs_pct: s.carbsPct,
-        fat_pct: m.fat_pct,
-      });
-      await refreshProfile();
-    } catch {
-      /* silent — the main Save button also persists these */
     }
   };
 
@@ -212,15 +281,16 @@ export default function ProfileGoals() {
     }
   };
 
-  const removeSlot = async (id: string) => {
-    const pb = getClient(endpoint);
-    try {
-      await pb.collection('meal_slots').delete(id);
+  // Removing a slot destroys every entry ever logged in it, on every date —
+  // the same guard Today uses, rather than deleting behind a bare ✕.
+  const slotDeletion = useSlotDeletion(
+    () => getClient(endpoint),
+    async (name) => {
       await refreshSlots();
-    } catch {
-      toast('Could not remove slot', 'err');
-    }
-  };
+      toast(`Deleted “${name}”`);
+    },
+    (msg) => toast(msg, 'err'),
+  );
 
   /* ----- Theme ----- */
   const applyTheme = async (color: string) => {
@@ -234,6 +304,18 @@ export default function ProfileGoals() {
       }
     }
   };
+
+  /** Self-hosting is the headline feature — calling a self-hosted instance
+   *  "Hosted" is the one label this screen must not get wrong. */
+  const isHosted = endpoint === HOSTED_ENDPOINT;
+
+  const hostLabel = (() => {
+    try {
+      return new URL(endpoint).host;
+    } catch {
+      return endpoint;
+    }
+  })();
 
   const initials = (() => {
     const n = ((profile?.['name'] as string | undefined) ?? '').trim();
@@ -259,13 +341,10 @@ export default function ProfileGoals() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-md font-bold">{(profile?.['name'] as string) || 'Signed in'}</div>
-            <div className="mt-0.5 text-xs text-text-faint">
-              {profile ? 'Profile on ' : 'Sign-in active · '}
-              {new URL(endpoint).host}
-            </div>
+            <div className="mt-0.5 truncate text-xs text-text-faint">{hostLabel}</div>
             <div className="mt-1 flex items-center gap-1.5 text-2xs font-semibold text-good-ink">
-              <span className="inline-block h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />{' '}
-              Hosted · {new URL(endpoint).host}
+              <span className="inline-block h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
+              <span>{isHosted ? 'Hosted' : 'Self-hosted'}</span>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={() => setSheetOpen(true)}>
@@ -281,14 +360,36 @@ export default function ProfileGoals() {
         </div>
         <Card className="p-4">
           <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
-            <Field label="Height (cm)">
-              <TextInput
-                type="number"
-                min={0}
-                value={form.height_cm}
-                onChange={(e) => setForm({ ...form, height_cm: e.target.value })}
-              />
-            </Field>
+            {form.units === 'imperial' ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Height (feet)">
+                  <TextInput
+                    type="number"
+                    min={0}
+                    value={String(heightImperial.feet)}
+                    onChange={(e) => setHeightFromImperial(Number(e.target.value) || 0, heightImperial.inches)}
+                  />
+                </Field>
+                <Field label="Height (inches)">
+                  <TextInput
+                    type="number"
+                    min={0}
+                    max={11}
+                    value={String(heightImperial.inches)}
+                    onChange={(e) => setHeightFromImperial(heightImperial.feet, Number(e.target.value) || 0)}
+                  />
+                </Field>
+              </div>
+            ) : (
+              <Field label="Height (cm)">
+                <TextInput
+                  type="number"
+                  min={0}
+                  value={form.height_cm}
+                  onChange={(e) => setForm({ ...form, height_cm: e.target.value })}
+                />
+              </Field>
+            )}
             <Field label="Birth year">
               <TextInput
                 type="number"
@@ -332,13 +433,42 @@ export default function ProfileGoals() {
                 onChange={(e) => setForm({ ...form, body_fat_pct: e.target.value })}
               />
             </Field>
-            <Field label="Weight (kg)" hint="Saved as a weights record">
+            <Field label={`Weight (${weightUnit(form.units)})`} hint="Saved as a weights record">
               <TextInput
                 type="number"
                 min={0}
                 step={0.1}
-                value={form.weight_kg}
-                onChange={(e) => setForm({ ...form, weight_kg: e.target.value })}
+                value={displayWeight}
+                onChange={(e) => setWeightFromDisplay(e.target.value)}
+              />
+            </Field>
+            <Field label="Water goal (ml)" hint="Shown on the Today dashboard">
+              <TextInput
+                type="number"
+                min={0}
+                step={50}
+                value={form.water_goal_ml}
+                onChange={(e) => setForm({ ...form, water_goal_ml: e.target.value })}
+              />
+            </Field>
+            <Field label="Step goal" hint="Shown on the Today dashboard">
+              <TextInput
+                type="number"
+                min={0}
+                step={500}
+                value={form.steps_goal}
+                onChange={(e) => setForm({ ...form, steps_goal: e.target.value })}
+              />
+            </Field>
+            <Field label="Units" hint="Display only — your data is stored in metric">
+              <Segmented
+                aria-label="Units"
+                value={form.units}
+                onChange={(u) => setForm((f) => ({ ...f, units: u }))}
+                options={[
+                  { value: 'metric' as Units, label: 'Metric' },
+                  { value: 'imperial' as Units, label: 'Imperial' },
+                ]}
               />
             </Field>
             <Field label="Formula">
@@ -373,7 +503,7 @@ export default function ProfileGoals() {
               <div className="mt-1 text-[32px] font-bold tracking-[-.02em]">
                 {formatInt(tdee)} <small className="text-base font-medium text-text-muted">kcal/day</small>
               </div>
-              <div className="mt-2.5 text-sm font-medium text-text-muted">
+              <div className="mt-2.5 text-sm font-medium text-text-muted" data-testid="calorie-target">
                 BMR {formatInt(computeBmr(input, form.tdee_formula) ?? 0)} · target{' '}
                 {target != null ? formatInt(target) : '—'} kcal/day to {goal}
               </div>
@@ -385,7 +515,7 @@ export default function ProfileGoals() {
             value={goal}
             onChange={(g) => {
               setGoal(g);
-              void saveGoalMacros(g, macros);
+              setRate(signedRate(g, rate));
             }}
             options={[
               { value: 'lose', label: 'Lose' },
@@ -393,6 +523,19 @@ export default function ProfileGoals() {
               { value: 'gain', label: 'Gain' },
             ]}
           />
+          <div className="mt-4">
+            <RatePicker
+              goal={goal}
+              value={rate}
+              onChange={setRate}
+            />
+          </div>
+          {targetDetail?.capped && (
+            <p className="mb-3.5 text-xs leading-normal text-warn" role="status">
+              That rate would put you below {formatInt(targetDetail.floor)} kcal/day, so your target is
+              capped there. Choose a gentler rate to lose weight at the pace you picked.
+            </p>
+          )}
           <div className="mt-3.5 flex gap-2.5">
             {(
               [
@@ -423,11 +566,9 @@ export default function ProfileGoals() {
                   min={0}
                   max={100}
                   value={macros[key]}
-                  onChange={(e) => {
-                    const next = { ...macros, [key]: Math.max(0, Math.min(100, Number(e.target.value) || 0)) };
-                    setMacros(next);
-                    void saveGoalMacros(goal, next);
-                  }}
+                  onChange={(e) =>
+                    setMacros((m) => ({ ...m, [key]: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))
+                  }
                 />
               </Field>
             ))}
@@ -457,7 +598,6 @@ export default function ProfileGoals() {
                 key={s.id}
                 className="flex items-center gap-2.5 border-b border-border py-3.5 text-base last:border-0"
               >
-                <span className="text-text-faint">⋮⋮</span>
                 <span className="flex-1">{s.name}</span>
                 <input
                   className="w-[54px] rounded-md border-[1.5px] border-border px-1.5 py-1 text-right text-sm font-semibold"
@@ -487,7 +627,7 @@ export default function ProfileGoals() {
                   </button>
                   <button
                     className={ICON_BTN_DANGER}
-                    onClick={() => void removeSlot(s.id)}
+                    onClick={() => void slotDeletion.request(s.id, s.name)}
                     aria-label={`Remove ${s.name}`}
                   >
                     ✕
@@ -502,10 +642,22 @@ export default function ProfileGoals() {
 
       {/* Save + data */}
       <div className="px-6 pt-5">
-        <Button block loading={saving} onClick={() => void saveProfile()}>
+        <Button block loading={saving} disabled={!dirty && !saving} onClick={() => void saveProfile()}>
           {saving ? 'Saving…' : 'Save changes'}
         </Button>
       </div>
+
+      {dirty && (
+        <div
+          className="sticky bottom-0 z-20 mt-4 flex items-center justify-between gap-3 border-t border-border bg-raised/95 px-6 py-3 backdrop-blur"
+          role="status"
+        >
+          <span className="text-xs font-semibold text-warn">Unsaved changes</span>
+          <Button size="sm" loading={saving} onClick={() => void saveProfile()}>
+            Save
+          </Button>
+        </div>
+      )}
 
       <div className="px-6 pb-6 pt-5">
         <Card className="p-4">
@@ -519,6 +671,15 @@ export default function ProfileGoals() {
           </Link>
         </Card>
         <Card className="mt-3.5 p-4">
+          <div className="text-xs font-semibold text-text-muted">Account</div>
+          <p className={cn(HINT, 'mb-3 mt-2')}>
+            Signing out keeps this server selected — you'll sign back in to the same place.
+          </p>
+          <Button variant="outline" block onClick={() => setConfirmSignOut(true)}>
+            Sign out
+          </Button>
+        </Card>
+        <Card className="mt-3.5 p-4">
           <div className="text-xs font-semibold text-text-muted">Data</div>
           <p className={cn(HINT, 'mb-3 mt-2')}>Bring your history from other apps, or export your diary.</p>
           <Link
@@ -529,6 +690,27 @@ export default function ProfileGoals() {
           </Link>
         </Card>
       </div>
+
+      <DeleteSlotDialog
+        pending={slotDeletion.pending}
+        deleting={slotDeletion.deleting}
+        onCancel={slotDeletion.cancel}
+        onConfirm={(p) => void slotDeletion.confirm(p.id, p.name)}
+      />
+
+      <Modal open={confirmSignOut} onClose={() => setConfirmSignOut(false)} title="Sign out?">
+        <p className="text-sm text-text-muted">
+          You'll need your email and password to sign back in to {hostLabel}. Nothing is deleted.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setConfirmSignOut(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" size="sm" onClick={signOut}>
+            Sign out
+          </Button>
+        </div>
+      </Modal>
 
       {/* ── Theme sheet ── */}
       <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Accent theme">

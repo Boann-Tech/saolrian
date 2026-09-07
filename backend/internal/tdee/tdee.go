@@ -46,7 +46,28 @@ func BMR(in Input) float64 {
 	}
 }
 
-// Budget returns the daily calorie target (TDEE adjusted for the goal).
+// KcalPerKG is the energy in a kilogram of bodyweight, divided by 7 to turn a
+// weekly rate into a daily calorie adjustment.
+const KcalPerKG = 7700
+
+// Calorie floors: the lowest daily target we will hand a user, whatever rate
+// they asked for. Usual clinical guidance is 1200 kcal/day for women and 1500
+// for men; anything unknown gets the conservative floor.
+const (
+	floorMale    = 1500
+	floorDefault = 1200
+)
+
+// CalorieFloor returns the minimum daily target for a given sex.
+func CalorieFloor(sex string) float64 {
+	if sex == "male" {
+		return floorMale
+	}
+	return floorDefault
+}
+
+// Budget returns the daily calorie target (TDEE adjusted for the goal, then
+// clamped up to the calorie floor).
 func Budget(in Input) float64 {
 	bmr := BMR(in)
 
@@ -56,15 +77,14 @@ func Budget(in Input) float64 {
 	}
 	tdee := bmr * mult
 
-	switch in.Goal {
-	case "lose":
-		// goal_rate is negative for loss
-		return tdee + in.GoalRate*7700/7
-	case "gain":
-		return tdee + in.GoalRate*7700/7
-	default:
-		return tdee
+	// goal_rate is negative for loss, positive for gain, ignored when
+	// maintaining.
+	adjusted := tdee
+	if in.Goal == "lose" || in.Goal == "gain" {
+		adjusted = tdee + in.GoalRate*KcalPerKG/7
 	}
+
+	return math.Max(CalorieFloor(in.Sex), adjusted)
 }
 
 // Round rounds to the nearest whole calorie.

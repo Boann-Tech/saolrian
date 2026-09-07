@@ -225,7 +225,7 @@ func buildTrends(app core.App, uid string, days int, today time.Time) (map[strin
 		"goal_rate":     goalRate,
 		"target_source": profile.GetString("calorie_target_source"),
 		"target_set_at": profile.GetString("calorie_target_set_at"),
-		"targets":       trendTargets(profile, budget),
+		"targets":       dailyTargets(profile, budget),
 		"slots":         slotsOut,
 		"estimate":      estOut,
 	}
@@ -417,19 +417,3 @@ func formulaInput(app core.App, uid string, profile *core.Record) (tdee.Input, b
 
 // trendTargets derives per-day macro targets from the profile's percentage
 // split against the current budget, so they move when the budget does.
-func trendTargets(profile *core.Record, budget any) map[string]any {
-	kcal, _ := budget.(float64)
-	grams := func(pct, kcalPerGram float64) float64 {
-		if kcal <= 0 || pct <= 0 {
-			return 0
-		}
-		return tdee.Round(kcal * pct / 100 / kcalPerGram)
-	}
-	return map[string]any{
-		"protein_g": grams(profile.GetFloat("protein_pct"), 4),
-		"carbs_g":   grams(profile.GetFloat("carbs_pct"), 4),
-		"fat_g":     grams(profile.GetFloat("fat_pct"), 9),
-		"water_ml":  2000,
-		"steps":     10000,
-	}
-}

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Recipes from '../Recipes';
 import { AppProvider } from '../../state/AppContext';
 
@@ -26,9 +27,13 @@ vi.mock('../../lib/pb', async (importOriginal) => {
 
 function renderRecipes() {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/add', '/recipes']} initialIndex={1}>
       <AppProvider>
-        <Recipes />
+        <Routes>
+          <Route path="/add" element={<div>add food screen</div>} />
+          <Route path="/recipes" element={<Recipes />} />
+          <Route path="/profile" element={<div>profile screen</div>} />
+        </Routes>
       </AppProvider>
     </MemoryRouter>,
   );
@@ -56,5 +61,17 @@ describe('Recipes list', () => {
     expect(await screen.findByText('Chili')).toBeInTheDocument();
     expect(screen.getByText('4 servings')).toBeInTheDocument();
     expect(screen.getByText('200')).toBeInTheDocument();
+  });
+});
+
+
+describe('Recipes — back returns where you came from', () => {
+  it('goes back to the screen that opened it, not always Profile', async () => {
+    const user = userEvent.setup();
+    renderRecipes();
+
+    await user.click(await screen.findByRole('button', { name: /back/i }));
+
+    expect(await screen.findByText('add food screen')).toBeInTheDocument();
   });
 });
