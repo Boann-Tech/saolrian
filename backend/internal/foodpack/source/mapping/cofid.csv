@@ -60,3 +60,16 @@ sat fa excl br /100g fa (g),-,1,Proximates: /100g FA denominator and a saturated
 branched chain fa /100g fa (g),-,1,Proximates: /100g FA denominator; outside the canonical vocabulary
 n-3 poly /100g fa (g),-,1,Proximates: /100g FA denominator; outside the canonical vocabulary
 n-6 poly /100g fa (g),-,1,Proximates: /100g FA denominator; outside the canonical vocabulary
+fructose (g),-,1,"Proximates: an individual sugar, a component of total sugars, which is mapped above"
+galactose (g),-,1,"Proximates: an individual sugar, a component of total sugars, which is mapped above"
+glucose (g),-,1,"Proximates: an individual sugar, a component of total sugars, which is mapped above"
+lactose (g),-,1,"Proximates: an individual sugar, a component of total sugars, which is mapped above"
+maltose (g),-,1,"Proximates: an individual sugar, a component of total sugars, which is mapped above"
+sucrose (g),-,1,"Proximates: an individual sugar, a component of total sugars, which is mapped above"
+oligosaccharide (g),-,1,"Proximates: the oligosaccharide fraction of carbohydrate; outside the canonical vocabulary"
+total nitrogen (g),-,1,"Proximates: the protein precursor, protein times the food's own nitrogen factor; protein is mapped above"
+description,-,1,"Proximates: the food's own name, free text rather than a nutrient. It is listed here so the column is deliberately skipped instead of merely unrecognised: the adapter consults the mapping before parsing, and parsing free text would raise ErrUnknownToken"
+group,-,1,"Proximates: the food group, free text; see the description row above"
+footnote,-,1,"Proximates: free-text notes on the food; see the description row above"
+main data references,-,1,"Proximates: free-text bibliographic references; see the description row above"
+previous,-,1,"Proximates: the food's code in the previous CoFID edition, an identifier rather than a nutrient; see the description row above"

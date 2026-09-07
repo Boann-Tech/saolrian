@@ -33,10 +33,12 @@ var crossSourceKeys = []string{"energy_kcal", "protein", "fat", "carbohydrate"}
 // "no fat". Anchors include lean meat and leaf vegetables, so this is
 // load-bearing.
 //
-// Three of the four floors were raised when the non-USDA sources arrived,
-// and the reason is the same each time. These sources do not merely measure
-// the same quantity and get slightly different answers; for energy and
-// carbohydrate they publish a *differently defined* quantity. USDA states
+// All four floors were raised when the non-USDA sources arrived, for two
+// different reasons that are worth keeping apart.
+//
+// Energy and carbohydrate are the definitional pair. These sources do not
+// merely measure the same quantity and get slightly different answers; they
+// publish a *differently defined* quantity. USDA states
 // carbohydrate by difference (fibre included), CoFID, CIQUAL and AFCD state
 // available carbohydrate (fibre excluded); CoFID assigns carbohydrate 3.75
 // kcal/g and fibre none, EU 1169/2011 assigns 4 and 2. On a banana those
@@ -44,11 +46,29 @@ var crossSourceKeys = []string{"energy_kcal", "protein", "fat", "carbohydrate"}
 // carbohydrate carrying 2 g of fibre -- they differ by 74%, which no
 // tolerance can separate from an error.
 //
-// Raising a floor costs this check nothing it was ever able to do. It is
-// looking for a whole column read in the wrong unit, and a whole column is
-// wrong for every anchor food, not just the low-value one: banana and milk
-// still carry the comparison. What the floors buy is that the check stops
-// reporting a definition as a defect.
+// Protein and fat are not that. Both are the same quantity in all six
+// sources; their spread is cultivar, Kjeldahl factor and butchery trim --
+// sampling variance, not definition. Those two floors are ordinary
+// tolerance widenings and should be read as such rather than as part of the
+// argument above.
+//
+// What raising a floor costs: this check is looking for a whole column read
+// in the wrong unit, and a whole column is wrong for every anchor food, so
+// banana and milk still carry the comparison. But the floor is tested
+// against the *median* (see evalCrossSource), not against each value, and a
+// single-source outlier cannot move a five-source median -- so the food the
+// check exists to find is precisely the one a floor can skip. What saves
+// this today is that food.Nutrient's plausible maxima catch a
+// milligram-for-gram slip on protein or fat long before this check would.
+// A better instrument would keep the floors low and require both a relative
+// deviation and an absolute gap in grams; that preserves every comparison
+// and is not sensitive to the median at all. Left as a note rather than
+// done here, because it changes what the check means.
+//
+// Raising the floors also cost real comparisons: a six-source pack offers
+// 13 and this configuration makes 7. Two of the six dropped were passing
+// cleanly (milk carbohydrate, spinach protein) and are collateral from
+// floors set by other anchors.
 var crossSourceFloor = map[string]float64{
 	// 50, not 20: below it the energy conventions above diverge by more
 	// than the 25% tolerance. Raw spinach is 23 kcal to USDA, 25 to CoFID

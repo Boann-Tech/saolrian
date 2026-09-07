@@ -88,10 +88,15 @@ var Nutrients = []Nutrient{
 	// is 20.8% potassium.
 	{"potassium", "Potassium", UnitMg, GroupMineral, 55000},
 	// 40000: CIQUAL publishes 30400mg/100g for dried lithothamnion
-	// (alim_code 20989), a calcareous red alga that is roughly a third
-	// calcium carbonate by weight and is sold as a calcium supplement on
-	// exactly that basis. CIQUAL grades the figure confiance A -- its own
-	// highest, analytically determined. Real food, real number.
+	// (alim_code 20989), a calcareous red alga sold as a calcium supplement
+	// on exactly that basis. 30400mg is 30.4% calcium by weight, which
+	// takes roughly 76% calcium carbonate -- corroborated by the same
+	// food's own 93.6g/100g of ash, and matching commercial Lithothamnion
+	// preparations specified at 31-34% calcium. (An earlier version of this
+	// comment said "a third calcium carbonate", which is wrong by 2.3x: a
+	// third CaCO3 is 13.3% calcium, less than half the figure being
+	// defended here.) CIQUAL grades it confiance A -- its own highest,
+	// analytically determined. Real food, real number.
 	{"calcium", "Calcium", UnitMg, GroupMineral, 40000},
 	{"magnesium", "Magnesium", UnitMg, GroupMineral, 5000},
 	// 10000: USDA SR Legacy's "Leavening agents, baking powder, double-acting,

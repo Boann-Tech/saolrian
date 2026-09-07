@@ -657,7 +657,7 @@ func TestAtwaterStillCatchesKilojoulesAsKilocalories(t *testing.T) {
 // fibre <= carbohydrate is a fact about carbohydrate-by-difference, not
 // about food. AFCD's uncooked psyllium is 88.7 g of fibre against 1.0 g of
 // available carbohydrate and is entirely correct.
-func TestSubNutrientsFibreRelationIsUSDAOnly(t *testing.T) {
+func TestSubNutrientsFibreRelationSkipsAvailableCarbohydrateSources(t *testing.T) {
 	psyllium := food.Profile{"carbohydrate": 1.0, "fibre": 88.7}
 
 	if r := result(t, packFromSource("afcd", psyllium), "sub_nutrients"); !r.Pass {
@@ -672,5 +672,55 @@ func TestSubNutrientsFibreRelationIsUSDAOnly(t *testing.T) {
 	// would have quietly deleted a working guard.
 	if result(t, packFromSource("usda_sr", psyllium), "sub_nutrients").Pass {
 		t.Error("sub_nutrients passed fibre exceeding carbohydrate-by-difference in USDA data")
+	}
+}
+
+// CNF states carbohydrate by difference, exactly as USDA does -- its
+// mapping table's code 205 reads "CARBOHYDRATE, TOTAL (BY DIFFERENCE)" --
+// so the fibre relation holds for it and must run. Scoping the relation to
+// the two USDA sources alone dropped 5,454 CNF foods out of a guard that
+// returns zero violations across every one of them.
+func TestSubNutrientsFibreRelationCoversCNF(t *testing.T) {
+	impossible := food.Profile{"carbohydrate": 10, "fibre": 30}
+	for _, src := range []string{"usda_sr", "usda_foundation", "cnf"} {
+		if result(t, packFromSource(src, impossible), "sub_nutrients").Pass {
+			t.Errorf("sub_nutrients passed fibre exceeding carbohydrate-by-difference in %s", src)
+		}
+	}
+}
+
+// The three available-carbohydrate sources are exempt from the fibre
+// relation by construction, so checkMacroSum is the only thing standing
+// between them and a fibre column carrying another nutrient's values. For
+// them fibre is a disjoint mass and belongs in the sum.
+func TestMacroSumIncludesFibreForAvailableCarbohydrateSources(t *testing.T) {
+	// Buckwheat groats, the highest real food under the fibre-inclusive
+	// sum at 109.8 g. It must pass.
+	real := food.Profile{
+		"protein": 8.1, "fat": 1.5, "carbohydrate": 84.4, "water": 11, "ash": 2.1, "fibre": 2.7,
+	}
+	if r := result(t, packFromSource("cofid", real), "macro_sum"); !r.Pass {
+		t.Errorf("macro_sum failed on a real high-carbohydrate CoFID food: %s", r.Detail)
+	}
+
+	// A fibre column carrying a protein-sized value on a food that is
+	// mostly water has nowhere else to show up.
+	corrupt := food.Profile{
+		"protein": 3, "fat": 0.5, "carbohydrate": 5, "water": 90, "ash": 1, "fibre": 30,
+	}
+	if result(t, packFromSource("afcd", corrupt), "macro_sum").Pass {
+		t.Error("macro_sum passed a food whose fibre column pushes its mass past 115 g per 100 g")
+	}
+
+	// USDA and CNF state carbohydrate by difference, so their fibre is
+	// already inside it. Adding it again would double-count and fail real
+	// high-fibre foods, which is why the variant is source-scoped.
+	bran := food.Profile{
+		"protein": 15.6, "fat": 4.3, "carbohydrate": 64.5, "water": 9.9, "ash": 5.8, "fibre": 42.8,
+	}
+	for _, src := range []string{"usda_sr", "cnf"} {
+		if r := result(t, packFromSource(src, bran), "macro_sum"); !r.Pass {
+			t.Errorf("macro_sum failed on wheat bran from %s; its fibre must not be counted twice: %s", src, r.Detail)
+		}
 	}
 }

@@ -129,6 +129,11 @@ PocketBase API rules.
 
 **Next up** — designed, not yet built (see [`docs/superpowers/specs/`](docs/superpowers/specs/)):
 
+- **Generic foods, offline** — a 21,834-food reference pack built from five national
+  food-composition databases, bundled with the backend so the staples resolve without a
+  network round trip and without depending on how someone happened to type a barcode
+  label. The pack builds and verifies today; wiring it into search is the next step.
+
 - **Full Lose It! import** — upload the whole "Export Data" zip instead of hunting
   for one CSV: the app shows which of the 24 supported categories it found (exercise,
   weight, sleep, steps, body fat, custom foods, recipes, goals), you pick what to
@@ -137,6 +142,35 @@ PocketBase API rules.
 **v2** — Health Connect (Android), Strava, Liftosaur connectors; unified energy-balance dashboards
 
 **v3** — smart TDEE back-calculation, AI suggestions, family/coach sharing
+
+## Data sources
+
+Branded products come from [Open Food Facts](https://world.openfoodfacts.org). Generic
+foods come from a reference pack of 21,834 entries (1.8 MB compressed) that
+`backend/cmd/foodpack` builds from five national food-composition databases — built and
+verified today, not yet wired into search. Every food keeps the licence of the dataset it
+came from:
+
+- **[USDA FoodData Central](https://fdc.nal.usda.gov/)** — Foundation Foods (411) and
+  SR Legacy (7,791), published by the U.S. Department of Agriculture, Agricultural
+  Research Service. Public domain.
+- **[Canadian Nutrient File 2015](https://food-nutrition.canada.ca/cnf-fce/)** — 5,677
+  foods, published by Health Canada. Contains information licensed under the
+  [Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada).
+- **[ANSES-CIQUAL 2025](https://ciqual.anses.fr/)** — 3,483 foods, published by ANSES
+  (French Agency for Food, Environmental and Occupational Health & Safety). Used under
+  the [Licence Ouverte / Open Licence](https://www.etalab.gouv.fr/licence-ouverte-open-licence/).
+- **[McCance & Widdowson's CoFID 2021](https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid)**
+  — 2,884 foods, published by Public Health England. Contains public sector information
+  licensed under the
+  [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+- **[Australian Food Composition Database, Release 3](https://www.foodstandards.gov.au/science-data/food-composition-databases)**
+  — 1,588 foods, published by Food Standards Australia New Zealand. Used under
+  [CC BY 3.0 AU](https://creativecommons.org/licenses/by/3.0/au/).
+
+None of these publishers endorse Saolrian. The data is reshaped on the way in —
+nutrient names mapped onto one canonical vocabulary, values normalised per 100 g — so
+anything the app gets wrong is ours to fix, not theirs.
 
 ## License
 
