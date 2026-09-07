@@ -33,6 +33,9 @@ function makeProfile(overrides: Record<string, unknown> = {}) {
 }
 
 let profileRecord = makeProfile();
+let weightItems: Array<Record<string, unknown>> = [];
+const weightCreates: Array<Record<string, unknown>> = [];
+const profileUpdates: Array<Record<string, unknown>> = [];
 
 const fakePb = {
   baseUrl: 'http://localhost:8090',
@@ -46,6 +49,7 @@ const fakePb = {
       return {
         getFullList: async () => [{ ...profileRecord }],
         update: async (_id: string, data: Record<string, unknown>) => {
+          profileUpdates.push(data);
           profileRecord = { ...profileRecord, ...data };
           return { ...profileRecord };
         },
@@ -57,8 +61,11 @@ const fakePb = {
     }
     if (name === 'weights') {
       return {
-        getList: async () => ({ items: [] }),
-        create: async () => ({}),
+        getList: async () => ({ items: weightItems }),
+        create: async (data: Record<string, unknown>) => {
+          weightCreates.push(data);
+          return { ...data };
+        },
       };
     }
     if (name === 'meal_slots') {
@@ -91,6 +98,9 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   profileRecord = makeProfile();
+  weightItems = [];
+  weightCreates.length = 0;
+  profileUpdates.length = 0;
 });
 
 afterEach(() => {
@@ -130,6 +140,45 @@ describe('ProfileGoals — unsaved edits survive background profile refreshes', 
     await waitFor(() => expect(profileRecord.goal).toBe('lose'));
 
     expect(formulaSelect).toHaveValue('katch');
+  });
+});
+
+describe('ProfileGoals — Weight field shows current weight', () => {
+  it('pre-fills the Weight field with the latest weights record on load', async () => {
+    weightItems = [{ kg: 78.4, measured_at: '2026-09-01T08:00:00Z' }];
+    renderProfile();
+
+    const weightInput = await screen.findByLabelText(/Weight \(kg\)/i);
+    await waitFor(() => expect(weightInput).toHaveValue(78.4));
+  });
+
+  it('does not write a new weights record when the pre-filled value is unchanged', async () => {
+    weightItems = [{ kg: 78.4, measured_at: '2026-09-01T08:00:00Z' }];
+    const user = userEvent.setup();
+    renderProfile();
+
+    const weightInput = await screen.findByLabelText(/Weight \(kg\)/i);
+    await waitFor(() => expect(weightInput).toHaveValue(78.4));
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(profileUpdates.length).toBeGreaterThan(0));
+
+    expect(weightCreates).toHaveLength(0);
+  });
+
+  it('writes a new weights record when the value is changed', async () => {
+    weightItems = [{ kg: 78.4, measured_at: '2026-09-01T08:00:00Z' }];
+    const user = userEvent.setup();
+    renderProfile();
+
+    const weightInput = await screen.findByLabelText(/Weight \(kg\)/i);
+    await waitFor(() => expect(weightInput).toHaveValue(78.4));
+
+    await user.clear(weightInput);
+    await user.type(weightInput, '77.1');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(weightCreates).toHaveLength(1));
+    expect(weightCreates[0]).toMatchObject({ kg: 77.1 });
   });
 });
 

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import PocketBase from 'pocketbase';
 import { getClient, saolrianSend } from '../lib/pb';
@@ -64,18 +64,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authVersion, setAuthVersion] = useState(0);
   const bumpAuth = useCallback(() => setAuthVersion((v) => v + 1), []);
 
+  // Which user's weight `latestWeight` currently holds — so a sign-in as
+  // someone else drops the stale value instead of showing it to the new user.
+  const weightUserId = useRef<string | null>(null);
+
   const refreshProfile = useCallback(async () => {
     if (!endpoint) return;
     const pb = getClient(endpoint);
     if (!pb.authStore.isValid) return;
+    const uid = pb.authStore.record?.id ?? null;
+    if (weightUserId.current !== uid) {
+      weightUserId.current = uid;
+      setLatestWeight(null);
+    }
     try {
       const recs = await pb.collection('profiles').getFullList({
-        filter: `user="${pb.authStore.record?.id}"`,
+        filter: `user="${uid}"`,
       });
       setProfile((recs[0] as unknown as Profile) ?? null);
       try {
         const w = await pb.collection('weights').getList(1, 1, {
-          filter: `user="${pb.authStore.record?.id}"`,
+          filter: `user="${uid}"`,
           sort: '-measured_at',
         });
         setLatestWeight((w.items[0]?.['kg'] as number | undefined) ?? null);
@@ -144,6 +153,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setSlots([]);
     setLatestWeight(null);
+    weightUserId.current = null;
     setEndpointState('');
   }, []);
 

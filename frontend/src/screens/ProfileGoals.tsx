@@ -57,13 +57,15 @@ function fromProfile(p: Profile | null): ProfileForm {
     sex: p?.sex ?? '',
     activity_level: p?.activity_level ?? '',
     body_fat_pct: p?.body_fat_pct != null ? String(p.body_fat_pct) : '',
+    // Weight lives in its own collection and lands on its own async beat; the
+    // effect below seeds it from `latestWeight` once that resolves.
     weight_kg: '',
     tdee_formula: p?.tdee_formula ?? 'mifflin',
   };
 }
 
 export default function ProfileGoals() {
-  const { endpoint, profile, refreshProfile, slots, refreshSlots, theme, setTheme, mode, setMode } = useApp();
+  const { endpoint, profile, latestWeight, refreshProfile, slots, refreshSlots, theme, setTheme, mode, setMode } = useApp();
   const toast = useToast();
   const [form, setForm] = useState<ProfileForm>(() => fromProfile(profile));
   const [saving, setSaving] = useState(false);
@@ -81,13 +83,27 @@ export default function ProfileGoals() {
   // refreshProfile() and would otherwise clobber whatever the user is
   // mid-typing (e.g. weight, formula) with a blind resync.
   const syncedProfileId = useRef<string | null | undefined>(undefined);
+  const seededWeightId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const id = profile?.id ?? null;
     if (syncedProfileId.current === id) return;
     syncedProfileId.current = id;
+    seededWeightId.current = undefined; // let the weight effect re-seed for this record
     setForm(fromProfile(profile));
     if (profile?.goal) setGoal(profile.goal);
   }, [profile]);
+
+  // Seed the Weight field with the user's current weight. It comes from its
+  // own collection and lands after the profile record, so this runs on a
+  // later beat than the re-seed above. Fill it in once per record — never
+  // clobbering a value the user is mid-typing.
+  useEffect(() => {
+    const id = profile?.id ?? null;
+    if (seededWeightId.current === id) return;
+    if (latestWeight == null) return;
+    seededWeightId.current = id;
+    setForm((f) => ({ ...f, weight_kg: String(latestWeight) }));
+  }, [profile, latestWeight]);
 
   const num = (s: string): number | null => {
     const v = parseFloat(s);
@@ -131,9 +147,11 @@ export default function ProfileGoals() {
       } else {
         await pb.collection('profiles').create(payload);
       }
-      // Weight goes to its own collection, never onto the profile.
+      // Weight goes to its own collection, never onto the profile. The field
+      // is pre-filled with the current weight, so only log a new measurement
+      // when the user actually changed it.
       const weight = num(form.weight_kg);
-      if (weight != null) {
+      if (weight != null && weight !== latestWeight) {
         await pb.collection('weights').create({
           user: pb.authStore.record?.id,
           kg: weight,
@@ -142,7 +160,6 @@ export default function ProfileGoals() {
         });
       }
       await refreshProfile();
-      if (weight != null) setForm((f) => ({ ...f, weight_kg: '' }));
       toast('Profile saved');
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Could not save profile', 'err');
