@@ -9,7 +9,12 @@ import { cn } from '../lib/cn';
  *  slot picker. Save updates in place and returns to Today/History.
  *
  *  Macros are stored per entry, so changing the calories has to rescale them
- *  or the diary's macro totals stop matching its calorie total. */
+ *  or the diary's macro totals stop matching its calorie total.
+ *
+ *  Grams is the quantity for anything logged by weight — AddFood derives the
+ *  calories from it via foodMath — so editing the amount rescales the calories
+ *  with it. A direct calorie edit is treated as an override of the database's
+ *  number and leaves the amount alone. */
 
 /** Rescale the stored macros to a new calorie total, keeping the entry's
  *  composition. An entry logged with no calories has no ratio to scale by, so
@@ -41,7 +46,9 @@ export default function EditEntry() {
   const [slotId, setSlotId] = useState('');
   const [saving, setSaving] = useState(false);
   // The entry as loaded — the baseline the macro rescale is measured against.
-  const [original, setOriginal] = useState<{ kcal: number; protein: number; carbs: number; fat: number } | null>(null);
+  const [original, setOriginal] = useState<
+    { grams: number; kcal: number; protein: number; carbs: number; fat: number } | null
+  >(null);
 
   useEffect(() => {
     if (!endpoint || !id) return;
@@ -55,6 +62,7 @@ export default function EditEntry() {
         setGrams(String(rec['grams'] ?? ''));
         setSlotId(String(rec['meal_slot'] ?? slots[0]?.id ?? ''));
         setOriginal({
+          grams: Number(rec['grams'] ?? 0),
           kcal: Number(rec['kcal'] ?? 0),
           protein: Number(rec['protein'] ?? 0),
           carbs: Number(rec['carbs'] ?? 0),
@@ -65,6 +73,17 @@ export default function EditEntry() {
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint, id]);
+
+  /** Editing the amount rescales the calories from the entry as logged. An
+   *  entry with no recorded weight has no ratio to scale by, so its calorie
+   *  figure stands. */
+  const setGramsAndScale = (raw: string) => {
+    setGrams(raw);
+    if (!original || !(original.grams > 0) || !(original.kcal > 0)) return;
+    const next = parseFloat(raw);
+    if (!Number.isFinite(next)) return;
+    setKcal(String(Math.round((original.kcal / original.grams) * next)));
+  };
 
   const save = async () => {
     if (!endpoint || !id) return;
@@ -135,7 +154,7 @@ export default function EditEntry() {
               min={0}
               inputMode="decimal"
               value={grams}
-              onChange={(e) => setGrams(e.target.value.replace(/[^\d.]/g, ''))}
+              onChange={(e) => setGramsAndScale(e.target.value.replace(/[^\d.]/g, ''))}
             />
           </Field>
 

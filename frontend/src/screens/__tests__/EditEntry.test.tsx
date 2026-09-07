@@ -119,3 +119,66 @@ describe('EditEntry — macros track the calorie edit', () => {
     }
   });
 });
+
+
+describe('EditEntry — grams is the quantity, so calories follow it', () => {
+  it('rescales calories and macros when the amount is reduced', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+
+    const grams = await screen.findByLabelText(/Grams/i);
+    await waitFor(() => expect(grams).toHaveValue(200));
+    await user.clear(grams);
+    await user.type(grams, '100');
+
+    // Half the food: the calorie field follows, visibly, before saving.
+    await waitFor(() => expect(screen.getByLabelText(/Calories/i)).toHaveValue(300));
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(updates).toHaveLength(1));
+    expect(updates[0]).toMatchObject({ grams: 100, kcal: 300, protein: 20, carbs: 30, fat: 10 });
+  });
+
+  it('rescales upward too', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+
+    const grams = await screen.findByLabelText(/Grams/i);
+    await waitFor(() => expect(grams).toHaveValue(200));
+    await user.clear(grams);
+    await user.type(grams, '300');
+
+    await waitFor(() => expect(screen.getByLabelText(/Calories/i)).toHaveValue(900));
+  });
+
+  it('treats a direct calorie edit as an override, leaving the amount alone', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+
+    const kcal = await screen.findByLabelText(/Calories/i);
+    await waitFor(() => expect(kcal).toHaveValue(600));
+    await user.clear(kcal);
+    await user.type(kcal, '500');
+
+    // The user is correcting the database's number, not the portion.
+    expect(screen.getByLabelText(/Grams/i)).toHaveValue(200);
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(updates).toHaveLength(1));
+    expect(updates[0]).toMatchObject({ grams: 200, kcal: 500 });
+  });
+
+  it('leaves calories alone for an entry that was logged without a weight', async () => {
+    entry = { ...entry, grams: 0 };
+    const user = userEvent.setup();
+    renderEdit();
+
+    const grams = await screen.findByLabelText(/Grams/i);
+    await waitFor(() => expect(grams).toHaveValue(0));
+    await user.clear(grams);
+    await user.type(grams, '150');
+
+    // Nothing to scale from — the calorie figure stands as logged.
+    expect(screen.getByLabelText(/Calories/i)).toHaveValue(600);
+  });
+});
