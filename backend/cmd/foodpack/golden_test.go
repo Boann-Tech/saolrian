@@ -9,6 +9,18 @@ import (
 	"github.com/boanntech/saolrian/backend/internal/foodpack/format"
 )
 
+// An empty name_regex compiles to a wildcard matching every food, which
+// combined with lowest-SourceID selection would let checkGolden anchor on
+// an arbitrary food and report PASS. A blank cell is the likeliest edit
+// error in a hand-maintained CSV, not a deliberate wildcard.
+func TestParseGoldenTableRejectsEmptyNameRegex(t *testing.T) {
+	body := "source,name_regex,nutrient_key,expected,tolerance_pct,note\n" +
+		"usda_sr,,energy_kcal,89,5,\n"
+	if _, err := parseGoldenTable(strings.NewReader(body)); err == nil {
+		t.Fatal("want an error for an empty name_regex")
+	}
+}
+
 // TestGoldenTableLoads is the golden-table analogue of
 // TestCheckedInMappingsLoad: the checked-in CSV must parse, and must carry
 // the four foods the spec names plus every unit class.

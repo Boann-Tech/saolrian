@@ -66,6 +66,14 @@ func parseGoldenTable(r io.Reader) ([]goldenEntry, error) {
 			return nil, fmt.Errorf("line %d: empty source", line)
 		}
 		pattern := strings.TrimSpace(row[1])
+		if pattern == "" {
+			// An empty pattern compiles to a wildcard matching every
+			// food, which combined with lowest-SourceID selection would
+			// anchor on an arbitrary food and report PASS. This is a
+			// hand-edited CSV; a blank cell is the likeliest edit error,
+			// not a deliberate "match anything".
+			return nil, fmt.Errorf("line %d: empty name_regex", line)
+		}
 		re, err := regexp.Compile(pattern)
 		if err != nil {
 			return nil, fmt.Errorf("line %d: bad name_regex %q: %w", line, pattern, err)

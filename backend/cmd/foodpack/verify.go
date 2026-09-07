@@ -118,7 +118,7 @@ func checkVocabulary(p format.Pack) CheckResult {
 // "Salt, table, iodized" entry (0kcal is correct but apparently never
 // recorded) and roughly fifty specialty dry-bean cultivar samples that
 // read as a proximate-only research batch. 0.01 (1%) sits comfortably
-// above that confirmed gap (58 of 8,201 foods, ~0.7%) while still failing
+// above that confirmed gap (58 of 8,202 foods, ~0.7%) while still failing
 // loudly on a mapping regression that took out a meaningfully larger
 // slice.
 const energyPresentMaxMissingFraction = 0.01

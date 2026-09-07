@@ -21,9 +21,10 @@ const (
 	cnfURL     = "https://food-nutrition.canada.ca/cnf-fce/"
 )
 
-// cnfValues: CNF leaves an unmeasured nutrient's row out of NUTRIENT
-// AMOUNT.csv entirely rather than writing a sentinel, so a blank cell is
-// the only gap spelling it uses.
+// cnfValues: CNF usually leaves an unmeasured nutrient's row out of
+// NUTRIENT AMOUNT.csv entirely rather than writing a sentinel, so a blank
+// cell is the common case, but "NA" appears too and is handled the same
+// way: absent, not zero.
 var cnfValues = ValueSyntax{Absent: []string{"NA"}}
 
 // CNFOptions configures the Canadian Nutrient File adapter.

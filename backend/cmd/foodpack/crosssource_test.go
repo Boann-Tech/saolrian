@@ -145,6 +145,11 @@ func TestParseAnchorTableRejectsBadRows(t *testing.T) {
 		"empty source": "anchor,source,name_regex,note\nbanana,,x,\n",
 		"bad regex":    "anchor,source,name_regex,note\nbanana,usda_sr,[unclosed,\n",
 		"duplicate":    "anchor,source,name_regex,note\nbanana,usda_sr,a,\nbanana,usda_sr,b,\n",
+		// An empty pattern compiles to a wildcard matching every food,
+		// which combined with lowest-SourceID selection would anchor on
+		// an arbitrary food and report PASS. A blank cell is the likeliest
+		// edit error in a hand-maintained CSV, not a deliberate wildcard.
+		"empty name_regex": "anchor,source,name_regex,note\nbanana,usda_sr,,\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := parseAnchorTable(strings.NewReader(body)); err == nil {

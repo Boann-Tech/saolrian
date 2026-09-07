@@ -88,7 +88,16 @@ func parseAnchorTable(r io.Reader) ([]anchorEntry, error) {
 			return nil, fmt.Errorf("line %d: %s already has a regex for %s", line, e.Anchor, e.Source)
 		}
 		seen[key] = true
-		e.NameRegex, err = regexp.Compile(strings.TrimSpace(row[2]))
+		pattern := strings.TrimSpace(row[2])
+		if pattern == "" {
+			// An empty pattern compiles to a wildcard matching every
+			// food, which combined with lowest-SourceID selection would
+			// anchor on an arbitrary food and report PASS. This is a
+			// hand-edited CSV; a blank cell is the likeliest edit error,
+			// not a deliberate "match anything".
+			return nil, fmt.Errorf("line %d: empty name_regex", line)
+		}
+		e.NameRegex, err = regexp.Compile(pattern)
 		if err != nil {
 			return nil, fmt.Errorf("line %d: bad name_regex: %w", line, err)
 		}
