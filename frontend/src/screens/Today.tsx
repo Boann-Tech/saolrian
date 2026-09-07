@@ -4,16 +4,17 @@ import { useApp, saolrianSend } from '../state/AppContext';
 import type { Summary } from '../lib/types';
 import { todayISO, greeting, formatInt } from '../lib/format';
 import { getClient } from '../lib/pb';
+import { deleteEntryWithUndo, restoreEntry } from '../lib/diary';
 import { normalizeSummary } from '../lib/normalize';
 import { DEFAULT_STEPS_GOAL, DEFAULT_WATER_GOAL_ML } from '../lib/nutrition';
 import { MealGroup } from '../components/MealGroup';
+import { DeleteSlotDialog, useSlotDeletion } from '../components/DeleteSlotDialog';
 import {
   Button,
   Card,
   CardTitle,
   Empty,
   Meter,
-  Modal,
   ProgressBar,
   Spinner,
   StatTile,
@@ -39,10 +40,6 @@ export default function Today() {
   const [savingMetric, setSavingMetric] = useState(false);
   const [editingWater, setEditingWater] = useState(false);
   const [waterInput, setWaterInput] = useState('');
-  const [confirmDeleteSlot, setConfirmDeleteSlot] = useState<{ id: string; name: string; count: number } | null>(
-    null,
-  );
-  const [deletingSlot, setDeletingSlot] = useState(false);
 
   const load = useCallback(async () => {
     if (!endpoint) return;
@@ -147,42 +144,36 @@ export default function Today() {
     if (next !== waterMl) await upsertMetric({ water_ml: next });
   };
 
-  const requestDeleteSlot = async (id: string, name: string) => {
-    const pb = getClient(endpoint);
-    try {
-      const res = await pb.collection('diary_entries').getList(1, 1, { filter: `meal_slot="${id}"` });
-      if (res.totalItems === 0) {
-        await doDeleteSlot(id, name);
-      } else {
-        setConfirmDeleteSlot({ id, name, count: res.totalItems });
-      }
-    } catch (ex) {
-      toast(ex instanceof Error ? ex.message : 'Could not check meal slot', 'err');
-    }
-  };
-
-  const doDeleteSlot = async (id: string, name: string) => {
-    const pb = getClient(endpoint);
-    setDeletingSlot(true);
-    try {
-      await pb.collection('meal_slots').delete(id);
+  const slotDeletion = useSlotDeletion(
+    () => getClient(endpoint),
+    async (name) => {
       await refreshSlots();
       await load();
       toast(`Deleted “${name}”`);
-    } catch (ex) {
-      toast(ex instanceof Error ? ex.message : 'Could not delete meal slot', 'err');
-    } finally {
-      setDeletingSlot(false);
-      setConfirmDeleteSlot(null);
-    }
-  };
+    },
+    (msg) => toast(msg, 'err'),
+  );
 
   const destroyEntry = async (entryId: string) => {
     const pb = getClient(endpoint);
     try {
-      await pb.collection('diary_entries').delete(entryId);
+      const snapshot = await deleteEntryWithUndo(pb, entryId);
       await load();
-      toast('Entry deleted');
+      toast('Entry deleted', {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            void (async () => {
+              try {
+                await restoreEntry(pb, snapshot);
+                await load();
+              } catch (ex) {
+                toast(ex instanceof Error ? ex.message : 'Could not restore that entry', 'err');
+              }
+            })();
+          },
+        },
+      });
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Could not delete entry', 'err');
     }
@@ -321,7 +312,7 @@ export default function Today() {
                 date={todayISO()}
                 onDelete={(id) => void destroyEntry(id)}
                 onEdit={(id) => navigate(`/edit/${id}`)}
-                onDeleteSlot={() => void requestDeleteSlot(g.slot_id, g.slot_name)}
+                onDeleteSlot={() => void slotDeletion.request(g.slot_id, g.slot_name)}
               />
             ))}
 
@@ -442,29 +433,12 @@ export default function Today() {
         </>
       )}
 
-      <Modal
-        open={!!confirmDeleteSlot}
-        onClose={() => setConfirmDeleteSlot(null)}
-        title={`Delete “${confirmDeleteSlot?.name}”?`}
-      >
-        <p className="text-sm text-text-muted">
-          This removes the meal category and permanently deletes {confirmDeleteSlot?.count} logged item
-          {confirmDeleteSlot?.count === 1 ? '' : 's'} across all dates, not just today. This can’t be undone.
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => setConfirmDeleteSlot(null)}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            loading={deletingSlot}
-            onClick={() => confirmDeleteSlot && void doDeleteSlot(confirmDeleteSlot.id, confirmDeleteSlot.name)}
-          >
-            Delete
-          </Button>
-        </div>
-      </Modal>
+      <DeleteSlotDialog
+        pending={slotDeletion.pending}
+        deleting={slotDeletion.deleting}
+        onCancel={slotDeletion.cancel}
+        onConfirm={(p) => void slotDeletion.confirm(p.id, p.name)}
+      />
     </div>
   );
 }

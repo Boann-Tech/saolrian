@@ -4,6 +4,7 @@ import { useApp, saolrianSend } from '../state/AppContext';
 import type { DailyMetric, ExerciseEntry, Summary } from '../lib/types';
 import { dateFromOffset, formatInt, formatNumber, monthTitle, prettyDate, todayISO, weekdayLabel } from '../lib/format';
 import { getClient } from '../lib/pb';
+import { deleteEntryWithUndo, restoreEntry } from '../lib/diary';
 import { normalizeSummary } from '../lib/normalize';
 import { MealGroup } from '../components/MealGroup';
 import { Calendar, Card, Empty, Sheet, Spinner, StatTile, useToast } from '../components/ui';
@@ -36,12 +37,28 @@ export default function History() {
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
+  // Deleting a diary entry is frequent and low-stakes, so it gets an undo
+  // rather than a confirmation dialog in front of every single tap.
   const destroyEntry = async (entryId: string) => {
     const pb = getClient(endpoint);
     try {
-      await pb.collection('diary_entries').delete(entryId);
+      const snapshot = await deleteEntryWithUndo(pb, entryId);
       await load();
-      toast('Entry deleted');
+      toast('Entry deleted', {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            void (async () => {
+              try {
+                await restoreEntry(pb, snapshot);
+                await load();
+              } catch (ex) {
+                toast(ex instanceof Error ? ex.message : 'Could not restore that entry', 'err');
+              }
+            })();
+          },
+        },
+      });
     } catch (ex) {
       toast(ex instanceof Error ? ex.message : 'Could not delete entry', 'err');
     }

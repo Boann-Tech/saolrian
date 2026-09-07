@@ -17,6 +17,7 @@ import {
   signedRate,
 } from '../lib/nutrition';
 import { RatePicker } from '../components/RatePicker';
+import { DeleteSlotDialog, useSlotDeletion } from '../components/DeleteSlotDialog';
 import { formatInt } from '../lib/format';
 import { Button, Card, Field, Modal, Segmented, Select, Sheet, TextInput, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
@@ -240,15 +241,16 @@ export default function ProfileGoals() {
     }
   };
 
-  const removeSlot = async (id: string) => {
-    const pb = getClient(endpoint);
-    try {
-      await pb.collection('meal_slots').delete(id);
+  // Removing a slot destroys every entry ever logged in it, on every date —
+  // the same guard Today uses, rather than deleting behind a bare ✕.
+  const slotDeletion = useSlotDeletion(
+    () => getClient(endpoint),
+    async (name) => {
       await refreshSlots();
-    } catch {
-      toast('Could not remove slot', 'err');
-    }
-  };
+      toast(`Deleted “${name}”`);
+    },
+    (msg) => toast(msg, 'err'),
+  );
 
   /* ----- Theme ----- */
   const applyTheme = async (color: string) => {
@@ -560,7 +562,7 @@ export default function ProfileGoals() {
                   </button>
                   <button
                     className={ICON_BTN_DANGER}
-                    onClick={() => void removeSlot(s.id)}
+                    onClick={() => void slotDeletion.request(s.id, s.name)}
                     aria-label={`Remove ${s.name}`}
                   >
                     ✕
@@ -611,6 +613,13 @@ export default function ProfileGoals() {
           </Link>
         </Card>
       </div>
+
+      <DeleteSlotDialog
+        pending={slotDeletion.pending}
+        deleting={slotDeletion.deleting}
+        onCancel={slotDeletion.cancel}
+        onConfirm={(p) => void slotDeletion.confirm(p.id, p.name)}
+      />
 
       <Modal open={confirmSignOut} onClose={() => setConfirmSignOut(false)} title="Sign out?">
         <p className="text-sm text-text-muted">

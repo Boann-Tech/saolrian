@@ -38,6 +38,9 @@ function makeProfile(overrides: Record<string, unknown> = {}) {
 
 let profileRecord = makeProfile();
 let authCleared = false;
+let slotEntryCount = 0;
+let mealSlots: Record<string, unknown>[] = [];
+const slotDeletes: string[] = [];
 let weightItems: Array<Record<string, unknown>> = [];
 const weightCreates: Array<Record<string, unknown>> = [];
 const profileUpdates: Array<Record<string, unknown>> = [];
@@ -76,8 +79,18 @@ const fakePb = {
         },
       };
     }
+    if (name === 'diary_entries') {
+      return { getList: async () => ({ totalItems: slotEntryCount }) };
+    }
     if (name === 'meal_slots') {
-      return { getFullList: async () => [] };
+      return {
+        getFullList: async () => mealSlots,
+        update: async () => ({}),
+        delete: async (id: string) => {
+          slotDeletes.push(id);
+          return {};
+        },
+      };
     }
     throw new Error(`unexpected collection ${name}`);
   },
@@ -107,6 +120,12 @@ beforeEach(() => {
   localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   profileRecord = makeProfile();
   authCleared = false;
+  slotEntryCount = 0;
+  slotDeletes.length = 0;
+  mealSlots = [
+    { id: 'slot-1', name: 'Breakfast', sort_order: 1, pct_allocation: 30 },
+    { id: 'slot-2', name: 'Lunch', sort_order: 2, pct_allocation: 70 },
+  ];
   weightItems = [];
   weightCreates.length = 0;
   profileUpdates.length = 0;
@@ -279,6 +298,44 @@ describe('ProfileGoals — daily goals', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(profileRecord.water_goal_ml).toBe(2500));
+  });
+});
+
+describe('ProfileGoals — removing a meal slot', () => {
+  it('warns how much history the removal destroys', async () => {
+    slotEntryCount = 12;
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('button', { name: /remove Lunch/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(/12/);
+    expect(dialog).toHaveTextContent(/all dates/i);
+    expect(slotDeletes).toHaveLength(0);
+  });
+
+  it('deletes once confirmed', async () => {
+    slotEntryCount = 12;
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('button', { name: /remove Lunch/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+
+    await waitFor(() => expect(slotDeletes).toEqual(['slot-2']));
+  });
+
+  it('skips the warning for an empty slot', async () => {
+    slotEntryCount = 0;
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('button', { name: /remove Lunch/i }));
+
+    await waitFor(() => expect(slotDeletes).toEqual(['slot-2']));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 

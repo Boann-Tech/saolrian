@@ -3,14 +3,19 @@
  * explain itself when the backend can't compute a budget.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Today from '../Today';
+import { ToastProvider } from '../../components/ui';
 import { AppProvider } from '../../state/AppContext';
 
 const authRecord = { id: 'user-1' };
 let summaryResponse: Record<string, unknown> = {};
 let metricRows: Record<string, unknown>[] = [];
+const deleted: string[] = [];
+const restored: Record<string, unknown>[] = [];
+let storedEntry: Record<string, unknown> = {};
 
 const fakePb = {
   baseUrl: 'http://localhost:8090',
@@ -26,7 +31,20 @@ const fakePb = {
         update: async (_id: string, d: Record<string, unknown>) => d,
       };
     }
-    if (name === 'diary_entries') return { getList: async () => ({ totalItems: 0 }), delete: async () => ({}) };
+    if (name === 'diary_entries') {
+      return {
+        getList: async () => ({ totalItems: 0 }),
+        getOne: async (id: string) => ({ ...storedEntry, id }),
+        delete: async (id: string) => {
+          deleted.push(id);
+          return {};
+        },
+        create: async (data: Record<string, unknown>) => {
+          restored.push(data);
+          return { id: 'entry-new', ...data };
+        },
+      };
+    }
     throw new Error(`unexpected collection ${name}`);
   },
 };
@@ -55,7 +73,9 @@ function renderToday() {
   return render(
     <MemoryRouter>
       <AppProvider>
-        <Today />
+        <ToastProvider>
+          <Today />
+        </ToastProvider>
       </AppProvider>
     </MemoryRouter>,
   );
@@ -67,6 +87,22 @@ beforeEach(() => {
   localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   summaryResponse = baseSummary();
   metricRows = [];
+  deleted.length = 0;
+  restored.length = 0;
+  storedEntry = {
+    id: 'e1',
+    user: 'user-1',
+    meal_slot: 'slot-7',
+    name_snapshot: 'Soup',
+    brand_snapshot: 'Brand',
+    grams: 300,
+    kcal: 210,
+    protein: 8,
+    carbs: 20,
+    fat: 9,
+    logged_at: '2026-09-07T12:00:00Z',
+    source: 'manual',
+  };
 });
 afterEach(() => cleanup());
 
@@ -126,5 +162,55 @@ describe('Today — a missing budget explains itself', () => {
 
     const fix = await screen.findByRole('link', { name: /profile/i });
     expect(fix).toHaveAttribute('href', '/profile');
+  });
+});
+
+
+const groupWithEntry = {
+  slot_id: 'slot-7',
+  slot_name: 'Lunch',
+  sort_order: 1,
+  entries: [
+    {
+      id: 'e1', name: 'Soup', brand: 'Brand', grams: 300, kcal: 210,
+      protein: 8, carbs: 20, fat: 9,
+      logged_at: '2026-09-07T12:00:00Z', source: 'manual',
+    },
+  ],
+};
+
+describe('Today — deleting an entry is reversible', () => {
+  async function deleteTheEntry(user: ReturnType<typeof userEvent.setup>) {
+    summaryResponse = baseSummary({ groups: [groupWithEntry] });
+    renderToday();
+    await user.click(await screen.findByRole('button', { name: /actions for soup/i }));
+    // Exact: the slot header also has a "Delete Lunch" control.
+    await user.click(await screen.findByRole('button', { name: 'Delete' }));
+  }
+
+  it('offers an undo instead of a confirmation', async () => {
+    const user = userEvent.setup();
+    await deleteTheEntry(user);
+
+    await waitFor(() => expect(deleted).toEqual(['e1']));
+    expect(await screen.findByRole('button', { name: /undo/i })).toBeInTheDocument();
+  });
+
+  it('restores the entry, with its macros, when undo is tapped', async () => {
+    const user = userEvent.setup();
+    await deleteTheEntry(user);
+
+    await user.click(await screen.findByRole('button', { name: /undo/i }));
+
+    await waitFor(() => expect(restored).toHaveLength(1));
+    expect(restored[0]).toMatchObject({
+      meal_slot: 'slot-7',
+      name_snapshot: 'Soup',
+      kcal: 210,
+      protein: 8,
+      carbs: 20,
+      fat: 9,
+      logged_at: '2026-09-07T12:00:00Z',
+    });
   });
 });
