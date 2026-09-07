@@ -483,6 +483,49 @@ func TestCheckSubNutrientsIgnoresNearZeroTraceNoise(t *testing.T) {
 	}
 }
 
+// The soft gate exists to catch a systematic error moving many foods
+// together, at a ratio too small for any individual food to trip the
+// hard gate. A handful of foods just over the soft threshold (1.1x) but
+// nowhere near the hard one (3.0x) must fail once they are a large enough
+// fraction of the pack, even though every single food would pass a
+// hard-only check.
+func TestCheckSubNutrientsSoftGateFailsOnASystematicFraction(t *testing.T) {
+	good := food.Profile{"fat": 10, "fat_saturated": 3, "fat_monounsaturated": 3, "fat_polyunsaturated": 3}    // ratio 0.9
+	suspect := food.Profile{"fat": 10, "fat_saturated": 4, "fat_monounsaturated": 4, "fat_polyunsaturated": 4} // ratio 1.2, under the 3.0 hard gate
+
+	profiles := make([]food.Profile, 0, 200)
+	for i := 0; i < 198; i++ {
+		profiles = append(profiles, good)
+	}
+	profiles = append(profiles, suspect, suspect) // 2/200 = 1%, over the 0.5% soft ceiling
+
+	got := result(t, packOf(profiles...), "sub_nutrients")
+	if got.Pass {
+		t.Fatalf("2%% of foods at 1.2x (over the 1.1x soft threshold, under the 3.0x hard one) must fail the soft gate: %s", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "1.1") {
+		t.Errorf("detail should name the soft threshold, got: %s", got.Detail)
+	}
+}
+
+// The mirror case: the same suspect ratio, but rare enough (under the
+// soft ceiling) that it must not fail the build. This is what keeps the
+// soft gate from being a hard-only check in disguise.
+func TestCheckSubNutrientsSoftGateToleratesARareOutlier(t *testing.T) {
+	good := food.Profile{"fat": 10, "fat_saturated": 3, "fat_monounsaturated": 3, "fat_polyunsaturated": 3}
+	suspect := food.Profile{"fat": 10, "fat_saturated": 4, "fat_monounsaturated": 4, "fat_polyunsaturated": 4} // ratio 1.2
+
+	profiles := make([]food.Profile, 0, 300)
+	for i := 0; i < 299; i++ {
+		profiles = append(profiles, good)
+	}
+	profiles = append(profiles, suspect) // 1/300 = 0.33%, under the 0.5% soft ceiling
+
+	if got := result(t, packOf(profiles...), "sub_nutrients"); !got.Pass {
+		t.Fatalf("a rare outlier under the soft ceiling must still pass: %s", got.Detail)
+	}
+}
+
 func portionFoodOf(portions []format.Portion, defaultServingG float64) format.RefFood {
 	return format.RefFood{
 		Source: "usda_sr", SourceID: "1", Name: "Test food", Region: "test-region", Licence: "test-licence",

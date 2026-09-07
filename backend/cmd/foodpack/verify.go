@@ -339,20 +339,38 @@ func missingAttributionFields(s format.SourceInfo) []string {
 // is missing, is skipped entirely: absent is not zero, and treating it as
 // zero would only ever make this check laxer or noisier, never catch
 // anything.
+//
+// Two gates, mirroring checkAtwater in this same file: HardMult is a
+// single-food gate exactly like the original design and the first version
+// of this check — it exists to catch one catastrophic outlier (a factor
+// error on one food, or one column read in the wrong unit) but a flat
+// hard bound wide enough to admit real independent-measurement variance
+// cannot also catch a *systematic* error. A conversion-factor bug that
+// scales an entire source's fatty acids (or shrinks its total fat) by,
+// say, 1.5-2x would move virtually every food to somewhere in that range
+// and sail under a hard ceiling picked to admit one 2.85x outlier,
+// silently. SoftMult/SoftMaxSuspectFraction is the fractional gate that
+// catches that shape of failure instead: it fires when too large a
+// *fraction* of foods sit above a tight ratio, regardless of how far past
+// it any single one goes. SoftMult == 0 disables the soft gate for a
+// relation where the real distribution is already tight enough that the
+// blind spot is negligible (fibre, retinol below).
 type subNutrientRelation struct {
 	Name        string // used in the failure message
 	Numerators  []string
 	Denominator string
-	Mult        float64
 	Floor       float64
+
+	SoftMult               float64 // 0 disables the fractional gate
+	SoftMaxSuspectFraction float64
+
+	HardMult float64
 }
 
 // subNutrientRelations are checked against the real USDA-only build
-// (8,202 foods) that this branch can currently produce; each Mult/Floor
-// pair is the smallest that lets every food in that build pass, with a
-// small margin, not a value picked in advance. This is a hard check in
-// the style of checkRanges: any violation fails the whole build on the
-// first food found, so these bounds must actually hold.
+// (8,202 foods) that this branch can currently produce; every constant
+// below is derived from the measured distribution over that build, not
+// picked in advance — see each relation's comment for the numbers.
 //
 // "vitamin_d + vitamin_e ..." and similar RE-vs-RAE style relationships
 // are deliberately not here: the four below are the ones that held (with
@@ -363,72 +381,99 @@ var subNutrientRelations = []subNutrientRelation{
 	{
 		// USDA measures fatty acid subtypes independently of total fat
 		// rather than deriving one from the other, so they do not sum
-		// exactly to it even in good data. Confirmed worst case in the
-		// real build: usda_sr/174513 "Turkey, retail parts, breast, meat
-		// only, with added solution, raw" sums to 7.213g across the three
-		// subtypes against 2.53g of total fat (2.85x) — an "added
+		// exactly to it even in good data. Measured distribution over
+		// 5,534 real foods with fat >= 1g and all three subtypes present:
+		// 12 (0.22%) exceed 1.05x, 10 (0.18%) exceed 1.1x, 7 (0.13%)
+		// exceed 1.2x, 2 (0.04%) exceed 1.5x, and exactly 1 (0.02%)
+		// exceeds 2.0x — usda_sr/174513 "Turkey, retail parts, breast,
+		// meat only, with added solution, raw" at 2.85x, an "added
 		// solution" (brine-injected) product, a category USDA is known to
 		// carry some nutrient values for by retention/imputation rather
 		// than direct proportional measurement of the diluted product.
 		// The next worst, usda_sr/170603 "Beef, chuck, under blade pot
 		// roast..." (1.67x), is an ordinary raw cut with no such
-		// explanation, so the margin is real headroom, not just a
-		// one-food carve-out. 3.0 clears both with room, while still
-		// failing outright on the kind of order-of-magnitude factor error
-		// (a forgotten mg->g conversion, a 0.001 applied to the wrong
-		// column) this check exists to catch. Floor 1.0g: below that,
-		// e.g. "Beverages, Orange juice drink" at 0.00g fat against
-		// 0.02g of summed subtypes, the comparison is rounding noise
-		// between two near-zero figures.
-		Name:        "fat_saturated + fat_monounsaturated + fat_polyunsaturated <= fat",
-		Numerators:  []string{"fat_saturated", "fat_monounsaturated", "fat_polyunsaturated"},
-		Denominator: "fat",
-		Mult:        3.0,
-		Floor:       1.0,
+		// explanation.
+		//
+		// A flat hard bound wide enough to admit 2.85x (anything under
+		// ~3x) would let a systematic 1.5-2x scaling bug — the kind that
+		// moves virtually every food together, not one outlier — sail
+		// through silently: 99.8% of real foods sit under 1.05x, so a
+		// bug that pushed most foods to even 1.2x would be enormous
+		// relative to reality but invisible to a hard-only gate. SoftMult
+		// 1.1x with a 0.5% suspect ceiling closes that: real data trips
+		// it at 0.18% (10/5,534), comfortably under the ceiling with
+		// ~2.8x headroom, while a systematic bug affecting more than a
+		// tiny fraction of foods fails outright. HardMult stays at 3.0 so
+		// the turkey — a single, explained outlier — still passes on its
+		// own without being excluded by name.
+		Name:                   "fat_saturated + fat_monounsaturated + fat_polyunsaturated <= fat",
+		Numerators:             []string{"fat_saturated", "fat_monounsaturated", "fat_polyunsaturated"},
+		Denominator:            "fat",
+		Floor:                  1.0,
+		SoftMult:               1.1,
+		SoftMaxSuspectFraction: 0.005,
+		HardMult:               3.0,
 	},
 	{
 		// Sugars and starch are likewise measured separately from
-		// carbohydrate-by-difference. Confirmed worst case:
-		// usda_sr/173327 "HOT POCKETS Ham 'N Cheese Stuffed Sandwich,
-		// frozen" sums to 32.15g against 24.69g of carbohydrate (1.30x),
-		// a composite prepared dish where the two measurements come from
-		// different methods. 1.35 clears the real build with a small
-		// margin. Floor 1.0g excludes trace-level foods such as
-		// usda_sr/171528 "Turkey, retail parts, breast, meat and skin,
-		// raw" (0.01g summed against 0.00g carbohydrate).
-		Name:        "sugars + starch <= carbohydrate",
-		Numerators:  []string{"sugars", "starch"},
-		Denominator: "carbohydrate",
-		Mult:        1.35,
-		Floor:       1.0,
+		// carbohydrate-by-difference. Measured distribution over 1,019
+		// real foods with carbohydrate >= 1g and both present: 6 (0.59%)
+		// exceed 1.05x, 3 (0.29%) exceed 1.1x, 2 (0.20%) exceed 1.2x, and
+		// none exceed 1.35x. Worst case: usda_sr/173327 "HOT POCKETS Ham
+		// 'N Cheese Stuffed Sandwich, frozen" at 1.302x, a composite
+		// prepared dish where the two measurements come from different
+		// methods.
+		//
+		// Same blind spot as the fat relation above, smaller stakes: a
+		// hard-only gate at 1.35x would admit a systematic bug that moved
+		// most foods to 1.2-1.3x. SoftMult 1.1x with a 1.0% suspect
+		// ceiling closes it: real data trips it at 0.29% (3/1,019), ~3.4x
+		// under the ceiling. HardMult stays at 1.35x so Hot Pockets still
+		// passes on its own.
+		Name:                   "sugars + starch <= carbohydrate",
+		Numerators:             []string{"sugars", "starch"},
+		Denominator:            "carbohydrate",
+		Floor:                  1.0,
+		SoftMult:               1.1,
+		SoftMaxSuspectFraction: 0.01,
+		HardMult:               1.35,
 	},
 	{
 		// Fibre is a component of carbohydrate-by-difference by
 		// definition (it is not measured independently and subtracted
 		// out the way sugars/starch are), so this one holds exactly: 0
 		// violations across every one of the 7,403 real foods carrying
-		// both keys. No floor and no margin beyond the design's own 1.0
-		// were needed.
+		// both keys, and the single closest real food (usda_sr/167682
+		// "Pectin, liquid") sits at ratio 1.0000 -- fibre equal to
+		// carbohydrate, not exceeding it. No soft gate: with the relation
+		// already exact by definition, a fractional gate has no real
+		// distribution to distinguish from a systematic error and would
+		// add nothing but a second constant to maintain. No floor and no
+		// margin beyond the design's own 1.0 were needed.
 		Name:        "fibre <= carbohydrate",
 		Numerators:  []string{"fibre"},
 		Denominator: "carbohydrate",
-		Mult:        1.0,
 		Floor:       0,
+		HardMult:    1.0,
 	},
 	{
 		// Retinol is one component that feeds into vitamin_a_rae (the
 		// other being carotenes divided by their RAE conversion factors),
-		// so it cannot exceed RAE by more than measurement noise. Holds
-		// with 0 violations across 4,439 real foods at the design's own
-		// 1.1. Floor 1.0ug excludes usda_sr/167889 "Pork, fresh, loin,
-		// center rib..." where vitamin_a_rae rounds to 0ug against 2ug of
-		// retinol — noise between two near-zero figures, not a real
+		// so it cannot exceed RAE by more than measurement noise. Real
+		// worst case over 4,439 real foods: usda_sr/173540 "Infant
+		// formula, MEAD JOHNSON, PROSOBEE, with iron, ready-to-feed" at
+		// 1.0172x (59ug retinol against 58ug RAE) -- already close enough
+		// to the design's own 1.1 hard bound that the blind spot a soft
+		// gate would close is negligible; not worth a second constant.
+		// Floor 1.0ug excludes usda_sr/167889 "Pork, fresh, loin, center
+		// rib..." where vitamin_a_rae rounds to 0ug against 2ug of
+		// retinol -- noise between two near-zero figures, not a real
 		// disagreement.
 		Name:        "retinol <= vitamin_a_rae",
 		Numerators:  []string{"retinol"},
 		Denominator: "vitamin_a_rae",
-		Mult:        1.1,
 		Floor:       1.0,
+		HardMult:    1.1,
 	},
 }
 
@@ -445,14 +490,23 @@ var subNutrientRelations = []subNutrientRelation{
 // a column already in grams, milligrams read as grams — produces values a
 // thousandfold too small and sails through every other check unnoticed.
 // Scaling one side of one of these relationships out of proportion to the
-// other, in either direction, is exactly what this catches.
+// other, in either direction, is exactly what this catches: a hard gate
+// for one outlier food, a soft gate (where the relation has one — see
+// subNutrientRelation's doc comment) for a systematic error moving many
+// foods together.
 func checkSubNutrients(p format.Pack) CheckResult {
-	checked := 0
-	for _, f := range p.Foods {
-		prof := food.Decode(f.Nutrients)
-		for _, rel := range subNutrientRelations {
+	var details []string
+	for _, rel := range subNutrientRelations {
+		checked, suspect := 0, 0
+		var worstSoftDesc string
+		worstSoftRatio := 0.0
+		var hardDesc string
+		hardRatio := 0.0
+
+		for _, f := range p.Foods {
+			prof := food.Decode(f.Nutrients)
 			denom, ok := prof[rel.Denominator]
-			if !ok {
+			if !ok || denom < rel.Floor {
 				continue
 			}
 			sum := 0.0
@@ -468,20 +522,46 @@ func checkSubNutrients(p format.Pack) CheckResult {
 			if !complete {
 				continue
 			}
-			if denom < rel.Floor {
-				continue
-			}
 			checked++
-			if sum > denom*rel.Mult {
-				return CheckResult{"sub_nutrients", false, fmt.Sprintf(
-					"%s/%s (%s): %s but %s = %.3f and %s sum to %.3f",
-					f.Source, f.SourceID, f.Name, rel.Name, rel.Denominator, denom,
-					strings.Join(rel.Numerators, "+"), sum)}
+			ratio := sum / denom
+
+			if rel.SoftMult > 0 && ratio > rel.SoftMult {
+				suspect++
+				if ratio > worstSoftRatio {
+					worstSoftRatio = ratio
+					worstSoftDesc = fmt.Sprintf("%s/%s (%s): %.3fx", f.Source, f.SourceID, f.Name, ratio)
+				}
+			}
+			if ratio > rel.HardMult && ratio > hardRatio {
+				hardRatio = ratio
+				hardDesc = fmt.Sprintf("%s/%s (%s): %s = %.3f, %s sum to %.3f (%.3fx)",
+					f.Source, f.SourceID, f.Name, rel.Denominator, denom,
+					strings.Join(rel.Numerators, "+"), sum, ratio)
 			}
 		}
+
+		if hardDesc != "" {
+			return CheckResult{"sub_nutrients", false, fmt.Sprintf(
+				"%s: a single food deviates over %.2fx: %s", rel.Name, rel.HardMult, hardDesc)}
+		}
+		if rel.SoftMult > 0 {
+			frac := 0.0
+			if checked > 0 {
+				frac = float64(suspect) / float64(checked)
+			}
+			if frac > rel.SoftMaxSuspectFraction {
+				return CheckResult{"sub_nutrients", false, fmt.Sprintf(
+					"%s: %d of %d checked foods (%.3f%%) exceed %.2fx, over the %.2f%% ceiling; worst: %s",
+					rel.Name, suspect, checked, frac*100, rel.SoftMult, rel.SoftMaxSuspectFraction*100, worstSoftDesc)}
+			}
+			details = append(details, fmt.Sprintf(
+				"%s: %d checked, %d (%.3f%%) exceed %.2fx (soft ceiling %.2f%%), none exceed %.2fx (hard)",
+				rel.Name, checked, suspect, frac*100, rel.SoftMult, rel.SoftMaxSuspectFraction*100, rel.HardMult))
+		} else {
+			details = append(details, fmt.Sprintf("%s: %d checked, none exceed %.2fx", rel.Name, checked, rel.HardMult))
+		}
 	}
-	return CheckResult{"sub_nutrients", true,
-		fmt.Sprintf("%d relation checks held across %d food(s)", checked, len(p.Foods))}
+	return CheckResult{"sub_nutrients", true, strings.Join(details, "; ")}
 }
 
 // portionMaxPlausibleGrams bounds a single household-measure portion
@@ -496,8 +576,8 @@ func checkSubNutrients(p format.Pack) CheckResult {
 // the largest real portion in the 8,202-food build is usda_sr/172868
 // "Turkey, whole, meat only, with added solution, raw", whose "1 bird"
 // portion is 5,717g -- a real whole turkey is plausibly that heavy. The
-// next largest values cluster in the 3,000-5,000g band (other whole
-// birds and roasts). 10,000g (10kg) sits with nearly 2x margin above the
+// next-largest real portions (other whole birds and roasts) run
+// 3,952-5,717g for the top ten. 10,000g (10kg) sits with nearly 2x margin above the
 // largest confirmed real portion while still failing outright on the
 // kind of error this exists to catch: CNF's serving-size arithmetic is
 // `factor * 100`, so a factor mistakenly left in a per-kg rather than
