@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import type { Food } from '../lib/types';
 import { getClient, UnreachableError } from '../lib/pb';
@@ -8,7 +8,7 @@ import { foodMath, perServing } from '../lib/nutrition';
 import { listRecipes } from '../lib/recipes';
 import { normalizeSearch, normalizeBarcode } from '../lib/normalize';
 import type { Recipe } from '../lib/types';
-import { formatInt } from '../lib/format';
+import { formatInt, loggedAtISO, todayISO } from '../lib/format';
 import { Button, Card, Empty, Field, Sheet, Spinner, Stepper, TextInput, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
 import ScanSheet from '../components/ScanSheet';
@@ -39,6 +39,17 @@ export default function AddFood() {
   const { endpoint, slots, refreshSlots, userId } = useApp();
   const navigate = useNavigate();
   const toast = useToast();
+  const [params] = useSearchParams();
+
+  // Which day this screen is logging to. History and the per-meal "add" links
+  // pass ?date= (and ?slot=) so a forgotten day can be filled in; with neither,
+  // this is the plain "log something now" case.
+  const targetDate = params.get('date') || todayISO();
+  const slotParam = params.get('slot');
+  const isToday = targetDate === todayISO();
+  const loggedAt = () => loggedAtISO(targetDate);
+  /** Where to return after logging — back to the day the entry landed on. */
+  const doneHref = isToday ? '/today' : `/history?date=${targetDate}`;
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Food[]>([]);
@@ -101,8 +112,10 @@ export default function AddFood() {
   }, [query, endpoint]);
 
   useEffect(() => {
-    if (!slotId && slots.length > 0) setSlotId(slots[0].id);
-  }, [slots, slotId]);
+    if (slotId || slots.length === 0) return;
+    const wanted = slotParam && slots.some((s) => s.id === slotParam) ? slotParam : slots[0].id;
+    setSlotId(wanted);
+  }, [slots, slotId, slotParam]);
 
   const openDetail = (food: Food) => {
     setSelected(food);
@@ -170,7 +183,7 @@ export default function AddFood() {
       protein: num(qaP),
       carbs: num(qaC),
       fat: num(qaF),
-      logged_at: new Date().toISOString(),
+      logged_at: loggedAt(),
     });
     setQaAdding(false);
     if (result.queued) {
@@ -186,7 +199,7 @@ export default function AddFood() {
     setQaP('');
     setQaC('');
     setQaF('');
-    navigate('/today');
+    navigate(doneHref);
   };
 
   const addEntry = async () => {
@@ -208,7 +221,7 @@ export default function AddFood() {
       protein: m.protein,
       carbs: m.carbs,
       fat: m.fat,
-      logged_at: new Date().toISOString(),
+      logged_at: loggedAt(),
     });
     setAdding(false);
     if (result.queued) {
@@ -219,7 +232,7 @@ export default function AddFood() {
     } else {
       toast(`Added ${selected.name} · ${formatInt(m.kcal)} kcal`);
     }
-    navigate('/today');
+    navigate(doneHref);
   };
 
   const openRecipes = async () => {
@@ -278,7 +291,7 @@ export default function AddFood() {
         protein: recipeLogMath.protein,
         carbs: recipeLogMath.carbs,
         fat: recipeLogMath.fat,
-        logged_at: new Date().toISOString(),
+        logged_at: loggedAt(),
       },
       'recipe',
     );
@@ -291,7 +304,7 @@ export default function AddFood() {
     } else {
       toast(`Logged ${selectedRecipe.name}`);
     }
-    navigate('/today');
+    navigate(doneHref);
   };
 
   const math = selected
@@ -355,6 +368,20 @@ export default function AddFood() {
         <h2 className="text-xl font-bold tracking-[-.02em]">Add food</h2>
         <span className="w-9" />
       </div>
+
+      {!isToday && (
+        <div
+          data-testid="logging-to"
+          className="mx-6 mb-1 rounded-md border border-accent-line bg-accent-soft px-3 py-2 text-xs font-semibold text-accent-ink"
+        >
+          Logging to{' '}
+          {new Date(`${targetDate}T12:00:00`).toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
+        </div>
+      )}
 
       <div className="relative mt-0.5 px-6">
         <TextInput

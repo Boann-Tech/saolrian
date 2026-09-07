@@ -20,6 +20,7 @@ const authRecord = { id: 'user-1' };
 let metricRows: Record<string, unknown>[] = [];
 let exerciseRows: Record<string, unknown>[] = [];
 let exerciseQuery: { page?: number; perPage?: number; opts?: Record<string, unknown> } = {};
+let summaryGroups: Record<string, unknown>[] = [];
 
 const fakePb = {
   baseUrl: 'http://localhost:8090',
@@ -43,7 +44,7 @@ const fakePb = {
     budget: 2000,
     tdee: 2200,
     goal: 'maintain',
-    groups: [],
+    groups: summaryGroups,
     totals: { kcal: 0, protein: 0, carbs: 0, fat: 0 },
   }),
 };
@@ -53,9 +54,9 @@ vi.mock('../../lib/pb', async (importOriginal) => {
   return { ...actual, getClient: () => fakePb };
 });
 
-function renderHistory() {
+function renderHistory(route = '/history') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[route]}>
       <AppProvider>
         <ToastProvider>
           <History />
@@ -70,6 +71,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   metricRows = [];
+  summaryGroups = [];
   exerciseRows = [];
   exerciseQuery = {};
 });
@@ -161,5 +163,44 @@ describe('History — month/year picker', () => {
     expect(
       within(await screen.findByTestId('day-summary')).getByText(/\b15\b/),
     ).toBeInTheDocument();
+  });
+});
+
+
+describe('History — adding food lands on the day being viewed', () => {
+  it('carries the selected day into the add link', async () => {
+    // A slot with an entry renders expanded, so the add link is reachable.
+    summaryGroups = [
+      {
+        slot_id: 'slot-7',
+        slot_name: 'Lunch',
+        sort_order: 1,
+        entries: [
+          {
+            id: 'e1', name: 'Soup', brand: '', grams: 300, kcal: 210,
+            protein: 8, carbs: 20, fat: 9,
+            logged_at: '2026-09-01T12:00:00Z', source: 'manual',
+          },
+        ],
+      },
+    ];
+    const user = userEvent.setup();
+    renderHistory();
+
+    // Pick the first day in the visible week rather than today.
+    const strip = await screen.findByTestId('week-strip');
+    const firstDay = within(strip).getAllByRole('button')[0];
+    const iso = firstDay.getAttribute('data-date')!;
+    await user.click(firstDay);
+
+    const add = await screen.findByRole('link', { name: /add food/i });
+    expect(add.getAttribute('href')).toContain(`date=${iso}`);
+  });
+
+  it('opens on the day named in the query string', async () => {
+    renderHistory('/history?date=2026-08-12');
+
+    // The day-summary card labels the selected day with the short format.
+    expect(await screen.findByTestId('day-summary')).toHaveTextContent('Aug 12');
   });
 });

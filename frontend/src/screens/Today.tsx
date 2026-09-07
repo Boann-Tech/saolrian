@@ -318,7 +318,7 @@ export default function Today() {
               <MealGroup
                 key={g.slot_id}
                 group={g}
-                onAddFood={() => navigate('/add')}
+                date={todayISO()}
                 onDelete={(id) => void destroyEntry(id)}
                 onEdit={(id) => navigate(`/edit/${id}`)}
                 onDeleteSlot={() => void requestDeleteSlot(g.slot_id, g.slot_name)}

@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import AddFood from '../AddFood';
 import { AppProvider } from '../../state/AppContext';
+import { todayISO } from '../../lib/format';
 
 const authRecord = { id: 'user-1' };
 const created: Record<string, unknown>[] = [];
@@ -14,7 +15,13 @@ const fakePb = {
   collection: (name: string) => {
     if (name === 'profiles') return { getFullList: async () => [] };
     if (name === 'weights') return { getList: async () => ({ items: [] }) };
-    if (name === 'meal_slots') return { getFullList: async () => [{ id: 'slot-1', name: 'Lunch', sort_order: 0, pct_allocation: null }] };
+    if (name === 'meal_slots')
+      return {
+        getFullList: async () => [
+          { id: 'slot-1', name: 'Lunch', sort_order: 0, pct_allocation: null },
+          { id: 'slot-2', name: 'Dinner', sort_order: 1, pct_allocation: null },
+        ],
+      };
     if (name === 'diary_entries') {
       return {
         create: async (data: Record<string, unknown>) => {
@@ -38,9 +45,9 @@ vi.mock('../../lib/recipes', () => ({
   ]),
 }));
 
-function renderAddFood() {
+function renderAddFood(route = '/add') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[route]}>
       <AppProvider>
         <AddFood />
       </AppProvider>
@@ -89,5 +96,55 @@ describe('AddFood — From recipe', () => {
       carbs: 30,
       fat: 7.5,
     });
+  });
+});
+
+
+describe('AddFood — logging to a chosen day', () => {
+  async function quickAdd(user: ReturnType<typeof userEvent.setup>, kcal = '250') {
+    await user.click(await screen.findByRole('button', { name: /quick add/i }));
+    await user.type(await screen.findByLabelText(/Calories/i), kcal);
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+  }
+
+  it('stamps the entry with the date from the query string', async () => {
+    const user = userEvent.setup();
+    renderAddFood('/add?date=2026-09-01');
+
+    await quickAdd(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(String(created[0]['logged_at'])).toMatch(/^2026-09-01/);
+  });
+
+  it('stamps today when no date is given', async () => {
+    const user = userEvent.setup();
+    renderAddFood('/add');
+
+    await quickAdd(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(String(created[0]['logged_at']).slice(0, 10)).toBe(todayISO());
+  });
+
+  it('preselects the meal slot named in the query string', async () => {
+    const user = userEvent.setup();
+    renderAddFood('/add?slot=slot-2');
+
+    await quickAdd(user);
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]['meal_slot']).toBe('slot-2');
+  });
+
+  it('names the day it is logging to when that day is not today', async () => {
+    renderAddFood('/add?date=2026-09-01');
+    expect(await screen.findByText(/1 September 2026/i)).toBeInTheDocument();
+  });
+
+  it('says nothing about the date when logging to today', async () => {
+    renderAddFood('/add');
+    await screen.findByRole('button', { name: /quick add/i });
+    expect(screen.queryByTestId('logging-to')).not.toBeInTheDocument();
   });
 });

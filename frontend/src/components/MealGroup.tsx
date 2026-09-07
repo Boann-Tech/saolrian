@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import type { SummaryGroup } from '../lib/types';
-import { formatInt } from '../lib/format';
+import { formatInt, todayISO } from '../lib/format';
 import { Card } from './ui';
 
 /** Expandable meal group shared by Today and History — prototype
@@ -82,15 +82,17 @@ function timeOf(iso: string): string {
 
 export function MealGroup({
   group,
+  date,
   addLabel = 'Add food',
-  onAddFood,
   onDelete,
   onEdit,
   onDeleteSlot,
 }: {
   group: SummaryGroup;
+  /** The day these entries belong to. Carried into the add link so logging
+   *  from a past day lands on that day, not today. */
+  date?: string;
   addLabel?: string;
-  onAddFood?: () => void;
   onDelete?: (entryId: string) => void;
   onEdit?: (entryId: string) => void;
   onDeleteSlot?: () => void;
@@ -98,20 +100,17 @@ export function MealGroup({
   const [open, setOpen] = useState(group.entries.length > 0);
   const [menuEntry, setMenuEntry] = useState<string | null>(null);
   const groupKcal = group.entries.reduce((s, e) => s + e.kcal, 0);
+  const addHref = `/add?date=${date ?? todayISO()}&slot=${group.slot_id}`;
 
   const body = (
     <Card padding="none" className="divide-y divide-border">
       {group.entries.length === 0 ? (
-        <div
-          className="flex items-center gap-3 p-3.5"
-          onClick={onAddFood}
-          role={onAddFood ? 'button' : undefined}
-        >
+        <Link className="flex items-center gap-3 p-3.5 no-underline" to={addHref}>
           <div className={IC_CHIP}>{ICONS.fork}</div>
           <div className="min-w-0 flex-1">
             <div className="text-text-faint">Nothing logged yet — tap to add</div>
           </div>
-        </div>
+        </Link>
       ) : (
         group.entries.map((e) => (
           <div key={e.id} className="relative flex items-center gap-3 p-3.5">
@@ -209,16 +208,11 @@ export function MealGroup({
         )}
       </div>
       {open && body}
-      {open &&
-        (onAddFood ? (
-          <button className={ADDMEAL} onClick={onAddFood}>
-            + {addLabel}
-          </button>
-        ) : (
-          <Link className={ADDMEAL} to="/add">
-            + {addLabel}
-          </Link>
-        ))}
+      {open && (
+        <Link className={ADDMEAL} to={addHref}>
+          + {addLabel}
+        </Link>
+      )}
     </div>
   );
 }
