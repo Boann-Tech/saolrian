@@ -9,10 +9,12 @@ import {
   DEFAULT_MACROS,
   FORMULA_LABEL,
   computeBmr,
-  computeCalorieTarget,
+  computeCalorieTargetDetail,
   computeTdee,
   macroSplit,
+  signedRate,
 } from '../lib/nutrition';
+import { RatePicker } from '../components/RatePicker';
 import { formatInt } from '../lib/format';
 import { Button, Card, Field, Segmented, Select, Sheet, TextInput, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
@@ -70,6 +72,11 @@ export default function ProfileGoals() {
   const [form, setForm] = useState<ProfileForm>(() => fromProfile(profile));
   const [saving, setSaving] = useState(false);
   const [goal, setGoal] = useState<Goal>(profile?.goal ?? 'maintain');
+  // Signed kg/week. The profile stores it signed already; fall back to a
+  // moderate 0.5 kg/wk in whichever direction the goal points.
+  const [rate, setRate] = useState<number>(() =>
+    signedRate(profile?.goal ?? 'maintain', profile?.goal_rate ?? -0.5),
+  );
   const [macros, setMacros] = useState({
     protein_pct: profile?.protein_pct ?? DEFAULT_MACROS.protein_pct,
     carbs_pct: profile?.carbs_pct ?? DEFAULT_MACROS.carbs_pct,
@@ -91,6 +98,7 @@ export default function ProfileGoals() {
     seededWeightId.current = undefined; // let the weight effect re-seed for this record
     setForm(fromProfile(profile));
     if (profile?.goal) setGoal(profile.goal);
+    setRate(signedRate(profile?.goal ?? 'maintain', profile?.goal_rate ?? -0.5));
   }, [profile]);
 
   // Seed the Weight field with the user's current weight. It comes from its
@@ -121,7 +129,8 @@ export default function ProfileGoals() {
   };
 
   const tdee = computeTdee(input);
-  const target = computeCalorieTarget(input, goal);
+  const targetDetail = computeCalorieTargetDetail(input, goal, rate);
+  const target = targetDetail?.target ?? null;
   const split = macroSplit(target ?? 0, macros.protein_pct, macros.fat_pct);
 
   const saveProfile = async () => {
@@ -137,6 +146,7 @@ export default function ProfileGoals() {
         body_fat_pct: num(form.body_fat_pct),
         tdee_formula: form.tdee_formula,
         goal,
+        goal_rate: signedRate(goal, rate),
         protein_pct: macros.protein_pct,
         carbs_pct: split.carbsPct,
         fat_pct: macros.fat_pct,
@@ -168,13 +178,14 @@ export default function ProfileGoals() {
     }
   };
 
-  const saveGoalMacros = async (g: Goal, m: typeof macros) => {
+  const saveGoalMacros = async (g: Goal, m: typeof macros, r: number = rate) => {
     if (!profile) return;
     const pb = getClient(endpoint);
     const s = macroSplit(target ?? 0, m.protein_pct, m.fat_pct);
     try {
       await pb.collection('profiles').update(profile.id, {
         goal: g,
+        goal_rate: signedRate(g, r),
         protein_pct: m.protein_pct,
         carbs_pct: s.carbsPct,
         fat_pct: m.fat_pct,
@@ -373,7 +384,7 @@ export default function ProfileGoals() {
               <div className="mt-1 text-[32px] font-bold tracking-[-.02em]">
                 {formatInt(tdee)} <small className="text-base font-medium text-text-muted">kcal/day</small>
               </div>
-              <div className="mt-2.5 text-sm font-medium text-text-muted">
+              <div className="mt-2.5 text-sm font-medium text-text-muted" data-testid="calorie-target">
                 BMR {formatInt(computeBmr(input, form.tdee_formula) ?? 0)} · target{' '}
                 {target != null ? formatInt(target) : '—'} kcal/day to {goal}
               </div>
@@ -384,8 +395,10 @@ export default function ProfileGoals() {
             aria-label="Goal"
             value={goal}
             onChange={(g) => {
+              const next = signedRate(g, rate);
               setGoal(g);
-              void saveGoalMacros(g, macros);
+              setRate(next);
+              void saveGoalMacros(g, macros, next);
             }}
             options={[
               { value: 'lose', label: 'Lose' },
@@ -393,6 +406,22 @@ export default function ProfileGoals() {
               { value: 'gain', label: 'Gain' },
             ]}
           />
+          <div className="mt-4">
+            <RatePicker
+              goal={goal}
+              value={rate}
+              onChange={(r) => {
+                setRate(r);
+                void saveGoalMacros(goal, macros, r);
+              }}
+            />
+          </div>
+          {targetDetail?.capped && (
+            <p className="mb-3.5 text-xs leading-normal text-warn" role="status">
+              That rate would put you below {formatInt(targetDetail.floor)} kcal/day, so your target is
+              capped there. Choose a gentler rate to lose weight at the pace you picked.
+            </p>
+          )}
           <div className="mt-3.5 flex gap-2.5">
             {(
               [

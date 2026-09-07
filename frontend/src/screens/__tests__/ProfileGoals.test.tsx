@@ -24,6 +24,7 @@ function makeProfile(overrides: Record<string, unknown> = {}) {
     body_fat_pct: null,
     tdee_formula: 'mifflin',
     goal: 'maintain',
+    goal_rate: 0,
     protein_pct: 30,
     carbs_pct: 40,
     fat_pct: 30,
@@ -179,6 +180,63 @@ describe('ProfileGoals — Weight field shows current weight', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }));
     await waitFor(() => expect(weightCreates).toHaveLength(1));
     expect(weightCreates[0]).toMatchObject({ kg: 77.1 });
+  });
+});
+
+describe('ProfileGoals — weekly rate drives the calorie target', () => {
+  // BMR 10*80 + 6.25*180 - 5*36 + 5 = 1750; moderate x1.55 => TDEE 2712.5
+  const targetText = () => screen.getByTestId('calorie-target').textContent ?? '';
+
+  it('seeds the rate picker from the profile and applies it to the target', async () => {
+    profileRecord = makeProfile({ goal: 'lose', goal_rate: -0.5 });
+    weightItems = [{ kg: 80 }];
+    renderProfile();
+
+    // -0.5 kg/wk = -550 kcal/day => 2712.5 - 550 = 2162.5 -> 2,163
+    await waitFor(() => expect(targetText()).toMatch(/2,163/));
+    expect(screen.getByRole('radio', { name: '0.5 kg/wk' })).toBeChecked();
+  });
+
+  it('recomputes the target when a different rate is chosen', async () => {
+    profileRecord = makeProfile({ goal: 'lose', goal_rate: -0.5 });
+    weightItems = [{ kg: 80 }];
+    const user = userEvent.setup();
+    renderProfile();
+    await waitFor(() => expect(targetText()).toMatch(/2,163/));
+
+    await user.click(screen.getByRole('radio', { name: '1 kg/wk' }));
+
+    // -1 kg/wk = -1100 kcal/day => 2712.5 - 1100 = 1612.5 -> 1,613
+    await waitFor(() => expect(targetText()).toMatch(/1,613/));
+  });
+
+  it('persists the chosen rate as a signed value', async () => {
+    profileRecord = makeProfile({ goal: 'lose', goal_rate: -0.5 });
+    weightItems = [{ kg: 80 }];
+    const user = userEvent.setup();
+    renderProfile();
+    await waitFor(() => expect(targetText()).toMatch(/2,163/));
+
+    await user.click(screen.getByRole('radio', { name: '1 kg/wk' }));
+    await waitFor(() => expect(profileRecord.goal_rate).toBe(-1));
+  });
+
+  it('hides the rate picker when maintaining', async () => {
+    profileRecord = makeProfile({ goal: 'maintain', goal_rate: 0 });
+    weightItems = [{ kg: 80 }];
+    renderProfile();
+
+    await waitFor(() => expect(targetText()).toMatch(/2,713/));
+    expect(screen.queryByRole('radio', { name: /kg\/wk/ })).not.toBeInTheDocument();
+  });
+
+  it('warns when the chosen rate is capped by the calorie floor', async () => {
+    profileRecord = makeProfile({ goal: 'lose', goal_rate: -1, sex: 'female', height_cm: 155, activity_level: 'sedentary' });
+    weightItems = [{ kg: 50 }];
+    renderProfile();
+
+    expect(await screen.findByText(/capped/i)).toBeInTheDocument();
+    await waitFor(() => expect(targetText()).toMatch(/1,200/));
   });
 });
 
