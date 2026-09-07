@@ -53,7 +53,11 @@ var Nutrients = []Nutrient{
 	{"fat_monounsaturated", "Monounsaturated fat", UnitG, GroupMacro, 100},
 	{"fat_polyunsaturated", "Polyunsaturated fat", UnitG, GroupMacro, 100},
 	{"fat_trans", "Trans fat", UnitG, GroupMacro, 100},
-	{"cholesterol", "Cholesterol", UnitMg, GroupMacro, 3000},
+	// 3200: USDA SR Legacy publishes 3010mg (raw) / 3100mg (cooked) for beef
+	// and veal brain, organ meats genuinely this high in cholesterol.
+	// Confirmed against the FDC API itself (fdc_id 168622, 168624, 174352),
+	// not a mapping or unit-factor defect.
+	{"cholesterol", "Cholesterol", UnitMg, GroupMacro, 3200},
 	{"alcohol", "Alcohol", UnitG, GroupMacro, 100},
 	{"water", "Water", UnitG, GroupMacro, 100},
 	{"ash", "Ash", UnitG, GroupMacro, 100},
@@ -63,11 +67,29 @@ var Nutrients = []Nutrient{
 	{"potassium", "Potassium", UnitMg, GroupMineral, 20000},
 	{"calcium", "Calcium", UnitMg, GroupMineral, 20000},
 	{"magnesium", "Magnesium", UnitMg, GroupMineral, 5000},
-	{"phosphorus", "Phosphorus", UnitMg, GroupMineral, 5000},
+	// 10000: USDA SR Legacy's "Leavening agents, baking powder, double-acting,
+	// straight phosphate" (fdc_id 172804) publishes 9918mg/100g. Baking
+	// powder made from phosphate salts (as opposed to the sodium-aluminum-
+	// sulfate kind) is chemically expected to run very high in phosphorus;
+	// third-party USDA mirrors report the same figure. Not a unit error.
+	{"phosphorus", "Phosphorus", UnitMg, GroupMineral, 10000},
 	{"iron", "Iron", UnitMg, GroupMineral, 500},
 	{"zinc", "Zinc", UnitMg, GroupMineral, 500},
+	// USDA SR Legacy's "Toddler drink, MEAD JOHNSON, PurAmino Toddler
+	// Powder... not reconstituted" (fdc_id 172294) publishes 370mg/100g
+	// copper -- roughly 1000x a plausible figure for infant formula powder
+	// (~0.4mg/100g). This is the source's own data being wrong, not a
+	// mapping defect, so the maximum stays put; the food is excluded by
+	// name in exclusions.csv instead (see Builder).
 	{"copper", "Copper", UnitMg, GroupMineral, 100},
-	{"manganese", "Manganese", UnitMg, GroupMineral, 100},
+	// 150: USDA SR Legacy's instant tea powders (fdc_id 173230, 174872)
+	// publish 125-133mg/100g; tea is well-documented as exceptionally
+	// manganese-rich, so 100 was a little tight. The UNILEVER SLIMFAST
+	// high-protein shake mix (fdc_id 173174) separately publishes
+	// 269.1mg/100g -- implausible against a ~2.3mg daily reference intake,
+	// so that food is excluded by name in exclusions.csv rather than
+	// raised for here.
+	{"manganese", "Manganese", UnitMg, GroupMineral, 150},
 	{"selenium", "Selenium", UnitUg, GroupMineral, 6000},
 	{"iodine", "Iodine", UnitUg, GroupMineral, 10000},
 

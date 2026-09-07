@@ -49,6 +49,12 @@ type SourceInfo struct {
 	Licence string
 	URL     string
 	Rows    int
+	// ArchiveSHA256 is the hash of the download this data came from, so a
+	// pack can say which release of a dataset it holds. Empty when the
+	// source directory was populated by hand rather than by `foodpack
+	// fetch`. Appended rather than inserted: gob decodes by field name, so
+	// an older pack simply leaves it empty.
+	ArchiveSHA256 string
 }
 
 // Pack is a complete built pack.

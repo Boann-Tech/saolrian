@@ -110,6 +110,16 @@ func (m *Mapping) Known(code string) bool {
 	return m.ignored[code]
 }
 
+// Ignored reports whether code is explicitly marked "-" in the mapping
+// table: known, but deliberately never stored. Callers that read raw
+// cells before consulting the mapping should skip an ignored column
+// without parsing its value at all -- that is what "-" means, and a
+// free-text column marked "-" (a name, a footnote) is exactly the case
+// where parsing it would fail.
+func (m *Mapping) Ignored(code string) bool {
+	return m.ignored[code]
+}
+
 // Codes returns every code in the mapping, in file order.
 func (m *Mapping) Codes() []string { return m.order }
 

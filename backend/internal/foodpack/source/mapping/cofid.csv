@@ -1,0 +1,49 @@
+source_code,canonical_key,factor,note
+energy (kcal) (kcal),energy_kcal,1,Proximates: energy in kcal
+protein (g),protein,1,Proximates
+fat (g),fat,1,Proximates
+carbohydrate (g),carbohydrate,1,"Proximates: available carbohydrate, monosaccharide equivalents"
+englyst fibre (g),fibre,1,Proximates
+total sugars (g),sugars,1,Proximates
+starch (g),starch,1,Proximates
+satd fa /100g fd (g),fat_saturated,1,"Proximates. The ""fd"" (food, as opposed to ""fa"" = fatty acids) spelling rests on documentation, not an observed workbook: no CoFID archive is reachable in this environment (see manifest/sources.csv), so this header has not been confirmed against a real file. Whoever downloads CoFID first should confirm the exact header text with --report-unmapped before trusting this row"
+mono fa /100g fd (g),fat_monounsaturated,1,Proximates: unverified against a real workbook, see the satd fa row above
+poly fa /100g fd (g),fat_polyunsaturated,1,Proximates: unverified against a real workbook, see the satd fa row above
+trans fa /100g fd (g),fat_trans,1,Proximates: unverified against a real workbook, see the satd fa row above
+cholesterol (mg),cholesterol,1,Proximates
+alcohol (g),alcohol,1,Proximates
+water (g),water,1,Proximates
+sodium (mg),sodium,1,Inorganics
+potassium (mg),potassium,1,Inorganics
+calcium (mg),calcium,1,Inorganics
+magnesium (mg),magnesium,1,Inorganics
+phosphorus (mg),phosphorus,1,Inorganics
+iron (mg),iron,1,Inorganics
+zinc (mg),zinc,1,Inorganics
+copper (mg),copper,1,Inorganics
+manganese (mg),manganese,1,Inorganics
+selenium (µg),selenium,1,Inorganics
+iodine (µg),iodine,1,Inorganics
+retinol (µg),retinol,1,Vitamins
+carotene (µg),carotene_beta,1,Vitamins
+vitamin a (µg),-,1,"Vitamins: this column is retinol equivalents (RE), not retinol activity equivalents (RAE) -- they are different quantities that can differ by up to 2x for carotene-rich foods (RE historically used a 1:6 beta-carotene:retinol ratio; RAE uses 1:12). The aggregate RE figure alone cannot be converted to RAE without the underlying carotene breakdown, which this column does not carry, so it is dropped rather than stored under vitamin_a_rae. The canonical vocabulary has no separate RE key; retinol and carotene_beta are mapped individually below instead"
+vitamin d (µg),vitamin_d,1,Vitamins
+vitamin e (mg),vitamin_e,1,Vitamins
+vitamin k1 (µg),vitamin_k,1,Vitamins
+vitamin c (mg),vitamin_c,1,Vitamins
+thiamin (mg),thiamin,1,Vitamins
+riboflavin (mg),riboflavin,1,Vitamins
+niacin (mg),niacin,1,Vitamins
+vitamin b6 (mg),vitamin_b6,1,Vitamins
+folate (µg),folate,1,Vitamins
+vitamin b12 (µg),vitamin_b12,1,Vitamins
+pantothenate (mg),pantothenate,1,Vitamins
+biotin (µg),biotin,1,Vitamins
+energy (kj) (kj),-,1,Proximates: energy in kJ; superseded by kcal
+chloride (mg),-,1,Inorganics: outside the canonical vocabulary
+tryptophan/60 (g),-,1,Proximates: a protein component
+niacin equivalent (mg),-,1,Vitamins: superseded by preformed niacin
+satd fa /100g fa (g),-,1,"Proximates: this is grams per 100g of FATTY ACIDS (a composition percentage of the fat fraction), not per 100g of food. fat_saturated means per 100g food; use the /100g fd column for that. Mapping this column here previously stored ~65g saturated fat against 0.1g of total fat for skimmed milk -- do not repeat that mistake"
+mono fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_monounsaturated, use the /100g fd column"
+poly fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_polyunsaturated, use the /100g fd column"
+trans fa /100g fa (g),-,1,"Proximates: /100g FA denominator (see satd fa /100g fa above); wrong denominator for fat_trans, use the /100g fd column"

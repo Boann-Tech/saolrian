@@ -1,11 +1,8 @@
 package source
 
 import (
-	"encoding/csv"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -47,6 +44,97 @@ const (
 // builds of the same archive produce byte-identical packs.
 var usdaSubtypeOrder = []string{SourceUSDAFoundation, SourceUSDASR}
 
+// usdaEnergyFallbackOrder are FDC's computed-energy nutrient numbers, tried
+// in this order for any food whose mapped energy code (nutrient_nbr 208,
+// mapped to energy_kcal in mapping/usda.csv) produced no value at all.
+//
+// USDA Foundation Foods commonly reports energy this way instead of the
+// classic "Energy" figure 208 uses: of one 2025 Foundation release's ~340
+// foods, only 97 carry 208 while 299 carry 957 (Atwater General Factors)
+// and 289 carry 958 (Atwater Specific Factors); SR Legacy never defines
+// either number at all, so this fallback is inert there. LoadMapping
+// allows only one source_code per canonical key, and 208 stays the mapped
+// code because it covers SR Legacy's much larger ~7,800-food set — mapping
+// 957 or 958 there instead would trade a small, real gap for a huge one.
+// This fallback is where Foundation's real energy figure is picked up
+// instead, per food, only when 208 is absent for it.
+//
+// 958 (Atwater Specific Factors) is tried before 957 (Atwater General
+// Factors) where a food reports both. FDC's own Foundation Foods
+// documentation describes general factors (uniform 4/9/4 kcal/g) as what
+// "most" foods get, and specific factors as calculated "per food as
+// outlined in USDA Handbook 74" — i.e. adjusted for that food's actual
+// digestibility (fibre fermentation, protein bioavailability) rather than
+// a flat constant. Handbook 74's own rationale for computing specific
+// factors at all is that they land closer to true metabolizable energy,
+// particularly for high-fibre and processed foods, which is why USDA
+// bothers computing them only where food-specific data supports it. That
+// is evidence about which calculation is more accurate for a given food,
+// not a direct FDC statement of "prefer 958" — no such explicit statement
+// was found in FDC's public documentation — but it is the only documented
+// signal available, and it points at specific factors as the more
+// food-appropriate figure when both exist. Coverage counts (299 vs 289
+// among Foundation Foods) were also checked and do not favour either
+// order, so they play no part in this choice.
+var usdaEnergyFallbackOrder = []string{"958", "957"}
+
+// usdaEnergyFallbackUnit is the unit every fallback number in
+// usdaEnergyFallbackOrder must be declared in. Both are always kcal in
+// practice, but nothing else asserts that: unlike every code in
+// mapping/usda.csv, which usdaCheckMapping checks against the canonical
+// unit before any value is trusted, these two are read directly from raw
+// amounts and bypass that guard entirely. usdaCheckEnergyFallbackUnits
+// closes that gap the same way the mapping guard would.
+const usdaEnergyFallbackUnit = "KCAL"
+
+// usdaCheckEnergyFallbackUnits fails the build if either Atwater-factor
+// fallback nutrient (usdaEnergyFallbackOrder) is declared in a unit other
+// than kcal in this release. The fallback reads raw amounts directly
+// rather than going through Mapping.Apply, so usdaCheckMapping's unit
+// guard never sees it; this is the equivalent check for those two codes,
+// with the same "name the code and the unit found" shape.
+func usdaCheckEnergyFallbackUnits(nutrients map[string]usdaNutrient) error {
+	byNumber := map[string]usdaNutrient{}
+	for _, n := range nutrients {
+		byNumber[n.number] = n
+	}
+	for _, code := range usdaEnergyFallbackOrder {
+		n, present := byNumber[code]
+		if !present {
+			continue // this release does not define it; nothing to fall back to
+		}
+		if n.unit != usdaEnergyFallbackUnit {
+			return fmt.Errorf("usda energy fallback nutrient_nbr %s: source unit %q but the fallback assumes %q; check usdaEnergyFallbackOrder in usda.go",
+				code, n.unit, usdaEnergyFallbackUnit)
+		}
+	}
+	return nil
+}
+
+// applyUSDAEnergyFallback fills energy_kcal from usdaEnergyFallbackOrder
+// for any food in profiles that has no energy_kcal of its own, using the
+// first fallback number that food actually reported. A food with neither
+// 208 nor any fallback figure is left exactly as it was: absence stays
+// absence, per Profile's own contract.
+func applyUSDAEnergyFallback(profiles map[string]food.Profile, fallback map[string]map[string]float64) {
+	for fdcID, byNumber := range fallback {
+		if _, has := profiles[fdcID]["energy_kcal"]; has {
+			continue
+		}
+		for _, code := range usdaEnergyFallbackOrder {
+			v, ok := byNumber[code]
+			if !ok {
+				continue
+			}
+			if profiles[fdcID] == nil {
+				profiles[fdcID] = food.Profile{}
+			}
+			profiles[fdcID]["energy_kcal"] = v
+			break
+		}
+	}
+}
+
 // usdaSourceFor maps an FDC data_type to a canonical source value.
 func usdaSourceFor(dataType string) string {
 	if dataType == "foundation_food" {
@@ -60,6 +148,9 @@ type USDAOptions struct {
 	Dir       string   // directory of extracted FDC CSVs
 	DataTypes []string // e.g. "foundation_food", "sr_legacy_food"
 	Mapping   *Mapping
+	// Unmapped, when set, is told about every source nutrient code the
+	// mapping does not cover. Optional.
+	Unmapped UnmappedSink
 }
 
 // LoadUSDA reads the FDC CSV export and returns canonical reference foods
@@ -76,6 +167,9 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 	if err := usdaCheckMapping(o.Mapping, nutrients); err != nil {
 		return nil, nil, err
 	}
+	if err := usdaCheckEnergyFallbackUnits(nutrients); err != nil {
+		return nil, nil, err
+	}
 
 	foods, order, err := usdaFoods(o.Dir, o.DataTypes)
 	if err != nil {
@@ -83,7 +177,8 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 	}
 
 	profiles := map[string]food.Profile{}
-	if err := usdaEachRow(filepath.Join(o.Dir, "food_nutrient.csv"),
+	fallbackEnergy := map[string]map[string]float64{} // fdcID -> nutrient_nbr -> kcal
+	if err := eachCSVRow(filepath.Join(o.Dir, "food_nutrient.csv"),
 		[]string{"fdc_id", "nutrient_id", "amount"},
 		func(get func(string) string) error {
 			fdcID := get("fdc_id")
@@ -100,6 +195,21 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 			}
 			key, value, ok := o.Mapping.Apply(n.number, amount)
 			if !ok {
+				if !o.Mapping.Known(n.number) {
+					noteUnmapped(o.Unmapped, n.number, n.name)
+				}
+				// mapping/usda.csv ignores 957/958 outright (see
+				// usdaEnergyFallbackOrder's doc comment for why), but the
+				// raw kcal figure is still worth remembering per food in
+				// case 208 turns out absent for it.
+				for _, fb := range usdaEnergyFallbackOrder {
+					if n.number == fb {
+						if fallbackEnergy[fdcID] == nil {
+							fallbackEnergy[fdcID] = map[string]float64{}
+						}
+						fallbackEnergy[fdcID][fb] = amount
+					}
+				}
 				return nil // unmapped or explicitly ignored
 			}
 			if profiles[fdcID] == nil {
@@ -110,54 +220,32 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 		}); err != nil {
 		return nil, nil, err
 	}
+	applyUSDAEnergyFallback(profiles, fallbackEnergy)
 
 	portions, err := usdaPortions(o.Dir, foods)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	out := make([]format.RefFood, 0, len(order))
-	rows := map[string]int{}
-
-	// Range violations are collected across the whole load rather than
-	// returned on the first offender. A real archive surfacing one defect
-	// per run makes fixing a mapping table an afternoon of rebuilds; the
-	// operator needs the whole list at once. order is food.csv order, so
-	// the list is deterministic.
-	var violations []string
-
+	b := NewBuilder()
 	for _, fdcID := range order {
 		f := foods[fdcID]
-		prof := profiles[fdcID]
-		if prof == nil {
-			continue // no nutrient data at all: not worth shipping
-		}
-		if err := food.Validate(prof); err != nil {
-			violations = append(violations, fmt.Sprintf("%s/%s (%s): %v", f.source, fdcID, f.name, err))
-			continue
-		}
-		p := portions[fdcID]
-		var defaultServing float64
-		if len(p) > 0 {
-			defaultServing = p[0].Grams
-		}
-		rows[f.source]++
-		out = append(out, format.RefFood{
-			Source:          f.source,
-			SourceID:        fdcID,
-			Region:          usdaRegion,
-			Licence:         usdaLicence,
-			Name:            f.name,
-			SearchText:      food.SearchText(f.name),
-			Nutrients:       food.Encode(prof),
-			Portions:        p,
-			DefaultServingG: defaultServing,
+		b.Add(FoodInput{
+			Source:   f.source,
+			SourceID: fdcID,
+			Region:   usdaRegion,
+			Licence:  usdaLicence,
+			Name:     f.name,
+			Profile:  profiles[fdcID],
+			Portions: portions[fdcID],
 		})
 	}
-	if err := food.RangeViolationsError(violations); err != nil {
-		return nil, nil, fmt.Errorf("usda: %w", err)
+	if err := b.Err("usda"); err != nil {
+		return nil, nil, err
 	}
+	b.ReportExcluded()
 
+	rows := b.Rows()
 	var sources []format.SourceInfo
 	for _, sub := range usdaSubtypeOrder {
 		if rows[sub] == 0 {
@@ -168,12 +256,13 @@ func LoadUSDA(o USDAOptions) ([]format.RefFood, []format.SourceInfo, error) {
 			URL: usdaURL, Rows: rows[sub],
 		})
 	}
-	return out, sources, nil
+	return b.Foods(), sources, nil
 }
 
 type usdaNutrient struct {
 	number string
 	unit   string
+	name   string
 }
 
 type usdaFood struct {
@@ -192,13 +281,14 @@ func usdaNutrients(dir string) (map[string]usdaNutrient, error) {
 	out := map[string]usdaNutrient{}
 	definedBy := map[string]string{} // nutrient_nbr -> the id that first declared it
 
-	err := usdaEachRow(filepath.Join(dir, "nutrient.csv"),
-		[]string{"id", "unit_name", "nutrient_nbr"},
+	err := eachCSVRow(filepath.Join(dir, "nutrient.csv"),
+		[]string{"id", "unit_name", "nutrient_nbr", "name"},
 		func(get func(string) string) error {
 			id := strings.TrimSpace(get("id"))
 			n := usdaNutrient{
 				number: strings.TrimSpace(get("nutrient_nbr")),
 				unit:   strings.ToUpper(strings.TrimSpace(get("unit_name"))),
+				name:   strings.TrimSpace(get("name")),
 			}
 			if n.number != "" {
 				if prev, seen := definedBy[n.number]; seen && prev != id {
@@ -273,7 +363,7 @@ func usdaFoods(dir string, dataTypes []string) (map[string]usdaFood, []string, e
 	foods := map[string]usdaFood{}
 	var order []string
 
-	err := usdaEachRow(filepath.Join(dir, "food.csv"),
+	err := eachCSVRow(filepath.Join(dir, "food.csv"),
 		[]string{"fdc_id", "data_type", "description"},
 		func(get func(string) string) error {
 			dt := strings.TrimSpace(get("data_type"))
@@ -300,7 +390,7 @@ func usdaFoods(dir string, dataTypes []string) (map[string]usdaFood, []string, e
 
 func usdaPortions(dir string, foods map[string]usdaFood) (map[string][]format.Portion, error) {
 	units := map[string]string{}
-	if err := usdaEachRow(filepath.Join(dir, "measure_unit.csv"),
+	if err := eachCSVRow(filepath.Join(dir, "measure_unit.csv"),
 		[]string{"id", "name"},
 		func(get func(string) string) error {
 			units[get("id")] = strings.TrimSpace(get("name"))
@@ -315,7 +405,7 @@ func usdaPortions(dir string, foods map[string]usdaFood) (map[string][]format.Po
 	}
 	acc := map[string][]seqPortion{}
 
-	err := usdaEachRow(filepath.Join(dir, "food_portion.csv"),
+	err := eachCSVRow(filepath.Join(dir, "food_portion.csv"),
 		[]string{"fdc_id", "seq_num", "amount", "measure_unit_id", "modifier", "gram_weight"},
 		func(get func(string) string) error {
 			id := get("fdc_id")
@@ -370,53 +460,4 @@ func usdaPortionLabel(amount, unit, modifier string) string {
 		return modifier
 	}
 	return ""
-}
-
-// usdaEachRow streams a CSV, calling fn with a column accessor. It fails
-// fast if any required column is missing from the header.
-func usdaEachRow(path string, required []string, fn func(get func(string) string) error) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("open %s: %w", filepath.Base(path), err)
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-	r.FieldsPerRecord = -1
-	r.ReuseRecord = true
-	r.LazyQuotes = true
-
-	header, err := r.Read()
-	if err != nil {
-		return fmt.Errorf("read header of %s: %w", filepath.Base(path), err)
-	}
-	col := map[string]int{}
-	for i, h := range header {
-		col[strings.Trim(strings.TrimSpace(h), "\"")] = i
-	}
-	for _, name := range required {
-		if _, ok := col[name]; !ok {
-			return fmt.Errorf("%s: missing required column %q", filepath.Base(path), name)
-		}
-	}
-
-	for {
-		rec, err := r.Read()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("read %s: %w", filepath.Base(path), err)
-		}
-		get := func(name string) string {
-			i, ok := col[name]
-			if !ok || i >= len(rec) {
-				return ""
-			}
-			return rec[i]
-		}
-		if err := fn(get); err != nil {
-			return err
-		}
-	}
 }

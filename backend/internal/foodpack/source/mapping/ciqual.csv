@@ -1,0 +1,42 @@
+source_code,canonical_key,factor,note
+328,energy_kcal,1,"Energy, Regulation EU No 1169/2011 (kcal/100 g)"
+25000,water,1,Water (g/100 g)
+25001,protein,1,"Protein, crude, N x 6.25 (g/100 g)"
+40000,fat,1,Fat (g/100 g)
+31000,carbohydrate,1,Carbohydrate (g/100 g)
+34000,fibre,1,"Fibre, dietary (g/100 g)"
+32000,sugars,1,Sugars (g/100 g)
+31200,starch,1,Starch (g/100 g)
+34100,ash,1,Ash (g/100 g)
+10110,salt,1,Salt (g/100 g)
+40302,fat_saturated,1,FA saturated (g/100 g)
+40303,fat_monounsaturated,1,FA monounsaturated (g/100 g)
+40304,fat_polyunsaturated,1,FA polyunsaturated (g/100 g)
+40400,cholesterol,1,Cholesterol (mg/100 g)
+10120,calcium,1,Calcium (mg/100 g)
+10190,copper,1,Copper (mg/100 g)
+10200,iron,1,Iron (mg/100 g)
+10230,iodine,1,Iodine (ug/100 g)
+10250,magnesium,1,Magnesium (mg/100 g)
+10260,manganese,1,Manganese (mg/100 g)
+10300,phosphorus,1,Phosphorus (mg/100 g)
+10310,potassium,1,Potassium (mg/100 g)
+10340,selenium,1,Selenium (ug/100 g)
+10400,sodium,1,Sodium (mg/100 g)
+10410,zinc,1,Zinc (mg/100 g)
+51330,retinol,1,Retinol (ug/100 g)
+51340,carotene_beta,1,Beta-carotene (ug/100 g)
+52100,vitamin_d,1,Vitamin D (ug/100 g)
+53100,vitamin_e,1,Vitamin E (mg/100 g)
+54100,vitamin_k,1,Vitamin K1 (ug/100 g)
+55100,vitamin_c,1,Vitamin C (mg/100 g)
+56100,thiamin,1,Thiamin (mg/100 g)
+56200,riboflavin,1,Riboflavin (mg/100 g)
+56300,niacin,1,Niacin (mg/100 g)
+56400,pantothenate,1,Pantothenic acid (mg/100 g)
+56500,vitamin_b6,1,Vitamin B6 (mg/100 g)
+56600,biotin,1,Biotin (ug/100 g)
+56700,folate,1,"Folate, total (ug/100 g)"
+56800,vitamin_b12,1,Vitamin B12 (ug/100 g)
+327,-,1,"Energy, Regulation EU (kJ/100 g); superseded by 328 kcal"
+10004,-,1,Energy N.G.M.; a second energy convention
