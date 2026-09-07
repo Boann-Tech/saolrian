@@ -20,6 +20,8 @@ export interface Profile {
   fat_pct: number | null;
   theme_accent: string | null;
   goal_rate: number | null;
+  water_goal_ml: number | null;
+  steps_goal: number | null;
   [key: string]: unknown;
 }
 
@@ -76,12 +78,25 @@ export interface SummaryGroup {
   entries: SummaryEntry[];
 }
 
+/** Per-day goals the backend derives from the profile. Macro grams are 0 when
+ *  there is no budget to split, in which case the UI shows no goal at all. */
+export interface SummaryTargets {
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  water_ml: number;
+  steps: number;
+}
+
 export interface Summary {
   budget: number | null;
+  /** Why `budget` is null — an actionable reason from the backend. */
+  budget_message?: string;
   tdee: number | null;
   goal: string;
   groups: SummaryGroup[];
   totals: { kcal: number; protein: number; carbs: number; fat: number };
+  targets?: SummaryTargets;
 }
 
 /** One logged workout — created by the Lose It! import (source "import"). */

@@ -1,4 +1,4 @@
-import type { Food, Summary, SummaryGroup } from './types';
+import type { Food, Summary, SummaryGroup, SummaryTargets } from './types';
 
 /** Normalize API responses that may come in either the documented shape or the
  * backend's evolved shape. Keeps screens agnostic to contract drift. */
@@ -18,6 +18,7 @@ interface RawSummaryLike {
     totals?: { kcal: number; protein: number; carbs: number; fat: number };
   }>;
   totals?: { kcal: number; protein: number; carbs: number; fat: number };
+  targets?: SummaryTargets;
 }
 
 export function normalizeSummary(raw: RawSummaryLike): Summary {
@@ -42,10 +43,14 @@ export function normalizeSummary(raw: RawSummaryLike): Summary {
     );
   return {
     budget: raw.budget ?? null,
+    // Carried through so the dashboard can say *why* there's no budget rather
+    // than rendering a bare dash the user can't act on.
+    ...(raw.budget_message ? { budget_message: raw.budget_message } : {}),
     tdee: raw.tdee ?? null,
     goal: raw.goal ?? 'maintain',
     groups,
     totals,
+    ...(raw.targets ? { targets: raw.targets } : {}),
   };
 }
 

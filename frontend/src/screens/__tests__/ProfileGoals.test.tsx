@@ -25,6 +25,8 @@ function makeProfile(overrides: Record<string, unknown> = {}) {
     tdee_formula: 'mifflin',
     goal: 'maintain',
     goal_rate: 0,
+    water_goal_ml: 0,
+    steps_goal: 0,
     protein_pct: 30,
     carbs_pct: 40,
     fat_pct: 30,
@@ -237,6 +239,40 @@ describe('ProfileGoals — weekly rate drives the calorie target', () => {
 
     expect(await screen.findByText(/capped/i)).toBeInTheDocument();
     await waitFor(() => expect(targetText()).toMatch(/1,200/));
+  });
+});
+
+describe('ProfileGoals — daily goals', () => {
+  it('seeds the water and step goals from the profile', async () => {
+    profileRecord = makeProfile({ water_goal_ml: 3000, steps_goal: 12000 });
+    renderProfile();
+
+    await waitFor(() => expect(screen.getByLabelText(/Water goal/i)).toHaveValue(3000));
+    expect(screen.getByLabelText(/Step goal/i)).toHaveValue(12000);
+  });
+
+  it('shows the defaults when the profile has none set', async () => {
+    profileRecord = makeProfile();
+    renderProfile();
+
+    await waitFor(() => expect(screen.getByLabelText(/Water goal/i)).toHaveValue(2000));
+    expect(screen.getByLabelText(/Step goal/i)).toHaveValue(10000);
+  });
+
+  it('saves an edited goal', async () => {
+    // Distinct from the default so the edit can wait for the profile to land
+    // rather than racing the initial seed.
+    profileRecord = makeProfile({ water_goal_ml: 1800, steps_goal: 10000 });
+    const user = userEvent.setup();
+    renderProfile();
+
+    const water = await screen.findByLabelText(/Water goal/i);
+    await waitFor(() => expect(water).toHaveValue(1800));
+    await user.clear(water);
+    await user.type(water, '2500');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(profileRecord.water_goal_ml).toBe(2500));
   });
 });
 

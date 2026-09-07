@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp, saolrianSend } from '../state/AppContext';
 import type { Summary } from '../lib/types';
 import { todayISO, greeting, formatInt } from '../lib/format';
 import { getClient } from '../lib/pb';
 import { normalizeSummary } from '../lib/normalize';
+import { DEFAULT_STEPS_GOAL, DEFAULT_WATER_GOAL_ML } from '../lib/nutrition';
 import { MealGroup } from '../components/MealGroup';
 import {
   Button,
@@ -91,6 +92,9 @@ export default function Today() {
   const remaining = budget != null ? budget - eaten : null;
   const over = remaining != null && remaining < 0;
   const firstName = (profile?.['name'] as string | undefined) ?? '';
+  const targets = summary?.targets;
+  const waterGoal = targets?.water_ml || DEFAULT_WATER_GOAL_ML;
+  const stepsGoal = targets?.steps || DEFAULT_STEPS_GOAL;
 
   const loadMetrics = async (pb: ReturnType<typeof getClient>) => {
     try {
@@ -209,7 +213,7 @@ export default function Today() {
               </small>
             </div>
           </div>
-          {budget != null && (
+          {budget != null ? (
             <div
               className={cn(
                 'rounded-full px-3 py-1.5 text-right text-sm font-semibold',
@@ -221,6 +225,15 @@ export default function Today() {
                 {pct}% of budget{over ? ' — over' : ''}
               </small>
             </div>
+          ) : (
+            summary?.budget_message && (
+              <div className="max-w-[52%] text-right text-2xs leading-normal text-text-muted">
+                {summary.budget_message}
+                <Link to="/profile" className="mt-1 block font-semibold text-accent-ink">
+                  Update your profile →
+                </Link>
+              </div>
+            )
           )}
         </Card>
       </section>
@@ -269,12 +282,20 @@ export default function Today() {
             <div className="flex gap-2.5">
               {(
                 [
-                  ['Protein', summary.totals.protein],
-                  ['Carbs', summary.totals.carbs],
-                  ['Fat', summary.totals.fat],
+                  ['Protein', summary.totals.protein, targets?.protein_g],
+                  ['Carbs', summary.totals.carbs, targets?.carbs_g],
+                  ['Fat', summary.totals.fat, targets?.fat_g],
                 ] as const
-              ).map(([label, val]) => (
-                <StatTile key={label} label={label} value={`${formatInt(val)}g`} sub="/ 150" progress={(val / 150) * 100} />
+              ).map(([label, val, goal]) => (
+                <StatTile
+                  key={label}
+                  label={label}
+                  value={`${formatInt(val)}g`}
+                  // No goal without a budget to split — show the intake alone
+                  // rather than inventing a target to measure it against.
+                  sub={goal ? `/ ${formatInt(goal)}` : undefined}
+                  progress={goal ? (val / goal) * 100 : undefined}
+                />
               ))}
             </div>
           </section>
@@ -358,14 +379,14 @@ export default function Today() {
                       {formatInt(waterMl)}
                     </button>
                   )}
-                  <small className="text-sm font-medium text-text-faint">/ {formatInt(2000)} ml</small>
+                  <small className="text-sm font-medium text-text-faint">/ {formatInt(waterGoal)} ml</small>
                 </span>
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
                   <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
                   water
                 </span>
               </div>
-              <ProgressBar pct={(waterMl / 2000) * 100} tone="good" />
+              <ProgressBar pct={(waterMl / waterGoal) * 100} tone="good" />
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   variant="outline"
@@ -390,14 +411,14 @@ export default function Today() {
               <CardTitle>Steps</CardTitle>
               <div className="flex items-baseline justify-between">
                 <span className="text-xl font-bold">
-                  {formatInt(steps)} <small className="text-sm font-medium text-text-faint">/ {formatInt(10000)} steps</small>
+                  {formatInt(steps)} <small className="text-sm font-medium text-text-faint">/ {formatInt(stepsGoal)} steps</small>
                 </span>
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-good-ink">
                   <span className="h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
                   manual
                 </span>
               </div>
-              <ProgressBar pct={(steps / 10000) * 100} tone="good" />
+              <ProgressBar pct={(steps / stepsGoal) * 100} tone="good" />
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   variant="outline"

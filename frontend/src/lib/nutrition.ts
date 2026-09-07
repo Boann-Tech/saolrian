@@ -33,6 +33,11 @@ export const ACTIVITY_LEVEL_HINT: Record<ActivityLevel, string> = {
  *  to turn a weekly rate into a daily calorie adjustment. */
 export const KCAL_PER_KG = 7700;
 
+/** Daily goals for a user who hasn't set their own. Must match the Go
+ *  constants in internal/routes/targets.go. */
+export const DEFAULT_WATER_GOAL_ML = 2000;
+export const DEFAULT_STEPS_GOAL = 10000;
+
 /** Lowest daily target we will hand a user, whatever rate they asked for.
  *  The usual clinical guidance: 1200 kcal/day for women, 1500 for men. */
 export const CALORIE_FLOOR: Record<Sex, number> = {

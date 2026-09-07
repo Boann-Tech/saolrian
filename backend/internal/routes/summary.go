@@ -158,13 +158,19 @@ func summaryHandler(e *core.RequestEvent) error {
 		resultGroups = append(resultGroups, unassigned)
 	}
 
+	profile, profileErr := e.App.FindFirstRecordByFilter("profiles", "user = {:uid}", map[string]any{"uid": uid})
 	budget, budgetErr := userBudget(e, uid)
 
 	resp := map[string]any{
-		"date":    day,
-		"slots":   resultGroups,
-		"totals":  dayTotals,
-		"budget":  budget, // nil when the profile has no weight yet
+		"date":   day,
+		"slots":  resultGroups,
+		"totals": dayTotals,
+		"budget": budget, // nil when the profile has no weight yet
+	}
+	// Macro/water/step goals, so the dashboard renders the user's own targets
+	// instead of inventing constants.
+	if profileErr == nil {
+		resp["targets"] = dailyTargets(profile, budget)
 	}
 	if budgetErr != nil {
 		resp["budget_message"] = budgetErr.Error()

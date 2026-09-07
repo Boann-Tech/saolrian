@@ -7,6 +7,8 @@ import {
   ACTIVITY_FACTORS,
   ACTIVITY_LEVEL_HINT,
   DEFAULT_MACROS,
+  DEFAULT_STEPS_GOAL,
+  DEFAULT_WATER_GOAL_ML,
   FORMULA_LABEL,
   computeBmr,
   computeCalorieTargetDetail,
@@ -50,6 +52,8 @@ interface ProfileForm {
   body_fat_pct: string;
   weight_kg: string;
   tdee_formula: TdeeFormula;
+  water_goal_ml: string;
+  steps_goal: string;
 }
 
 function fromProfile(p: Profile | null): ProfileForm {
@@ -63,6 +67,9 @@ function fromProfile(p: Profile | null): ProfileForm {
     // effect below seeds it from `latestWeight` once that resolves.
     weight_kg: '',
     tdee_formula: p?.tdee_formula ?? 'mifflin',
+    // 0/absent means "use the default", matching the backend's fallback.
+    water_goal_ml: String(p?.water_goal_ml || DEFAULT_WATER_GOAL_ML),
+    steps_goal: String(p?.steps_goal || DEFAULT_STEPS_GOAL),
   };
 }
 
@@ -145,6 +152,8 @@ export default function ProfileGoals() {
         activity_level: form.activity_level || null,
         body_fat_pct: num(form.body_fat_pct),
         tdee_formula: form.tdee_formula,
+        water_goal_ml: num(form.water_goal_ml),
+        steps_goal: num(form.steps_goal),
         goal,
         goal_rate: signedRate(goal, rate),
         protein_pct: macros.protein_pct,
@@ -350,6 +359,24 @@ export default function ProfileGoals() {
                 step={0.1}
                 value={form.weight_kg}
                 onChange={(e) => setForm({ ...form, weight_kg: e.target.value })}
+              />
+            </Field>
+            <Field label="Water goal (ml)" hint="Shown on the Today dashboard">
+              <TextInput
+                type="number"
+                min={0}
+                step={50}
+                value={form.water_goal_ml}
+                onChange={(e) => setForm({ ...form, water_goal_ml: e.target.value })}
+              />
+            </Field>
+            <Field label="Step goal" hint="Shown on the Today dashboard">
+              <TextInput
+                type="number"
+                min={0}
+                step={500}
+                value={form.steps_goal}
+                onChange={(e) => setForm({ ...form, steps_goal: e.target.value })}
               />
             </Field>
             <Field label="Formula">

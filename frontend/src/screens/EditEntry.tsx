@@ -2,12 +2,31 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { getClient } from '../lib/pb';
-import { Button, Card, Empty, Field, Spinner, TextInput, useToast } from '../components/ui';
+import { Button, Card, Field, Spinner, TextInput, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
-import { formatInt } from '../lib/format';
 
 /** Edit a diary entry — kcal + grams (+ macros kept proportional), meal
- *  slot picker. Save updates in place and returns to Today/History. */
+ *  slot picker. Save updates in place and returns to Today/History.
+ *
+ *  Macros are stored per entry, so changing the calories has to rescale them
+ *  or the diary's macro totals stop matching its calorie total. */
+
+/** Rescale the stored macros to a new calorie total, keeping the entry's
+ *  composition. An entry logged with no calories has no ratio to scale by, so
+ *  its macros stay put rather than blowing up to Infinity. */
+function scaleMacros(
+  original: { kcal: number; protein: number; carbs: number; fat: number } | null,
+  nextKcal: number,
+): { protein: number; carbs: number; fat: number } | undefined {
+  if (!original || original.kcal <= 0) return undefined;
+  const ratio = nextKcal / original.kcal;
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  return {
+    protein: round1(original.protein * ratio),
+    carbs: round1(original.carbs * ratio),
+    fat: round1(original.fat * ratio),
+  };
+}
 
 export default function EditEntry() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +40,8 @@ export default function EditEntry() {
   const [grams, setGrams] = useState('');
   const [slotId, setSlotId] = useState('');
   const [saving, setSaving] = useState(false);
+  // The entry as loaded — the baseline the macro rescale is measured against.
+  const [original, setOriginal] = useState<{ kcal: number; protein: number; carbs: number; fat: number } | null>(null);
 
   useEffect(() => {
     if (!endpoint || !id) return;
@@ -33,6 +54,12 @@ export default function EditEntry() {
         setKcal(String(rec['kcal'] ?? ''));
         setGrams(String(rec['grams'] ?? ''));
         setSlotId(String(rec['meal_slot'] ?? slots[0]?.id ?? ''));
+        setOriginal({
+          kcal: Number(rec['kcal'] ?? 0),
+          protein: Number(rec['protein'] ?? 0),
+          carbs: Number(rec['carbs'] ?? 0),
+          fat: Number(rec['fat'] ?? 0),
+        });
       })
       .catch(() => toast('Could not load entry', 'err'))
       .finally(() => setLoading(false));
@@ -53,6 +80,7 @@ export default function EditEntry() {
         kcal: kcalNum,
         grams: grams ? parseFloat(grams) : 0,
         meal_slot: slotId,
+        ...scaleMacros(original, kcalNum),
       });
       toast('Entry updated');
       navigate(-1);
@@ -136,9 +164,6 @@ export default function EditEntry() {
           </Button>
         </Card>
       </div>
-      {kcal ? (
-        <Empty>{formatInt(parseInt(kcal, 10) || 0)} kcal in this entry</Empty>
-      ) : null}
     </div>
   );
 }
