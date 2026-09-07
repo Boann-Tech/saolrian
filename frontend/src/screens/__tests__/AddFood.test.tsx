@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import AddFood from '../AddFood';
 import { AppProvider } from '../../state/AppContext';
 import { todayISO } from '../../lib/format';
@@ -49,11 +49,18 @@ vi.mock('../../lib/recipes', () => ({
   ]),
 }));
 
+/** Reports the live location, so tests can assert on URL state. */
+function StageProbe() {
+  const location = useLocation();
+  return <div data-testid="stage-probe">{location.search}</div>;
+}
+
 function renderAddFood(route = '/add') {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <AppProvider>
         <AddFood />
+        <StageProbe />
       </AppProvider>
     </MemoryRouter>,
   );
@@ -304,5 +311,62 @@ describe('AddFood — recents', () => {
 
     await screen.findByRole('button', { name: /quick add/i });
     expect(screen.queryByText('Recently logged')).not.toBeInTheDocument();
+  });
+});
+
+
+describe('AddFood — moving between stages', () => {
+  const food = {
+    name: 'Hummus', brand: 'Acme', kcal_per_100g: 300,
+    protein_per_100g: 8, carbs_per_100g: 12, fat_per_100g: 24,
+    default_serving_g: 100, local: false,
+  };
+
+  async function openTheFood(user: ReturnType<typeof userEvent.setup>) {
+    searchResults = { local: [], remote: [food] };
+    renderAddFood();
+    await user.type(screen.getByPlaceholderText(/search foods/i), 'hummus');
+    await user.click(await screen.findByRole('button', { name: /hummus/i }));
+    await screen.findByText(/Add to meal/i);
+  }
+
+  it('returns to the results when backing out of a food, not to the dashboard', async () => {
+    const user = userEvent.setup();
+    await openTheFood(user);
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+
+    // Back at the search stage with the query intact.
+    expect(await screen.findByRole('button', { name: /hummus/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/search foods/i)).toHaveValue('hummus');
+  });
+
+  it('puts the stage in the URL, so it is a history entry the browser can go back to', async () => {
+    const user = userEvent.setup();
+    await openTheFood(user);
+
+    // MemoryRouter has no window.history to drive, so assert the mechanism:
+    // the stage is URL state, which is what makes it a history entry at all.
+    expect(screen.getByTestId('stage-probe')).toHaveTextContent('stage=detail');
+  });
+
+  it('hides the search field while a food is open', async () => {
+    const user = userEvent.setup();
+    await openTheFood(user);
+
+    expect(screen.queryByPlaceholderText(/search foods/i)).not.toBeInTheDocument();
+  });
+
+  it('returns to the search stage when backing out of the recipe list', async () => {
+    searchResults = { local: [], remote: [] };
+    const user = userEvent.setup();
+    renderAddFood();
+
+    await user.click(await screen.findByRole('button', { name: /from recipe/i }));
+    await screen.findByText(/Manage recipes/i);
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+
+    expect(await screen.findByRole('button', { name: /quick add/i })).toBeInTheDocument();
   });
 });

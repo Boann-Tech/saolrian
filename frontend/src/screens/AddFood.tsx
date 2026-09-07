@@ -40,16 +40,26 @@ const IC_CHIP =
 const NCELL = 'min-w-0 flex-1 rounded-md border px-2.5 py-2.5';
 const NLABEL = 'mt-1 text-2xs font-semibold uppercase tracking-[.04em] text-text-faint';
 
+/** Stages are URL state, not component state: each one is a history entry, so
+ *  the header back button and the browser/hardware back button both step back
+ *  through the flow instead of leaving it in one jump. */
 export default function AddFood() {
   const { endpoint, slots, refreshSlots, userId } = useApp();
   const navigate = useNavigate();
   const toast = useToast();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
 
   // Which day this screen is logging to. History and the per-meal "add" links
   // pass ?date= (and ?slot=) so a forgotten day can be filled in; with neither,
   // this is the plain "log something now" case.
   const targetDate = params.get('date') || todayISO();
+  const urlStage = (params.get('stage') as Stage | null) ?? 'search';
+  const setStage = (next: Stage) => {
+    const nextParams = new URLSearchParams(params);
+    if (next === 'search') nextParams.delete('stage');
+    else nextParams.set('stage', next);
+    setParams(nextParams);
+  };
   const slotParam = params.get('slot');
   const isToday = targetDate === todayISO();
   const loggedAt = () => loggedAtISO(targetDate);
@@ -60,7 +70,7 @@ export default function AddFood() {
   const [results, setResults] = useState<Food[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchErr, setSearchErr] = useState('');
-  const [stage, setStage] = useState<Stage>('search');
+
   const [selected, setSelected] = useState<Food | null>(null);
   const [grams, setGrams] = useState(100);
   const [slotId, setSlotId] = useState<string>('');
@@ -342,6 +352,13 @@ export default function AddFood() {
 
   const recents = recentFoods(slotHistory ?? []);
 
+  // Guard a stage whose payload lives in memory: a reload straight onto
+  // ?stage=detail has no food to show, so fall back to the search stage.
+  const stage: Stage =
+    (urlStage === 'detail' && !selected) || (urlStage === 'recipeDetail' && !selectedRecipe)
+      ? 'search'
+      : urlStage;
+
   const math = selected
     ? foodMath(
         selected.kcal_per_100g,
@@ -393,7 +410,7 @@ export default function AddFood() {
       <div className="flex items-center justify-between px-6 pb-3 pt-4">
         <button
           className="flex h-11 w-11 flex-none items-center justify-center rounded-md border border-border bg-raised text-text"
-          onClick={() => navigate('/today')}
+          onClick={() => (stage === 'search' ? navigate(doneHref) : navigate(-1))}
           aria-label="Back"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -418,6 +435,7 @@ export default function AddFood() {
         </div>
       )}
 
+      {stage === 'search' && (
       <div className="relative mt-0.5 px-6">
         <TextInput
           type="text"
@@ -436,6 +454,7 @@ export default function AddFood() {
           {scanGlyph}
         </button>
       </div>
+      )}
 
       {stage === 'search' && (
         <div className="px-6">
