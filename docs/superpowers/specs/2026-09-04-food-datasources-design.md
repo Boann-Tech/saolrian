@@ -255,15 +255,22 @@ yearly). Four stages:
    upstream file fails loudly. On a 404 or a checksum mismatch the command
    fails and prints the path to drop the file into by hand — the national
    datasets move their download URLs often enough that a downloader alone
-   cannot be the only route in. `build` re-checks the recorded hash of
-   every file it reads.
+   cannot be the only route in. `build` compares the hash `fetch` recorded
+   in each source directory's breadcrumb against the manifest's pinned
+   hash, so a manifest re-pinned without a re-fetch (the directory still
+   holding the old dataset) is caught; it does not re-hash the files
+   themselves.
 2. **normalize** — per-source adapters map raw rows to canonical
    `RefFood` structs: unit conversion, name normalization, `search_text`
    generation, portion extraction, range assertions.
 3. **build** — emit `foodpack.<version>.bin.zst` plus a manifest
    recording per-source row counts, checksums and licences.
 4. **verify** — golden assertions against known foods (banana kcal,
-   spinach iron, salmon vitamin D, whole milk calcium) within tolerance,
+   spinach iron, fortified whole milk vitamin D, whole milk calcium)
+   within tolerance — this branch replaced the salmon vitamin D anchor
+   named in an earlier draft of this section with fortified milk, because
+   no salmon entry in the release this branch builds against carries a
+   vitamin D value at all, so that anchor could never have passed —
    plus two whole-pack checks: **cross-source agreement**, asserting that
    anchor foods carried by several sources agree on energy and macros
    within a wide band (~25%), and **attribution completeness**, asserting
