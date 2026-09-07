@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import type { ActivityLevel, Goal, Profile, Sex, TdeeFormula } from '../lib/types';
-import { getClient } from '../lib/pb';
+import { getClient, HOSTED_ENDPOINT } from '../lib/pb';
 import {
   ACTIVITY_FACTORS,
   ACTIVITY_LEVEL_HINT,
@@ -18,7 +18,7 @@ import {
 } from '../lib/nutrition';
 import { RatePicker } from '../components/RatePicker';
 import { formatInt } from '../lib/format';
-import { Button, Card, Field, Segmented, Select, Sheet, TextInput, useToast } from '../components/ui';
+import { Button, Card, Field, Modal, Segmented, Select, Sheet, TextInput, useToast } from '../components/ui';
 import { cn } from '../lib/cn';
 
 /** Profile & goals — prototype view: avatar card, sectioned hairline
@@ -74,7 +74,7 @@ function fromProfile(p: Profile | null): ProfileForm {
 }
 
 export default function ProfileGoals() {
-  const { endpoint, profile, latestWeight, refreshProfile, slots, refreshSlots, theme, setTheme, mode, setMode } = useApp();
+  const { endpoint, pb, profile, latestWeight, refreshProfile, slots, refreshSlots, theme, setTheme, mode, setMode } = useApp();
   const toast = useToast();
   const [form, setForm] = useState<ProfileForm>(() => fromProfile(profile));
   const [saving, setSaving] = useState(false);
@@ -90,6 +90,14 @@ export default function ProfileGoals() {
     fat_pct: profile?.fat_pct ?? DEFAULT_MACROS.fat_pct,
   });
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+
+  /** Clears the session only. The endpoint stays put so the next sign-in
+   *  targets the same server; Auth offers "Change server" for the rest. */
+  const signOut = () => {
+    setConfirmSignOut(false);
+    pb?.authStore.clear();
+  };
 
   // Re-seed the form only when the *record* changes (initial load, sign-in as
   // someone else) — not on every reference change, since background partial
@@ -255,6 +263,18 @@ export default function ProfileGoals() {
     }
   };
 
+  /** Self-hosting is the headline feature — calling a self-hosted instance
+   *  "Hosted" is the one label this screen must not get wrong. */
+  const isHosted = endpoint === HOSTED_ENDPOINT;
+
+  const hostLabel = (() => {
+    try {
+      return new URL(endpoint).host;
+    } catch {
+      return endpoint;
+    }
+  })();
+
   const initials = (() => {
     const n = ((profile?.['name'] as string | undefined) ?? '').trim();
     if (!n) return 'S';
@@ -279,13 +299,10 @@ export default function ProfileGoals() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-md font-bold">{(profile?.['name'] as string) || 'Signed in'}</div>
-            <div className="mt-0.5 text-xs text-text-faint">
-              {profile ? 'Profile on ' : 'Sign-in active · '}
-              {new URL(endpoint).host}
-            </div>
+            <div className="mt-0.5 truncate text-xs text-text-faint">{hostLabel}</div>
             <div className="mt-1 flex items-center gap-1.5 text-2xs font-semibold text-good-ink">
-              <span className="inline-block h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />{' '}
-              Hosted · {new URL(endpoint).host}
+              <span className="inline-block h-[7px] w-[7px] rounded-full bg-good shadow-[0_0_6px_rgba(62,207,142,.8)]" />
+              <span>{isHosted ? 'Hosted' : 'Self-hosted'}</span>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={() => setSheetOpen(true)}>
@@ -575,6 +592,15 @@ export default function ProfileGoals() {
           </Link>
         </Card>
         <Card className="mt-3.5 p-4">
+          <div className="text-xs font-semibold text-text-muted">Account</div>
+          <p className={cn(HINT, 'mb-3 mt-2')}>
+            Signing out keeps this server selected — you'll sign back in to the same place.
+          </p>
+          <Button variant="outline" block onClick={() => setConfirmSignOut(true)}>
+            Sign out
+          </Button>
+        </Card>
+        <Card className="mt-3.5 p-4">
           <div className="text-xs font-semibold text-text-muted">Data</div>
           <p className={cn(HINT, 'mb-3 mt-2')}>Bring your history from other apps, or export your diary.</p>
           <Link
@@ -585,6 +611,20 @@ export default function ProfileGoals() {
           </Link>
         </Card>
       </div>
+
+      <Modal open={confirmSignOut} onClose={() => setConfirmSignOut(false)} title="Sign out?">
+        <p className="text-sm text-text-muted">
+          You'll need your email and password to sign back in to {hostLabel}. Nothing is deleted.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setConfirmSignOut(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" size="sm" onClick={signOut}>
+            Sign out
+          </Button>
+        </div>
+      </Modal>
 
       {/* ── Theme sheet ── */}
       <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Accent theme">

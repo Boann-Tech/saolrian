@@ -7,12 +7,44 @@ import { Button, Field, TextInput } from '../components/ui';
  * prototype-styled centered card with wordmark + display h1. */
 
 export default function Auth() {
-  const { endpoint, refreshProfile, refreshSlots } = useApp();
+  const { endpoint, clearEndpoint, refreshProfile, refreshSlots } = useApp();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reveal, setReveal] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  /** Host of the endpoint being signed in to. A stored endpoint routes every
+   *  path here, so naming it is the only way a typo is visible. */
+  const host = (() => {
+    try {
+      return new URL(endpoint).host;
+    } catch {
+      return endpoint;
+    }
+  })();
+
+  const requestReset = async () => {
+    const address = email.trim();
+    if (!address) {
+      setNotice('');
+      setErr('Enter your email address first, then tap Forgot password.');
+      return;
+    }
+    setErr('');
+    setBusy(true);
+    try {
+      await getClient(endpoint).collection('users').requestPasswordReset(address);
+    } catch {
+      // Deliberately swallowed: reporting the failure would disclose whether
+      // the address is registered.
+    } finally {
+      setBusy(false);
+      setNotice('If that address has an account, a reset link is on its way.');
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,15 +119,25 @@ export default function Auth() {
             onChange={(e) => setEmail(e.target.value)}
           />
         </Field>
-        <Field label="Password">
-          <TextInput
-            type="password"
-            required
-            minLength={8}
-            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+        <Field label="Password" hint={mode === 'signup' ? 'At least 8 characters' : undefined}>
+          <div className="relative">
+            <TextInput
+              type={reveal ? 'text' : 'password'}
+              required
+              minLength={8}
+              className="pr-16"
+              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-text-muted hover:text-accent-ink"
+              onClick={() => setReveal((r) => !r)}
+            >
+              {reveal ? 'Hide password' : 'Show password'}
+            </button>
+          </div>
         </Field>
 
         {err && (
@@ -104,6 +146,14 @@ export default function Auth() {
             role="alert"
           >
             {err}
+          </div>
+        )}
+        {notice && (
+          <div
+            className="rounded-lg border-[1.5px] border-border bg-surface px-3.5 py-2.5 text-sm leading-normal text-text-muted"
+            role="status"
+          >
+            {notice}
           </div>
         )}
 
@@ -117,10 +167,34 @@ export default function Auth() {
           onClick={() => {
             setMode(mode === 'signin' ? 'signup' : 'signin');
             setErr('');
+            setNotice('');
           }}
         >
           {mode === 'signin' ? 'Need an account? Sign up' : 'Already registered? Sign in'}
         </Button>
+
+        {mode === 'signin' && (
+          <button
+            type="button"
+            className="rounded-md text-xs font-semibold text-text-muted hover:text-accent-ink"
+            onClick={() => void requestReset()}
+          >
+            Forgot password?
+          </button>
+        )}
+
+        <div className="mt-2 flex flex-col items-center gap-1 border-t border-border pt-3 text-2xs text-text-faint">
+          <span>
+            Signing in to <b className="font-semibold text-text-muted">{host}</b>
+          </span>
+          <button
+            type="button"
+            className="rounded-md font-semibold text-text-muted hover:text-accent-ink"
+            onClick={clearEndpoint}
+          >
+            Change server
+          </button>
+        </div>
       </form>
     </div>
   );

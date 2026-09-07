@@ -5,11 +5,12 @@
  * the main Save button.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import ProfileGoals from '../ProfileGoals';
 import { AppProvider } from '../../state/AppContext';
+import { HOSTED_ENDPOINT } from '../../lib/pb';
 
 const authRecord = { id: 'user-1' };
 
@@ -36,6 +37,7 @@ function makeProfile(overrides: Record<string, unknown> = {}) {
 }
 
 let profileRecord = makeProfile();
+let authCleared = false;
 let weightItems: Array<Record<string, unknown>> = [];
 const weightCreates: Array<Record<string, unknown>> = [];
 const profileUpdates: Array<Record<string, unknown>> = [];
@@ -45,6 +47,9 @@ const fakePb = {
   authStore: {
     isValid: true,
     record: authRecord,
+    clear: () => {
+      authCleared = true;
+    },
     onChange: () => () => {},
   },
   collection: (name: string) => {
@@ -101,6 +106,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('saolrian-endpoint', 'http://localhost:8090');
   profileRecord = makeProfile();
+  authCleared = false;
   weightItems = [];
   weightCreates.length = 0;
   profileUpdates.length = 0;
@@ -273,6 +279,61 @@ describe('ProfileGoals — daily goals', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(profileRecord.water_goal_ml).toBe(2500));
+  });
+});
+
+describe('ProfileGoals — identity card', () => {
+  it('calls a self-hosted server self-hosted', async () => {
+    renderProfile();
+    expect(await screen.findByText(/self-hosted/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Hosted ·/)).not.toBeInTheDocument();
+  });
+
+  it('names the host once, not twice', async () => {
+    renderProfile();
+    await screen.findByText(/self-hosted/i);
+    expect(screen.getAllByText(/localhost:8090/)).toHaveLength(1);
+  });
+
+  it('calls the hosted tier hosted', async () => {
+    localStorage.setItem('saolrian-endpoint', HOSTED_ENDPOINT);
+    renderProfile();
+    expect(await screen.findByText(/^Hosted$/i)).toBeInTheDocument();
+  });
+});
+
+describe('ProfileGoals — signing out', () => {
+  it('confirms before signing out', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('button', { name: /sign out/i }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(authCleared).toBe(false);
+  });
+
+  it('signs out once confirmed', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('button', { name: /sign out/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /^sign out$/i }));
+
+    await waitFor(() => expect(authCleared).toBe(true));
+  });
+
+  it('leaves the stored endpoint alone, so the next sign-in stays on this server', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole('button', { name: /sign out/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /^sign out$/i }));
+
+    await waitFor(() => expect(authCleared).toBe(true));
+    expect(localStorage.getItem('saolrian-endpoint')).toBe('http://localhost:8090');
   });
 });
 
