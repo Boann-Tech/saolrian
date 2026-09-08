@@ -3,6 +3,8 @@ node_modules/
 
 # build output
 frontend/dist/
+docs/site/dist/
+docs/site/dist-ssr/
 
 # PocketBase data (user data — never commit)
 pb_data/
@@ -26,6 +28,7 @@ coverage/
 
 # TypeScript incremental build info (regenerated on every build)
 frontend/tsconfig.tsbuildinfo
+docs/site/tsconfig.tsbuildinfo
 
 # git worktrees created for isolated feature work
 .claude/worktrees/
