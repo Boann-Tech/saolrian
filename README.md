@@ -18,23 +18,29 @@ Same app either way. Your data either way.
 
 ### Logging
 - 🍽️ **Food logging** — search 3M+ foods via [Open Food Facts](https://world.openfoodfacts.org), scan barcodes (camera + manual), save custom foods
+- 🕘 **Recently logged** — the log screen opens on the foods you actually eat, pre-filled with the amount you last had, so a repeat meal is two taps
 - ⚡ **Quick add** — log just calories (macros optional) in one tap, no search needed
 - 🥘 **Recipes** — build a recipe from searched foods or manual macro entries, see total *and* per-serving macros, then log any number of servings to the diary as a single entry
-- ✏️ **Edit & delete** — kebab menu on any diary entry; edit kcal/grams/meal in place, or delete
+- 🗓️ **Log to any day** — forgot yesterday? Add food straight from that day in History; it lands on the day you're looking at
+- 🍳 **Smart meal default** — the meal slot is guessed from when you usually log into each one, not from whichever sorts first
+- ✏️ **Edit & undo** — kebab menu on any diary entry; edit kcal/grams/meal in place, with grams driving the calories and macros. Deleting offers an undo rather than a confirmation
 - 🗓️ **Customizable meal slots** — Breakfast, second breakfast, pre-workout — name your meals whatever you want, add or delete as many as you like
 
 ### Dashboard
 - 📊 **Today** — animated budget meter, per-meal groups, remaining-calorie math
-- 💧 **Water & steps** — quick +250/+500 ml and +1,000/+5,000 step taps, or type an exact water amount
+- 💧 **Water & steps** — quick-add taps for both, and either can be tapped and typed to set an exact figure (or corrected after a mis-tap)
+- 🎯 **Your own targets** — macro, water and step goals come from your profile, not from built-in constants
 - ⚖️ **Weight** — logged from Profile, stored as a full history of `weights` records
 - 🗓️ **History** — week strip with adherence dots, day summary, weekly stats
 
 ### Everything else
-- 🎯 **TDEE & goals** — Mifflin-St Jeor / Katch-McArdle, five activity levels, lose/maintain/gain with macro targets
+- 🎯 **TDEE & goals** — Mifflin-St Jeor / Katch-McArdle, five activity levels, lose/maintain/gain at a weekly rate you pick, with macro targets. Targets are floored at a safe minimum, and the app says so when your chosen rate would go below it
+- 📏 **Metric or imperial** — kg/cm or lb/ft-in, defaulted from your locale. Storage stays metric either way
 - 📈 **Trends** — weight trend with a fitted rate, intake vs budget, cumulative energy balance, logging heatmap, macros, weekday pattern, meal split, water and steps; pick which cards you want
 - 🧮 **Observed TDEE** — your real calorie burn worked out from your own intake and weight history, offered as a suggestion you accept rather than applied behind your back
 - 📥 **Lose It! import** — bring your food-log history with you (CSV)
 - 🎨 **Theming** — light / dark / system appearance plus 8 accent palettes or a custom colour, saved per user and per device
+- 🔑 **Account** — password reset by email, and sign out from Profile (it keeps your server selected; use "Change server" on the sign-in screen to point somewhere else)
 - 📴 **Offline-first PWA** — diary creates queue to localStorage when the network drops and replay when you're back
 - 🔓 **Data export** — full CSV export, anytime
 
