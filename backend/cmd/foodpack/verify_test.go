@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -722,5 +723,71 @@ func TestMacroSumIncludesFibreForAvailableCarbohydrateSources(t *testing.T) {
 		if r := result(t, packFromSource(src, bran), "macro_sum"); !r.Pass {
 			t.Errorf("macro_sum failed on wheat bran from %s; its fibre must not be counted twice: %s", src, r.Detail)
 		}
+	}
+}
+
+// Deviation used to be measured against the declared figure, which made
+// the hard gate unreachable in the inflating direction: a food carrying
+// four times its real energy scored 76%, under the 100% gate, however
+// wrong it was.
+func TestAtwaterHardGateCatchesInflatedEnergy(t *testing.T) {
+	// Macros imply ~89 kcal; the declared figure is 2.5x that.
+	inflated := food.Profile{
+		"energy_kcal": 223, "protein": 1.1, "fat": 0.3, "carbohydrate": 20, "fibre": 2.6,
+	}
+	if result(t, packFromSource("afcd", inflated), "atwater").Pass {
+		t.Error("atwater passed a food carrying 2.5x its macro-implied energy")
+	}
+	// And the understating direction still fails, as it always did.
+	shrunk := food.Profile{
+		"energy_kcal": 40, "protein": 0.8, "fat": 0, "carbohydrate": 49.2, "fibre": 3,
+	}
+	if result(t, packFromSource("cnf", shrunk), "atwater").Pass {
+		t.Error("atwater passed a food carrying a fraction of its macro-implied energy")
+	}
+}
+
+// A symmetric ratio explodes when the macros imply almost nothing, which
+// is the normal case for a food whose energy comes from organic acids the
+// vocabulary does not carry. Eight such foods exist in a real six-source
+// build and every one is correct.
+func TestAtwaterHardGateExemptsNearZeroMacroFoods(t *testing.T) {
+	// CIQUAL's red wine vinegar: 0.4 g of carbohydrate against 19 kcal of
+	// acetic acid. A ratio calls that 1064% out; it is not an error.
+	vinegar := food.Profile{
+		"energy_kcal": 19, "protein": 0.04, "fat": 0, "carbohydrate": 0.4,
+	}
+	if r := result(t, packFromSource("ciqual", vinegar), "atwater"); !r.Pass {
+		t.Errorf("atwater hard-failed a food whose energy is organic acids: %s", r.Detail)
+	}
+}
+
+// The pack-wide suspect fraction is the wrong statistic once sources
+// differ in size by twenty times: usda_foundation could be entirely wrong
+// and move it by under 2%.
+func TestAtwaterFailsOneBadSourceThatPackWideFractionWouldDilute(t *testing.T) {
+	p := format.Pack{Version: "test", NutrientKeys: food.Keys()}
+	add := func(src string, n int, prof food.Profile) {
+		for i := 0; i < n; i++ {
+			p.Foods = append(p.Foods, format.RefFood{
+				Source: src, SourceID: fmt.Sprintf("%s-%d", src, i),
+				Name: "Test food", Nutrients: food.Encode(prof),
+			})
+		}
+		p.Sources = append(p.Sources, format.SourceInfo{Source: src, Rows: n})
+	}
+	sane := food.Profile{"energy_kcal": 89, "protein": 1.1, "fat": 0.3, "carbohydrate": 20}
+	// 60% out: past the 30% tolerance, inside the 100% hard gate, so only
+	// the fractional gates can catch it.
+	off := food.Profile{"energy_kcal": 143, "protein": 1.1, "fat": 0.3, "carbohydrate": 20}
+	add("usda_sr", 4000, sane)
+	add("usda_foundation", 150, off)
+
+	r := result(t, p, "atwater")
+	if r.Pass {
+		t.Errorf("atwater passed with one whole source off: %s", r.Detail)
+	}
+	if !strings.Contains(r.Detail, "usda_foundation") {
+		t.Errorf("the failure does not name the source responsible: %s", r.Detail)
 	}
 }

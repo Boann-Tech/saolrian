@@ -7,17 +7,30 @@ import (
 	"strings"
 )
 
-// Exclusions is the checked-in table of individual foods a source
-// publishes with a value confirmed to be the source's own error rather
-// than a defect in our mapping (see internal/food.Nutrient.Max's doc
-// comment on what the range guard is and is not for). Builder drops a
-// listed food instead of failing the whole build over it or raising a
-// plausible maximum to admit it.
+// Exclusions is the checked-in table of individual foods Builder drops
+// instead of failing the whole build over them or raising a plausible
+// maximum to admit them (see internal/food.Nutrient.Max's doc comment on
+// what the range guard is and is not for).
+//
+// There are exactly two reasons a food may be listed, and a row must say
+// which it is:
+//
+//  1. The source publishes a value confirmed to be its own error rather
+//     than a defect in our mapping. Almost every row is this.
+//  2. The canonical vocabulary cannot represent the food, so a check reads
+//     a correct food as broken. Such a row must name what is missing and
+//     say plainly that the source is not at fault, so that it reads as the
+//     limitation it is rather than as a check being quietly silenced. At
+//     the time of writing there is one: cnf/5522, a sugar-alcohol syrup
+//     the pack has no polyol key for.
 //
 // A row here is not a back door around the range guard: every row must
-// carry a human-readable reason, and the evidence bar is the same one
-// that applies to raising a Max -- confirmed against the source's own
-// published documentation, not merely "the check complained".
+// carry a human-readable reason, and the evidence bar for category 1 is
+// the same one that applies to raising a Max -- confirmed against the
+// source's own published documentation, not merely "the check complained".
+// Category 2 carries its own bar, which is harder to meet, not easier: the
+// gap has to be in the vocabulary, demonstrably, and the row has to say
+// what would close it.
 type Exclusions struct {
 	reasons map[string]string // "source\x00source_id" -> reason
 }

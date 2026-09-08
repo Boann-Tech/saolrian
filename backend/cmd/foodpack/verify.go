@@ -68,6 +68,23 @@ const atwaterHardDeviation = 1.0
 // seasoning blends 99+g) that this exists to exempt.
 const atwaterAshExemptionThreshold = 50.0
 
+// atwaterHardEstimateFloor exempts a food from the hard gate when its
+// macros imply almost no energy, mirroring the kcal < 20 skip on the other
+// side of the comparison.
+//
+// It exists because the deviation became symmetric. A food whose energy
+// comes from something the canonical vocabulary does not carry -- organic
+// acids above all -- has a near-zero estimate against a real declared
+// figure, and a ratio between those two says nothing about whether the
+// energy column is right. CIQUAL's red wine vinegar (alim_code 11220) is
+// the extreme: 0.4 g of carbohydrate implying under 2 kcal against a
+// declared 19, which reads as 1064% and is entirely correct, the energy
+// being acetic acid. Eight such foods exist in a six-source build, all of
+// them legitimate, and all eight fall away under this floor while the
+// corruption the symmetric measure exists to catch does not: an inflated
+// energy column leaves the macro estimate untouched and well above 20.
+const atwaterHardEstimateFloor = 20.0
+
 // runChecks runs every structural check over a built pack.
 func runChecks(p format.Pack) []CheckResult {
 	return []CheckResult{
@@ -261,8 +278,86 @@ var availableCarbohydrateSources = map[string]bool{
 	"afcd":   true,
 }
 
+// atwaterCount is one source's tally for the per-source suspect gate.
+type atwaterCount struct{ checked, suspect int }
+
+// atwaterMinSourceSample is how many checked foods a source needs before
+// its own suspect fraction is judged separately. Below it a handful of
+// unusual foods is a large percentage of nothing, and the pack-wide gate
+// is the more meaningful statistic.
+const atwaterMinSourceSample = 100
+
+// worstAtwaterSource returns the source with the highest suspect fraction
+// among those large enough to judge, so the check reports where its
+// suspects actually are rather than only a pack-wide average.
+//
+// The pack-wide fraction alone is the wrong statistic once a pack mixes
+// sources of very different sizes: it was set when there was one source and
+// every food moved together. usda_foundation is 331 checked foods against
+// usda_sr's 7,539, so its energy column could be entirely wrong and
+// contribute under 2% pack-wide. Measured, an inflated energy column puts
+// 100% of its own source past atwaterTolerance while the pack-wide figure
+// stays at a few percent -- which is exactly the shape this per-source gate
+// catches and the pack-wide one does not. Real data sits far below it: the
+// worst source in a correct six-source build is CNF at 0.86%, against a 10%
+// ceiling.
+func worstAtwaterSource(perSource map[string]*atwaterCount) (string, float64) {
+	var name string
+	worst := -1.0
+	names := make([]string, 0, len(perSource))
+	for s := range perSource {
+		names = append(names, s)
+	}
+	sort.Strings(names) // deterministic when two sources tie
+	for _, s := range names {
+		c := perSource[s]
+		if c.checked < atwaterMinSourceSample {
+			continue
+		}
+		if f := float64(c.suspect) / float64(c.checked); f > worst {
+			worst, name = f, s
+		}
+	}
+	if name == "" {
+		return "", 0
+	}
+	return name, worst
+}
+
+// atwaterDeviation compares a macro-derived estimate against a declared
+// energy figure, as a ratio of the larger to the smaller.
+//
+// It is deliberately symmetric, and that is a fix rather than a detail. The
+// obvious form, |est-kcal|/kcal, puts the declared figure in the
+// denominator, so a food whose energy is *overstated* can never deviate by
+// more than 1.0 however wrong it is: kilojoules shipped as kilocalories
+// reads as 1-1/4.184 = 76%, not 318%. Under that form the hard gate below
+// was unreachable in the inflating direction at any magnitude. Multiplying
+// AFCD's whole energy column by 4.184 and re-measuring leaves the old form
+// with zero hard failures; as a ratio the same corruption puts 1,511 AFCD
+// foods past the hard gate and all 1,567 of its checked foods past the
+// soft one.
+//
+// Worth knowing where this does and does not matter. That particular
+// corruption never reaches here in a real build: AFCD publishes kilojoules,
+// so a factor of 1 trips the mapping table's unit guard, and any factor
+// large enough to inflate energy meaningfully pushes foods past
+// food.Nutrient energy_kcal's maximum of 950 and fails checkRanges during
+// the build. What the symmetric form buys is the case those two miss --
+// energy inflated by two or three times on a source already stated in
+// kilocalories, which stays inside every plausible bound and used to be
+// invisible to the one check meant to notice.
+func atwaterDeviation(est, kcal float64) float64 {
+	lo, hi := math.Min(est, kcal), math.Max(est, kcal)
+	if lo <= 0 {
+		return math.Inf(1)
+	}
+	return hi/lo - 1
+}
+
 func checkAtwater(p format.Pack) CheckResult {
 	checked, suspect := 0, 0
+	perSource := map[string]*atwaterCount{}
 	var worst string
 	worstDev := 0.0
 	var hardFail string
@@ -278,6 +373,10 @@ func checkAtwater(p format.Pack) CheckResult {
 			continue // too little energy for a ratio to mean anything
 		}
 		checked++
+		if perSource[f.Source] == nil {
+			perSource[f.Source] = &atwaterCount{}
+		}
+		perSource[f.Source].checked++
 
 		// Sources do not agree on what "carbohydrate" counts or on what a
 		// gram of fibre is worth, and both disagreements move the estimate
@@ -302,14 +401,12 @@ func checkAtwater(p format.Pack) CheckResult {
 		// When a food carries no fibre figure all three collapse to the
 		// same plain formula.
 		//
-		// Two limits worth stating plainly rather than leaving to be
-		// rediscovered. First, the band gives fibre no coverage at all:
-		// the first candidate carries no fibre term, it is always in the
-		// set, and argmin will select it, so an error confined to the
-		// fibre column is invisible here. checkMacroSum's fibre-inclusive
-		// variant exists for that reason. Second, see
-		// atwaterHardDeviation -- the per-food gate is unreachable for any
-		// error that inflates energy, whatever the band does.
+		// One limit worth stating plainly rather than leaving to be
+		// rediscovered: the band gives fibre no coverage at all. The first
+		// candidate carries no fibre term, it is always in the set, and
+		// argmin will select it, so an error confined to the fibre column
+		// is invisible here. checkMacroSum's fibre-inclusive variant
+		// exists for that reason.
 		alc := prof["alcohol"]
 		base := 4*pro + 9*fat + 7*alc
 		fibre, hasFibre := prof["fibre"]
@@ -324,23 +421,27 @@ func checkAtwater(p format.Pack) CheckResult {
 				base+4*carb+2*fibre,    // available carbohydrate, fibre at 2 kcal/g (EU 1169/2011)
 			)
 		}
-		est, dev := ests[0], math.Abs(ests[0]-kcal)/kcal
+		est, dev := ests[0], atwaterDeviation(ests[0], kcal)
 		for _, e := range ests[1:] {
-			if d := math.Abs(e-kcal) / kcal; d < dev {
+			if d := atwaterDeviation(e, kcal); d < dev {
 				est, dev = e, d
 			}
 		}
 		if dev > atwaterTolerance {
 			suspect++
+			perSource[f.Source].suspect++
 			if dev > worstDev {
 				worstDev, worst = dev, fmt.Sprintf("%s/%s (%s): declared %.0f kcal, macros imply %.0f", f.Source, f.SourceID, f.Name, kcal, est)
 			}
 		}
-		// The hard gate assumes a normal food; a mineral-dominated one is
-		// exempt from it specifically (see atwaterAshExemptionThreshold),
-		// but still contributed to suspect/checked above, so it remains
+		// The hard gate assumes a normal food. Two kinds are exempt from
+		// it specifically -- a mineral-dominated one (see
+		// atwaterAshExemptionThreshold) and one whose macros imply almost
+		// no energy at all (see atwaterHardEstimateFloor) -- but both
+		// still contributed to suspect/checked above, so they remain
 		// visible in the reported percentage.
-		if dev > atwaterHardDeviation && dev > hardDev && prof["ash"] < atwaterAshExemptionThreshold {
+		if dev > atwaterHardDeviation && dev > hardDev &&
+			prof["ash"] < atwaterAshExemptionThreshold && est >= atwaterHardEstimateFloor {
 			hardDev, hardFail = dev, fmt.Sprintf("%s/%s (%s): declared %.0f kcal, macros imply %.0f (%.0f%% off)", f.Source, f.SourceID, f.Name, kcal, est, dev*100)
 		}
 	}
@@ -355,6 +456,13 @@ func checkAtwater(p format.Pack) CheckResult {
 		detail += "; worst: " + worst
 	}
 	pass := frac <= atwaterMaxSuspectFraction
+	if worstSrc, worstFrac := worstAtwaterSource(perSource); worstSrc != "" {
+		detail += fmt.Sprintf("; worst source %s at %.2f%%", worstSrc, worstFrac*100)
+		if worstFrac > atwaterMaxSuspectFraction {
+			pass = false
+			detail += fmt.Sprintf(" -- over the %.0f%% per-source ceiling", atwaterMaxSuspectFraction*100)
+		}
+	}
 	if hardFail != "" {
 		pass = false
 		detail += fmt.Sprintf("; HARD FAIL: a food deviates over %.0f%% (%s)", atwaterHardDeviation*100, hardFail)

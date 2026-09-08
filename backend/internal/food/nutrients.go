@@ -151,15 +151,25 @@ var Nutrients = []Nutrient{
 	{"vitamin_b6", "Vitamin B6", UnitMg, GroupVitamin, 100},
 	{"folate", "Folate", UnitUg, GroupVitamin, 5000},
 	{"vitamin_b12", "Vitamin B12", UnitUg, GroupVitamin, 500},
-	// 200: royal jelly (CIQUAL alim_code 31108) publishes 133mg/100g, and
-	// the rest of its B vitamins are just as extreme (105mg niacin, 150ug
-	// B12) -- royal jelly is the richest known dietary source of
-	// pantothenic acid and the literature agrees on 100-200mg/100g. The
-	// same archive's energy drink (18354) publishes 135mg against ordinary
-	// fortification levels for every other B vitamin in the same food,
-	// which is why this ceiling was raised to admit royal jelly rather
-	// than to cover that row too; that one food is excluded by id instead.
-	{"pantothenate", "Pantothenic acid (B5)", UnitMg, GroupVitamin, 200},
+	// 100, where an earlier version of this file said 200. That raise was
+	// made to admit CIQUAL's royal jelly (alim_code 31108) at 133mg/100g,
+	// on the stated grounds that "the literature agrees on 100-200mg/100g".
+	// It does not. Royal jelly genuinely is the richest known dietary
+	// source of pantothenic acid, but the published analyses put it far
+	// below that: 52.8mg/100g as the chief vitamin component, an HPLC study
+	// across eight samples at 120-565mg/kg (12-56.5mg/100g), a composition
+	// range of 3.6-23mg/100g, and Pearson and Burgin's classic 511ug/g on a
+	// *dry* basis, which is ~51mg/100g dry and less again once CIQUAL's own
+	// 66g of water is put back. 133 is about 2.4x the highest figure any of
+	// them reports.
+	//
+	// So the ceiling goes back and the food is excluded by id instead --
+	// the same treatment usda_sr/173174 got for manganese, and for the same
+	// reason: one row 4.5x above the next-highest food in the pack
+	// (usda_sr/173002 at 29.8mg) is an outlier, not a ceiling. CIQUAL
+	// grades that row confiance D, its own lowest, and its niacin (105mg
+	// against a published 4.5-42) sits equally far out.
+	{"pantothenate", "Pantothenic acid (B5)", UnitMg, GroupVitamin, 100},
 	{"biotin", "Biotin (B7)", UnitUg, GroupVitamin, 1000},
 }
 
