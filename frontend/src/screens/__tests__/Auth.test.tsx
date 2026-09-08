@@ -108,6 +108,14 @@ describe('Auth — password reset', () => {
 });
 
 describe('Auth — password field', () => {
+  it('describes the password rule on the input itself, not its wrapper', async () => {
+    const user = userEvent.setup();
+    renderAuth();
+    await user.click(screen.getByRole('button', { name: /need an account/i }));
+
+    expect(screen.getByLabelText(/^Password/i)).toHaveAccessibleDescription(/8 characters/i);
+  });
+
   it('can reveal and re-hide the password', async () => {
     const user = userEvent.setup();
     renderAuth();
