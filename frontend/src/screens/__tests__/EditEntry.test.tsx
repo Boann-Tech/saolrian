@@ -182,3 +182,39 @@ describe('EditEntry — grams is the quantity, so calories follow it', () => {
     expect(screen.getByLabelText(/Calories/i)).toHaveValue(600);
   });
 });
+
+
+describe('EditEntry — grams scaling is exact', () => {
+  it('scales macros by the gram ratio, not by the rounded calorie figure', async () => {
+    // 3 g -> 2 g is exactly 2/3. Deriving macros from the rounded calorie
+    // figure (100 -> 67) instead gives 16.8; the true answer is 16.7.
+    entry = { ...entry, grams: 3, kcal: 100, protein: 25, carbs: 0, fat: 0 };
+    const user = userEvent.setup();
+    renderEdit();
+
+    const grams = await screen.findByLabelText(/Grams/i);
+    await waitFor(() => expect(grams).toHaveValue(3));
+    await user.clear(grams);
+    await user.type(grams, '2');
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(updates).toHaveLength(1));
+    expect(updates[0]).toMatchObject({ grams: 2, kcal: 67, protein: 16.7 });
+  });
+
+  it('still scales by the calorie ratio when calories are edited directly', async () => {
+    entry = { ...entry, grams: 3, kcal: 100, protein: 25, carbs: 0, fat: 0 };
+    const user = userEvent.setup();
+    renderEdit();
+
+    const kcal = await screen.findByLabelText(/Calories/i);
+    await waitFor(() => expect(kcal).toHaveValue(100));
+    await user.clear(kcal);
+    await user.type(kcal, '67');
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(updates).toHaveLength(1));
+    // No gram ratio involved here — the override is the source of truth.
+    expect(updates[0]).toMatchObject({ grams: 3, kcal: 67, protein: 16.8 });
+  });
+});

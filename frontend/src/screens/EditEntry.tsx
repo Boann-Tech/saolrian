@@ -16,15 +16,18 @@ import { cn } from '../lib/cn';
  *  with it. A direct calorie edit is treated as an override of the database's
  *  number and leaves the amount alone. */
 
-/** Rescale the stored macros to a new calorie total, keeping the entry's
- *  composition. An entry logged with no calories has no ratio to scale by, so
- *  its macros stay put rather than blowing up to Infinity. */
+/** Rescale the stored macros by an explicit factor, keeping the entry's
+ *  composition. The factor comes from whichever field the user edited, so a
+ *  gram edit scales by the exact gram ratio rather than by the rounded calorie
+ *  figure derived from it — 3 g -> 2 g is 2/3, not 67/100.
+ *
+ *  A null factor means there was nothing to scale by, in which case the stored
+ *  macros are left alone rather than being zeroed or blown up to Infinity. */
 function scaleMacros(
-  original: { kcal: number; protein: number; carbs: number; fat: number } | null,
-  nextKcal: number,
+  original: { protein: number; carbs: number; fat: number } | null,
+  ratio: number | null,
 ): { protein: number; carbs: number; fat: number } | undefined {
-  if (!original || original.kcal <= 0) return undefined;
-  const ratio = nextKcal / original.kcal;
+  if (!original || ratio == null || !Number.isFinite(ratio)) return undefined;
   const round1 = (n: number) => Math.round(n * 10) / 10;
   return {
     protein: round1(original.protein * ratio),
@@ -45,6 +48,9 @@ export default function EditEntry() {
   const [grams, setGrams] = useState('');
   const [slotId, setSlotId] = useState('');
   const [saving, setSaving] = useState(false);
+  // How far the entry has been scaled from what was loaded. 1 means untouched;
+  // null means the edit gave nothing to scale by.
+  const [ratio, setRatio] = useState<number | null>(1);
   // The entry as loaded — the baseline the macro rescale is measured against.
   const [original, setOriginal] = useState<
     { grams: number; kcal: number; protein: number; carbs: number; fat: number } | null
@@ -74,15 +80,28 @@ export default function EditEntry() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint, id]);
 
-  /** Editing the amount rescales the calories from the entry as logged. An
-   *  entry with no recorded weight has no ratio to scale by, so its calorie
-   *  figure stands. */
+  /** Editing the amount rescales the calories from the entry as logged, and
+   *  sets the exact factor the macros will be scaled by. An entry with no
+   *  recorded weight has no ratio to scale by, so its figures stand. */
   const setGramsAndScale = (raw: string) => {
     setGrams(raw);
     if (!original || !(original.grams > 0) || !(original.kcal > 0)) return;
     const next = parseFloat(raw);
     if (!Number.isFinite(next)) return;
-    setKcal(String(Math.round((original.kcal / original.grams) * next)));
+    const gramRatio = next / original.grams;
+    setRatio(gramRatio);
+    setKcal(String(Math.round(original.kcal * gramRatio)));
+  };
+
+  /** A direct calorie edit overrides the database's number rather than saying
+   *  the portion changed, so the amount stays put and the macros follow the
+   *  calories. */
+  const setKcalAsOverride = (raw: string) => {
+    setKcal(raw);
+    if (!original) return;
+    const next = parseInt(raw, 10);
+    if (!Number.isFinite(next)) return;
+    setRatio(original.kcal > 0 ? next / original.kcal : null);
   };
 
   const save = async () => {
@@ -99,7 +118,7 @@ export default function EditEntry() {
         kcal: kcalNum,
         grams: grams ? parseFloat(grams) : 0,
         meal_slot: slotId,
-        ...scaleMacros(original, kcalNum),
+        ...scaleMacros(original, ratio),
       });
       toast('Entry updated');
       navigate(-1);
@@ -144,7 +163,7 @@ export default function EditEntry() {
               min={0}
               inputMode="numeric"
               value={kcal}
-              onChange={(e) => setKcal(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => setKcalAsOverride(e.target.value.replace(/\D/g, ''))}
             />
           </Field>
 
